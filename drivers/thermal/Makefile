@@ -70,3 +70,12 @@ obj-$(CONFIG_SPRD_THERMAL)	+= sprd_thermal.o
 obj-$(CONFIG_KHADAS_MCU_FAN_THERMAL)	+= khadas_mcu_fan.o
 obj-$(CONFIG_LOONGSON2_THERMAL)	+= loongson2_thermal.o
 obj-$(CONFIG_THERMAL_CORE_TESTING)	+= testing/
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_SPRD_THM)		+= sprd_thm.o
+obj-$(CONFIG_SPRD_THERMAL_MULT)		+= sprd_ap_mult_thm.o
+obj-$(CONFIG_SPRD_ITHM)		+= sprd_ap_ithm.o
+obj-$(CONFIG_SPRD_THM_DEDICATE)		+= sprd_ap_dedicate_thm.o
+obj-$(CONFIG_SPRD_PMIC_THERMAL)		+= sprd_pmic_thm.o
+obj-$(CONFIG_SPRD_BOARD_THM)		+= sprd_board_thm.o
+obj-$(CONFIG_SPRD_VIRT_THERMAL)                += sprd_virt_thm.o

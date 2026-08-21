@@ -451,3 +451,10 @@ config USB_DUMMY_HCD
 # first and will be selected by default.
 
 endmenu
+
+config USB_CHARGER
+	bool "USB charger support"
+	help
+	  The usb charger driver based on the usb gadget that makes an
+	  enhancement to a power driver which can set the current limitation
+	  when the usb charger is added or removed.

@@ -485,6 +485,9 @@ struct usb_gadget {
 	unsigned			wakeup_armed:1;
 	int				irq;
 	int				id_number;
+#ifdef CONFIG_USB_CHARGER
+	struct usb_charger		*charger;
+#endif
 };
 #define work_to_gadget(w)	(container_of((w), struct usb_gadget, work))
 

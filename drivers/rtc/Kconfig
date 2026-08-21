@@ -2173,3 +2173,10 @@ config RTC_DRV_HID_SENSOR_TIME
 	  rtc-hid-sensor-time.
 
 endif # RTC_CLASS
+
+# ==== SPRD RTC (ported from 4.4 vendor tree) ====
+
+config RTC_DRV_SPRD
+	tristate "Spreadtrum RTC"
+	help
+	  RTC driver for SPREADTRUM Real Time Clock controller

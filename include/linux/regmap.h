@@ -1347,6 +1347,15 @@ static inline int regmap_update_bits(struct regmap *map, unsigned int reg,
 	return regmap_update_bits_base(map, reg, mask, val, NULL, false, false);
 }
 
+/* DW99 port: 4.4 sprd hwlock variant, mapped to plain update_bits */
+static inline int regmap_hwlock_update_bits(struct regmap *map,
+					    unsigned int reg,
+					    unsigned int mask,
+					    unsigned int val)
+{
+	return regmap_update_bits(map, reg, mask, val);
+}
+
 static inline int regmap_update_bits_async(struct regmap *map, unsigned int reg,
 					   unsigned int mask, unsigned int val)
 {

@@ -791,3 +791,12 @@ config DMA_ENGINE_RAID
 	bool
 
 endif
+
+# ==== SPRD DMA (ported from 4.4 vendor tree) ====
+
+config SPRD_DMA_VENDOR
+	tristate "SPRD DMA support"
+	select DMA_ENGINE
+	default y
+	help
+	  Support the SPRD DMA engine.

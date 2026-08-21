@@ -115,6 +115,12 @@ const struct nf_conntrack_l4proto *nf_ct_l4proto_find(u8 l4proto)
 #if IS_ENABLED(CONFIG_IPV6)
 	case IPPROTO_ICMPV6: return &nf_conntrack_l4proto_icmpv6;
 #endif /* CONFIG_IPV6 */
+#ifdef CONFIG_NF_CT_PROTO_DCCP
+	case IPPROTO_DCCP: return &nf_conntrack_l4proto_dccp;
+#endif
+#ifdef CONFIG_NF_CT_PROTO_UDPLITE
+	case IPPROTO_UDPLITE: return &nf_conntrack_l4proto_udplite;
+#endif
 	}
 
 	return &nf_conntrack_l4proto_generic;

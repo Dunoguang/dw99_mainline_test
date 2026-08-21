@@ -303,3 +303,9 @@ obj-$(CONFIG_MFD_RSMU_SPI)	+= rsmu_spi.o rsmu_core.o
 obj-$(CONFIG_MFD_UPBOARD_FPGA)	+= upboard-fpga.o
 
 obj-$(CONFIG_MFD_LOONGSON_SE)	+= loongson-se.o
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_MFD_SC2705)	+= sc2705.o
+obj-$(CONFIG_MFD_SC2703)	+= sc2703.o sc2703-disp.o
+obj-$(CONFIG_AB3100_OTP)	+= ab3100-otp.o
+obj-$(CONFIG_MFD_SPRD_PMIC_SHARKLE)	+= sprd-pmic-spi.o

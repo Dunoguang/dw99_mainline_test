@@ -22,3 +22,11 @@ obj-$(CONFIG_USB_MXS_PHY)		+= phy-mxs-usb.o
 obj-$(CONFIG_USB_ULPI)			+= phy-ulpi.o
 obj-$(CONFIG_USB_ULPI_VIEWPORT)		+= phy-ulpi-viewport.o
 obj-$(CONFIG_KEYSTONE_USB_PHY)		+= phy-keystone.o
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_SPRD_USB3_PHY)		+= phy-sprd-usb3.o
+obj-$(CONFIG_SPRD_INTEL_USB3_PHY)	+= phy-sprd-intel-usb3.o
+obj-$(CONFIG_SPRD_USB2_PHY)		+= phy-sprd-musb.o
+obj-$(CONFIG_USB_SPRD_TYPEC)		+= phy-sprd-typec.o
+obj-$(CONFIG_SPRD_SHARKL3_USB2_PHY)	+= phy-sprd-sharkl3.o
+obj-$(CONFIG_USB_SPRD_TYPEC)	+= class-dual-role.o

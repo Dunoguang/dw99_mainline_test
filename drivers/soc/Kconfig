@@ -33,3 +33,4 @@ source "drivers/soc/vt8500/Kconfig"
 source "drivers/soc/xilinx/Kconfig"
 
 endmenu
+source "drivers/soc/sprd/Kconfig"

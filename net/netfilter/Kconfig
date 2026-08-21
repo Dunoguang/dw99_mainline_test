@@ -209,6 +209,22 @@ config NF_CT_PROTO_SCTP
 
 	  If unsure, say Y.
 
+
+config NF_CT_PROTO_DCCP
+	bool 'DCCP protocol connection tracking support'
+	depends on NETFILTER_ADVANCED
+	default y
+	help
+	  With this option enabled, the layer 3 independent connection
+	  tracking code will be able to do state tracking on DCCP connections.
+
+config NF_CT_PROTO_UDPLITE
+	bool 'UDP-Lite protocol connection tracking support'
+	depends on NETFILTER_ADVANCED
+	default y
+	help
+	  With this option enabled, the layer 3 independent connection
+	  tracking code will be able to do state tracking on UDP-Lite connections.
 config NF_CONNTRACK_AMANDA
 	tristate "Amanda backup protocol support"
 	depends on NETFILTER_ADVANCED
@@ -1514,6 +1530,39 @@ config NETFILTER_XT_MATCH_QUOTA
 	  If you want to compile it as a module, say M here and read
 	  <file:Documentation/kbuild/modules.rst>.  If unsure, say `N'.
 
+
+config NETFILTER_XT_MATCH_QUOTA2
+	tristate '"quota2" match support'
+	depends on NETFILTER_ADVANCED
+	help
+	  This option adds a `quota2' match, which allows to match on a
+	  byte counter correctly and not per CPU.
+	  It allows naming the quotas.
+	  This is based on http://xtables-addons.git.sourceforge.net
+
+config NETFILTER_XT_MATCH_QUOTA2_LOG
+	bool '"quota2" Netfilter LOG support'
+	depends on NETFILTER_XT_MATCH_QUOTA2
+	default n
+	help
+	  This option allows `quota2' to log ONCE when a quota limit
+	  is passed. It logs via NETLINK using the NETLINK_NFLOG family.
+
+config NETFILTER_XT_MATCH_QTAGUID
+	bool '"qtaguid" match support (Android socket UID stats)'
+	depends on NETFILTER_ADVANCED
+	default y
+	help
+	  This option adds a `qtaguid' match, which allows Android to
+	  track per-UID network traffic statistics.
+
+config NETFILTER_XT_MATCH_QTAGUID_LOG
+	bool '"qtaguid" Netfilter LOG support'
+	depends on NETFILTER_XT_MATCH_QTAGUID
+	default y
+	help
+	  This option allows `qtaguid' to log via NETLINK using the
+	  NETLINK_NFLOG family.
 config NETFILTER_XT_MATCH_RATEEST
 	tristate '"rateest" match support'
 	depends on NETFILTER_ADVANCED

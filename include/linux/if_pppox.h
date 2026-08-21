@@ -37,6 +37,20 @@ struct pptp_opt {
 };
 #include <net/sock.h>
 
+
+struct pppolac_opt {
+	__u32		local;
+	__u32		remote;
+	__u32		recv_sequence;
+	__u32		xmit_sequence;
+	atomic_t	sequencing;
+	int		(*backlog_rcv)(struct sock *sk_udp, struct sk_buff *skb);
+};
+
+struct pppopns_opt {
+	__u16		local;
+	__u16		remote;
+};
 struct pppox_sock {
 	/* struct sock must be the first member of pppox_sock */
 	struct sock sk;
@@ -45,6 +59,8 @@ struct pppox_sock {
 	union {
 		struct pppoe_opt pppoe;
 		struct pptp_opt  pptp;
+		struct pppolac_opt lac;
+		struct pppopns_opt pns;
 	} proto;
 	__be16			num;
 };

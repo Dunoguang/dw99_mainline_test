@@ -133,6 +133,8 @@ void nf_conntrack_icmpv6_init_net(struct net *net);
 
 /* Existing built-in generic protocol */
 extern const struct nf_conntrack_l4proto nf_conntrack_l4proto_generic;
+extern const struct nf_conntrack_l4proto nf_conntrack_l4proto_dccp;
+extern const struct nf_conntrack_l4proto nf_conntrack_l4proto_udplite;
 
 const struct nf_conntrack_l4proto *nf_ct_l4proto_find(u8 l4proto);
 
@@ -225,3 +227,14 @@ static inline struct nf_gre_net *nf_gre_pernet(struct net *net)
 #endif
 
 #endif /*_NF_CONNTRACK_PROTOCOL_H*/
+
+int nf_conntrack_dccp_packet(struct nf_conn *ct,
+			     struct sk_buff *skb,
+			     unsigned int dataoff,
+			     enum ip_conntrack_info ctinfo,
+			     const struct nf_hook_state *state);
+int nf_conntrack_udplite_packet(struct nf_conn *ct,
+				struct sk_buff *skb,
+				unsigned int dataoff,
+				enum ip_conntrack_info ctinfo,
+				const struct nf_hook_state *state);

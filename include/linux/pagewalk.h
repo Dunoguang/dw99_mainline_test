@@ -126,6 +126,12 @@ struct mm_walk {
 	enum page_walk_action action;
 	bool no_vma;
 	void *private;
+
+#ifdef CONFIG_SWAP_ZDATA
+	bool hiber;
+	unsigned nr_reclaimed;
+	unsigned nr_writedblock;
+#endif
 };
 
 int walk_page_range(struct mm_struct *mm, unsigned long start,

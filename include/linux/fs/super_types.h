@@ -207,6 +207,9 @@ struct super_block {
 	 * change at runtime
 	 */
 	char					s_id[32];	/* Informational name */
+#ifdef CONFIG_CLEANCACHE
+	int					cleancache_poolid;
+#endif
 	uuid_t					s_uuid;		/* UUID */
 	u8					s_uuid_len;	/* Default 16, possibly smaller for weird filesystems */
 

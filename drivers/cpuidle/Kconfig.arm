@@ -130,3 +130,20 @@ config ARM_QCOM_SPM_CPUIDLE
 	  The Subsystem Power Manager (SPM) controls low power modes for the
 	  CPU and L2 cores. It interface with various system drivers to put
 	  the cores in low power modes.
+
+config ARM_SPRD_DUMMY_CPUIDLE
+	bool "Dummy CPU Idle Driver for Spreadtrum processors"
+	depends on ARCH_SPRD
+	select DT_IDLE_STATES
+	help
+	  Select this to enable a dummy CPU idle driver for Spreadtrum
+	  processors (WFI only, no deep sleep states).
+
+config ARM_SPRD_CPUIDLE
+	bool "CPU Idle Driver for Spreadtrum processors"
+	depends on ARM && ARCH_SPRD
+	select DT_IDLE_STATES
+	help
+	  Select this to enable the CPU idle driver for Spreadtrum
+	  processors (light sleep / core power down / cluster power
+	  down / top power down).

@@ -150,3 +150,12 @@ config F2FS_UNFAIR_RWSEM
 	help
 	  Use unfair rw_semaphore, if system configured IO priority by block
 	  cgroup.
+
+config F2FS_RESERVE_SPACE_FILTER
+	bool "F2FS Reserve Space Filter"
+	depends on F2FS_FS
+	default n
+	help
+		Support for reserve space black and white list filter feature.
+		If you say Y here, it will enable the feature.
+

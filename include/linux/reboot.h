@@ -21,6 +21,7 @@ enum reboot_mode {
 	REBOOT_HARD,
 	REBOOT_SOFT,
 	REBOOT_GPIO,
+	REBOOT_WDT,
 };
 extern enum reboot_mode reboot_mode;
 extern enum reboot_mode panic_reboot_mode;

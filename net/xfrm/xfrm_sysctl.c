@@ -9,6 +9,10 @@ static void __net_init __xfrm_sysctl_init(struct net *net)
 	net->xfrm.sysctl_aevent_etime = XFRM_AE_ETIME;
 	net->xfrm.sysctl_aevent_rseqth = XFRM_AE_SEQT_SIZE;
 	net->xfrm.sysctl_larval_drop = 1;
+#ifdef CONFIG_XFRM_FRAGMENT
+	/*default is close.*/
+	net->xfrm.enable_xfrm_fragment = 0;
+#endif
 	net->xfrm.sysctl_acq_expires = 30;
 }
 

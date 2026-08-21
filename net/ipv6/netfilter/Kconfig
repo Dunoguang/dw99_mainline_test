@@ -301,3 +301,13 @@ endmenu
 
 config NF_DEFRAG_IPV6
 	tristate
+
+config IP6_NF_VOWIFI_DEC_TCPDUMP
+	bool "vowifi decoding pkts and save them with tcpdump in ipv6"
+	depends on IP6_NF_FILTER
+	default n
+	help
+	  This IP6_NF_VOWIFI_DEC_TCPDUMP module to debug for decode ipsec pkt
+	  for software engineer.Use this module,the esp pkt which apk allowed,
+	  will be save in the tcpdump with its orignal message.
+

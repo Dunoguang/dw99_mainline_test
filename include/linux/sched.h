@@ -832,6 +832,15 @@ struct task_ipi_mask {
 struct task_ipi_mask { };
 #endif
 
+#ifdef CONFIG_SWAP_ZDATA
+struct reclaim_result {
+	unsigned nr_reclaimed;
+	unsigned nr_writedblock;
+	s64 elapsed_centisecs64;
+};
+#endif
+#endif
+
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/*
@@ -1135,6 +1144,15 @@ struct task_struct {
 	u64				stimescaled;
 #endif
 	u64				gtime;
+
+#ifdef CONFIG_CPU_FREQ_TIMES
+	u64				*time_in_state;
+	unsigned int			max_state;
+#endif
+
+#ifdef CONFIG_SWAP_ZDATA
+	struct reclaim_result *proc_reclaimed_result;
+#endif
 	struct prev_cputime		prev_cputime;
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_GEN
 	struct vtime			vtime;
@@ -2521,5 +2539,10 @@ extern void migrate_enable(void);
 #endif /* MODULE */
 
 DEFINE_LOCK_GUARD_0(migrate, migrate_disable(), migrate_enable())
+
+static inline void arch_get_fast_cpus(struct cpumask *cpumask)
+{
+	cpumask_setall(cpumask);
+}
 
 #endif

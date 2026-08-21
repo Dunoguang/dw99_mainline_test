@@ -14,6 +14,7 @@
 #include <linux/compiler.h>
 #include <linux/dax.h>
 #include <linux/fs.h>
+#include <linux/cleancache.h>
 #include <linux/sched/signal.h>
 #include <linux/uaccess.h>
 #include <linux/capability.h>
@@ -223,6 +224,11 @@ void __filemap_remove_folio(struct folio *folio, void *shadow)
 	struct address_space *mapping = folio->mapping;
 
 	trace_mm_filemap_delete_from_page_cache(folio);
+
+	if (folio_test_uptodate(folio) && folio_test_mappedtodisk(folio))
+		cleancache_put_page(&folio->page);
+	else
+		cleancache_invalidate_page(mapping, &folio->page);
 	filemap_unaccount_folio(mapping, folio);
 	page_cache_delete(mapping, folio, shadow);
 }
@@ -331,6 +337,10 @@ void delete_from_page_cache_batch(struct address_space *mapping,
 		struct folio *folio = fbatch->folios[i];
 
 		trace_mm_filemap_delete_from_page_cache(folio);
+		if (folio_test_uptodate(folio) && folio_test_mappedtodisk(folio))
+			cleancache_put_page(&folio->page);
+		else
+			cleancache_invalidate_page(mapping, &folio->page);
 		filemap_unaccount_folio(mapping, folio);
 	}
 	page_cache_delete_batch(mapping, fbatch);

@@ -466,3 +466,11 @@ config ARCH_ZYNQMP
 	  This enables support for Xilinx ZynqMP Family
 
 endmenu # "Platform selection"
+config SOC_SHARKLE
+	bool "Spreadtrum SharklE SoC support (SC9832e/SL8541e)"
+	depends on ARCH_SPRD
+	select ARM_GIC
+	select PINCTRL_SPRD_SHARKLE
+	help
+	  This enables support for the Spreadtrum SharklE (SC9832e/SL8541e)
+	  SoC used in e.g. the DW99 smartwatch.

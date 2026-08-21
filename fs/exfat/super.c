@@ -21,6 +21,9 @@
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
+#ifdef CONFIG_EXFAT_VIRTUAL_XATTR
+extern const struct xattr_handler *exfat_xattr_handlers[];
+#endif
 
 static char exfat_default_iocharset[] = CONFIG_EXFAT_DEFAULT_IOCHARSET;
 static struct kmem_cache *exfat_inode_cachep;
@@ -732,6 +735,9 @@ static int exfat_fill_super(struct super_block *sb, struct fs_context *fc)
 		goto free_table;
 	}
 
+#ifdef CONFIG_EXFAT_VIRTUAL_XATTR
+	sb->s_xattr = exfat_xattr_handlers;
+#endif
 	return 0;
 
 put_inode:

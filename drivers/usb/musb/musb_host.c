@@ -294,7 +294,7 @@ __acquires(musb->lock)
  *
  * Context: caller owns controller lock, IRQs are blocked
  */
-static void musb_advance_schedule(struct musb *musb, struct urb *urb,
+void musb_advance_schedule(struct musb *musb, struct urb *urb,
 				  struct musb_hw_ep *hw_ep, int is_in)
 {
 	struct musb_qh		*qh = musb_ep_get_qh(hw_ep, is_in);
@@ -623,7 +623,72 @@ static void musb_tx_dma_set_mode_cppi_tusb(struct musb_hw_ep *hw_ep,
 	*mode = (urb->transfer_flags & URB_ZERO_PACKET) ? 1 : 0;
 }
 
-static bool musb_tx_dma_program(struct dma_controller *dma,
+void musb_rx_dma_sprd(struct dma_channel *dma_channel,
+				  struct musb *musb, u8 epnum,
+				  struct musb_qh *qh,
+				  struct urb *urb,
+				  u32 offset, size_t len)
+{
+	struct dma_controller	*dma_controller;
+	u8	dma_ok;
+	u16	csr;
+	u16	packet_sz = qh->maxpacket;
+	struct musb_hw_ep	*hw_ep = musb->endpoints + epnum;
+
+	dma_channel->actual_len = 0L;
+	qh->segsize = len;
+	dma_controller = musb->dma_controller;
+
+	/* target addr and (for multipoint) hub addr/port */
+	if (musb->is_multipoint) {
+		musb_write_rxfunaddr(musb, epnum, qh->addr_reg);
+		musb_write_rxhubaddr(musb, epnum, qh->h_addr_reg);
+		musb_write_rxhubport(musb, epnum, qh->h_port_reg);
+	} else
+		musb_writeb(musb->mregs, MUSB_FADDR, qh->addr_reg);
+
+	/* protocol/endpoint, interval/NAKlimit, i/o size */
+	musb_writeb(hw_ep->regs, MUSB_RXTYPE, qh->type_reg);
+	musb_writeb(hw_ep->regs, MUSB_RXINTERVAL, qh->intv_reg);
+
+	/* NOTE: bulk combining rewrites high bits of maxpacket */
+	/* Set RXMAXP with the FIFO size of the endpoint
+	* to disable double buffer mode.
+	 */
+	musb_writew(hw_ep->regs, MUSB_RXMAXP,
+			qh->maxpacket | ((qh->hb_mult - 1) << 11));
+
+	if (qh->type == USB_ENDPOINT_XFER_INT) {
+		csr = musb_readw(hw_ep->regs, MUSB_RXCSR);
+		csr |= MUSB_RXCSR_DISNYET;
+		musb_writew(hw_ep->regs, MUSB_RXCSR, csr);
+	}
+
+	csr = musb_readw(hw_ep->regs, MUSB_RXCSR);
+
+	/*start dma*/
+	dma_ok = dma_controller->channel_program(dma_channel,
+				packet_sz, !(urb->transfer_flags &
+						 URB_SHORT_NOT_OK),
+				urb->transfer_dma + offset,
+				qh->segsize);
+	if (!dma_ok) {
+		dma_controller->channel_release(dma_channel);
+		hw_ep->rx_channel = dma_channel = NULL;
+	} else {
+		if ((!(csr & MUSB_RXCSR_RXPKTRDY)) &&
+			(!(csr & MUSB_RXCSR_H_AUTOREQ))) {
+			csr |= MUSB_RXCSR_DMAMODE | MUSB_RXCSR_DMAENAB |
+				MUSB_RXCSR_AUTOCLEAR | MUSB_RXCSR_H_AUTOREQ |
+				MUSB_RXCSR_H_REQPKT;
+			musb_writew(hw_ep->regs, MUSB_RXCSR, csr);
+			dev_dbg(musb->controller, "RXCSR%d := %04x\n",
+				epnum, csr);
+		}
+	}
+}
+
+bool musb_tx_dma_program(struct dma_controller *dma,
 		struct musb_hw_ep *hw_ep, struct musb_qh *qh,
 		struct urb *urb, u32 offset, u32 length)
 {

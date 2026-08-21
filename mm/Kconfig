@@ -159,6 +159,14 @@ config ZSMALLOC_CHAIN_SIZE
 
 	  For more information, see zsmalloc documentation.
 
+config CLEANCACHE
+	bool "Enable cleancache driver to cache clean pages if tmem is present"
+	default n
+	help
+	  Cleancache can be thought of as a page-granularity victim cache
+	  for clean pages that the kernel's pageframe reclaim algorithm is
+	  about to evict.
+
 endmenu
 
 endif
@@ -1512,5 +1520,59 @@ config LAZY_MMU_MODE_KUNIT_TEST
 	  If unsure, say N.
 
 source "mm/damon/Kconfig"
+
+
+config PROCESS_RECLAIM
+	bool "Enable process reclaim"
+	depends on PROC_FS
+	default n
+	help
+	 It allows to reclaim pages of the process by /proc/pid/reclaim.
+
+	 (echo file > /proc/PID/reclaim) reclaims file-backed pages only.
+	 (echo anon > /proc/PID/reclaim) reclaims anonymous pages only.
+	 (echo all > /proc/PID/reclaim) reclaims file-backed and
+	  anonymous pages.
+	 (echo soft > /proc/PID/reclaim) reclaims soft vma pages.
+	 (echo inactive > /proc/PID/reclaim) reclaims inactive pages only.
+
+config SWAP_ZDATA
+	bool "Compressed data to swap"
+	depends on SWAP
+	depends on PROCESS_RECLAIM
+	default n
+	help
+	  Save compressed data to swap page. And user space can send a
+	  signal to notify kernel that the compressed data in swap page
+	  is no longer needed.
+config ZPOOL
+	tristate "Common API for compressed memory storage"
+	default n
+	help
+	  Compressed memory storage API.  This allows using either zbud or
+	  zsmalloc.
+
+config ZBUD
+	tristate "Low density storage for compressed pages"
+	default n
+	help
+	  A special purpose allocator for storing compressed pages.
+	  It is designed to store up to two compressed pages per physical
+	  page.  While this design limits storage density, it has simple and
+	  deterministic reclaim properties that make it preferable to a higher
+	  density approach when reclaim will be used.
+
+config SPRD_MEM_OVERLAY_CHECK
+	bool "detect reserved-memory region is overlay"
+	default y
+	help
+	  It's will panic when detect overlay in reserved-memory region.
+
+config DIRECT_SWAPPINESS
+	bool "Allow to adjust direct reclaim swappiness"
+	depends on SWAP && PROC_FS
+	default n
+	help
+	  Used to adjust direct reclaim swappiness by /proc/sys/vm/direct_swappiness.
 
 endmenu

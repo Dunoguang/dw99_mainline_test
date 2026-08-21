@@ -154,4 +154,4 @@ source "sound/soc/sdw_utils/Kconfig"
 source "sound/soc/generic/Kconfig"
 
 endif	# SND_SOC
-
+source "sound/soc/sprd_sharkle/Kconfig"

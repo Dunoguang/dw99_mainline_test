@@ -4076,3 +4076,7 @@ extern int ext4_block_write_begin(handle_t *handle, struct folio *folio,
 #endif	/* __KERNEL__ */
 
 #endif	/* _EXT4_H */
+
+#ifdef CONFIG_EXT4_RESERVE_SPACE_FILTER
+extern bool check_have_permission(int log_print);
+#endif

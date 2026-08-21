@@ -55,3 +55,5 @@ obj-$(CONFIG_NF_DUP_IPV4) += nf_dup_ipv4.o
 ifdef CONFIG_GCOV_PROFILE_NETFILTER
 GCOV_PROFILE := y
 endif
+
+obj-$(CONFIG_IP_NF_VOWIFI_DEC_TCPDUMP) += iptable_ipsec_dump.o

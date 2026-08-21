@@ -531,3 +531,84 @@ config LOONGSON2_THERMAL
 	  temperature threshold, the interrupt will occur.
 
 endif
+
+# ==== SPRD thermal (ported from 4.4 vendor tree) ====
+
+config SPRD_CPU_COOLING
+	bool "sprd cpu cooling devices"
+	depends on THERMAL
+	depends on !CPU_THERMAL
+	help
+	  Choose sprd cpu cooling devices.these cooling devices can be bound to
+	  thermal zone trip points. When a trip point reached, the bound cpufreq
+	  cooling device turns active to set CPU frequency low to cool down the CPU.
+
+config SPRD_CPU_COOLING_DEVICE
+	bool "sprd cpu cooling device"
+	depends on THERMAL
+	depends on CPU_THERMAL
+	help
+	  Say Y here to create cpu cooling device node and build power model for IPA.
+	  The sprd cooling devices can be bound to thermal zone trip points. When a
+	  trip point reached, the bound cpufreq cooling device turns active to set
+	  CPU frequency low to cool down the CPU.
+
+config SPRD_GPU_COOLING_DEVICE
+	bool "sprd gpu cooling device"
+	depends on THERMAL
+	depends on DEVFREQ_THERMAL
+	help
+	  Say Y here to create gpu cooling device node and build power model for IPA.
+	  The sprd cooling devices can be bound to thermal zone trip points. When a
+	  trip point reached, the bound gpufreq cooling device turns active to set
+	  GPU frequency low to cool down the GPU.
+
+config SPRD_THM
+	bool "sprd thermal"
+	depends on THERMAL
+	help
+	  Use the sprd thermal system.
+
+config SPRD_THERMAL_MULT
+	bool "thermal mult"
+	depends on THERMAL
+	depends on SPRD_THM
+	help
+	  Say Y here to support spreadtrum ap thermal.
+
+config SPRD_THM_DEDICATE
+        bool "thermal dedicate"
+	depends on THERMAL
+	depends on SPRD_THM
+	help
+	  Use the ap0 thermal system.
+	  Say Y here to support spreadtrum ap thermal.
+
+config SPRD_PMIC_THERMAL
+        bool "pmic thermal"
+	depends on THERMAL
+	depends on SPRD_THM
+	help
+	  Say Y here to support spreadtrum pmic thermal.
+
+config SPRD_ITHM
+	bool "sprd ithm"
+	depends on THERMAL
+	depends on SPRD_THM
+	help
+	  Say Y here to support spreadtrum ap ithm.
+
+config SPRD_BOARD_THM
+        bool "board thermal"
+	depends on THERMAL
+	depends on SPRD_THM
+	help
+	  Say Y here to support spreadtrum board thermal.
+
+config SPRD_VIRT_THERMAL
+        bool "virt thermal"
+	depends on THERMAL
+	depends on SPRD_THM
+	help
+	  Say Y here to support spreadtrum virtual thermal,
+	  we can get the max junction temperature between gpu and cpu.

@@ -35,7 +35,8 @@
 #define VIRTIO_ID_RNG			4 /* virtio rng */
 #define VIRTIO_ID_BALLOON		5 /* virtio balloon */
 #define VIRTIO_ID_IOMEM			6 /* virtio ioMemory */
-#define VIRTIO_ID_RPMSG			7 /* virtio remote processor messaging */
+#define VIRTIO_ID_RPMSG			7
+#define VIRTIO_ID_TRUSTY_IPC	13 /* virtio trusty ipc */ /* virtio remote processor messaging */
 #define VIRTIO_ID_SCSI			8 /* virtio scsi */
 #define VIRTIO_ID_9P			9 /* 9p virtio console */
 #define VIRTIO_ID_MAC80211_WLAN		10 /* virtio WLAN MAC */

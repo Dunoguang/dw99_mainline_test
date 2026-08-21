@@ -16,6 +16,7 @@
 #include <linux/cgroup.h>
 #include <linux/log2.h>
 #include <linux/mm.h>
+#include <linux/notifier.h>
 #include <linux/swap.h>
 #include <linux/printk.h>
 #include <linux/vmpressure.h>
@@ -83,6 +84,26 @@ out:
 
 	return vmpressure_level(pressure);
 }
+
+
+#ifdef CONFIG_PROCESS_RECLAIM
+BLOCKING_NOTIFIER_HEAD(vmpressure_notifier);
+
+int vmpressure_notifier_register(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&vmpressure_notifier, nb);
+}
+
+int vmpressure_notifier_unregister(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&vmpressure_notifier, nb);
+}
+
+void vmpressure_notify(unsigned long pressure)
+{
+	blocking_notifier_call_chain(&vmpressure_notifier, pressure, NULL);
+}
+#endif
 
 /**
  * vmpressure() - Account memory pressure through scanned/reclaimed ratio
@@ -170,6 +191,9 @@ void vmpressure(gfp_t gfp, int order, struct mem_cgroup *memcg, bool tree,
 		spin_unlock(&vmpr->sr_lock);
 
 		level = vmpressure_calc_level(scanned, reclaimed);
+#ifdef CONFIG_PROCESS_RECLAIM
+		vmpressure_notify(level);
+#endif
 
 		/*
 		 * Once we go above COSTLY_ORDER, reclaim relies heavily on

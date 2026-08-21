@@ -49,3 +49,6 @@ source "drivers/staging/axis-fifo/Kconfig"
 source "drivers/staging/vme_user/Kconfig"
 
 endif # STAGING
+source "drivers/staging/sprd/Kconfig"
+source "drivers/staging/sprd_usb/Kconfig"
+source "drivers/staging/android/Kconfig"

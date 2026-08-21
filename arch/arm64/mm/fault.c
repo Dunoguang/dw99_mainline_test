@@ -44,6 +44,9 @@
 #include <asm/system_misc.h>
 #include <asm/tlbflush.h>
 #include <asm/traps.h>
+#ifdef CONFIG_BOOST_SIGKILL_FREE
+#include <linux/boost_sigkill_free.h>
+#endif
 #include <asm/virt.h>
 
 struct fault_info {
@@ -726,6 +729,14 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 	}
 lock_mmap:
 
+#ifdef CONFIG_BOOST_SIGKILL_FREE
+	if (unlikely(test_bit(MMF_FAST_FREEING, __mm_flags_get_bitmap(mm)))) {
+		task_clear_jobctl_pending(current, JOBCTL_PENDING_MASK);
+		sigaddset(&current->pending.signal, SIGKILL);
+		set_tsk_thread_flag(current, TIF_SIGPENDING);
+		return VM_FAULT_SIGSEGV;
+	}
+#endif
 retry:
 	vma = lock_mm_and_find_vma(mm, addr, regs);
 	if (unlikely(!vma)) {

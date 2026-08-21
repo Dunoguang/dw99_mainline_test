@@ -2393,3 +2393,26 @@ config GUNYAH_WATCHDOG
 	  module will be called gunyah_wdt.
 
 endif # WATCHDOG
+
+# ==== SPRD watchdog (ported from 4.4 vendor tree) ====
+
+config SPRD_PMIC_WATCHDOG
+	bool "SPRD PMIC WDT Watchdog timer"
+	depends on SPI_SPRD_ADI_SHARKLE
+	help
+	  If you have a PMIC  watchdog board, say Y here, When PMIC watchdog
+	  is triggered, PMIC system, AP system and modem systemare both reset
+	  by power.
+
+# ALPHA Architecture
+
+# ARM Architecture
+
+config SPRD_WATCHDOG_SYS
+	bool "Spreadtrum Watchdog Timer"
+	depends on ARCH_SPRD
+	help
+	  This is the driver for the hardware watchdog on Spreadtrum chip.
+	  If you wish to have watchdog support enabled, say Y, otherwise say N.
+
+# AVR32 Architecture

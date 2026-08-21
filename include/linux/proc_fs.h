@@ -261,4 +261,8 @@ static inline void proc_make_permanent(struct proc_dir_entry *pde)
 #endif
 }
 
+#ifdef CONFIG_SWAP_ZDATA
+extern void exit_proc_reclaim(struct task_struct *tsk);
+#endif
+
 #endif /* _LINUX_PROC_FS_H */

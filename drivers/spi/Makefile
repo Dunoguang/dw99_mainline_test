@@ -181,3 +181,8 @@ obj-$(CONFIG_SPI_SLAVE_SYSTEM_CONTROL)	+= spi-slave-system-control.o
 # SPI offload triggers
 obj-$(CONFIG_SPI_OFFLOAD_TRIGGER_PWM)	+= spi-offload-trigger-pwm.o
 obj-$(CONFIG_SPI_OFFLOAD_TRIGGER_ADI_UTIL_SD) += spi-offload-trigger-adi-util-sigma-delta.o
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_SPI_EFM32)			+= spi-efm32.o
+obj-$(CONFIG_SPI_SPRD_SHARKLE)			+= spi-sprd-sharkle.o
+obj-$(CONFIG_SPI_SPRD_ADI_SHARKLE)		+= spi-sprd-adi-sharkle.o

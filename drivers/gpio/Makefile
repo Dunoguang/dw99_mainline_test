@@ -225,3 +225,7 @@ obj-$(CONFIG_GPIO_XTENSA)		+= gpio-xtensa.o
 obj-$(CONFIG_GPIO_ZEVIO)		+= gpio-zevio.o
 obj-$(CONFIG_GPIO_ZYNQ)			+= gpio-zynq.o
 obj-$(CONFIG_GPIO_ZYNQMP_MODEPIN)	+= gpio-zynqmp-modepin.o
+
+# ---- SPRD gpio (ported) ----
+obj-$(CONFIG_GPIO_SPRD_AP) += sprd/
+obj-$(CONFIG_GPIO_SPRD_PMIC) += sprd/

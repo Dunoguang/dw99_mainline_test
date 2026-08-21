@@ -86,4 +86,11 @@ static inline void vmpressure(gfp_t gfp, int order, struct mem_cgroup *memcg,
 static inline void vmpressure_prio(gfp_t gfp, struct mem_cgroup *memcg,
 				   int prio) {}
 #endif /* CONFIG_MEMCG */
+
+#ifdef CONFIG_PROCESS_RECLAIM
+extern int vmpressure_notifier_register(struct notifier_block *nb);
+extern int vmpressure_notifier_unregister(struct notifier_block *nb);
+extern void vmpressure_notify(unsigned long pressure);
+#endif
+
 #endif /* __LINUX_VMPRESSURE_H */

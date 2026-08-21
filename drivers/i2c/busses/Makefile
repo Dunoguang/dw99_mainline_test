@@ -164,3 +164,9 @@ obj-$(CONFIG_I2C_FSI)		+= i2c-fsi.o
 obj-$(CONFIG_I2C_VIRTIO)	+= i2c-virtio.o
 
 ccflags-$(CONFIG_I2C_DEBUG_BUS) := -DDEBUG
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_I2C_EFM32)		+= i2c-efm32.o
+obj-$(CONFIG_I2C_SPRD_R7P0)		+= i2c-sprd-r7p0.o
+obj-$(CONFIG_I2C_SPRD_V2)	+= i2c-sprd-v2.o
+obj-$(CONFIG_I2C_SPRD_V3)	+= i2c-sprd-v3.o

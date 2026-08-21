@@ -54,6 +54,12 @@ struct musb_qh;
 #define is_peripheral_active(m)		(!(m)->is_host)
 #define is_host_active(m)		((m)->is_host)
 
+enum {
+	MUSB_PORT_MODE_HOST	= 1,
+	MUSB_PORT_MODE_GADGET,
+	MUSB_PORT_MODE_DUAL_ROLE,
+};
+
 /****************************** CONSTANTS ********************************/
 
 #ifndef MUSB_C_NUM_EPS
@@ -144,6 +150,7 @@ struct musb_io;
 struct musb_platform_ops {
 
 #define MUSB_G_NO_SKB_RESERVE	BIT(9)
+#define MUSB_DMA_SPRD		BIT(10)
 #define MUSB_DA8XX		BIT(8)
 #define MUSB_PRESERVE_SESSION	BIT(7)
 #define MUSB_DMA_UX500		BIT(6)

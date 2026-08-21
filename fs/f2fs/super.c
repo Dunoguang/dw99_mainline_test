@@ -505,8 +505,13 @@ static void f2fs_destroy_casefold_cache(void) { }
 
 static inline void limit_reserve_root(struct f2fs_sb_info *sbi)
 {
+#ifdef CONFIG_F2FS_RESERVE_SPACE_FILTER
+	/* limit is 2% */
+	block_t block_limit = (sbi->user_block_count << 1) / 100;
+#else
 	block_t block_limit = min((sbi->user_block_count >> 3),
 			sbi->user_block_count - sbi->reserved_blocks);
+#endif
 	block_t node_limit = sbi->total_node_count >> 3;
 
 	/* limit is 12.5% */

@@ -69,6 +69,7 @@ struct musb_hw_ep;
 
 #ifdef CONFIG_USB_INVENTRA_DMA
 #define musb_dma_inventra(musb)		(musb->ops->quirks & MUSB_DMA_INVENTRA)
+#define musb_dma_sprd(musb)		(musb->ops->quirks & MUSB_DMA_SPRD)
 #else
 #define musb_dma_inventra(musb)		0
 #endif

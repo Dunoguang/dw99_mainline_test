@@ -97,3 +97,16 @@ obj-$(CONFIG_INPUT_WM831X_ON)		+= wm831x-on.o
 obj-$(CONFIG_INPUT_XEN_KBDDEV_FRONTEND)	+= xen-kbdfront.o
 obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
 obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
+
+# ---- SPRD sensor dirs (ported) ----
+obj-y += mc34xx/
+obj-y += lis3dh_cdc/
+obj-y += mc3xxx_cdc/
+obj-y += lis2dh/
+obj-y += lsm6ds3/
+obj-y += lsm6dsl/
+obj-y += mir3da/
+obj-y += st480/
+obj-y += bma253/
+obj-$(CONFIG_INPUT_KEYCHORD)		+= keychord.o
+obj-$(CONFIG_INPUT_GPIO)		+= gpio_event.o gpio_matrix.o gpio_input.o gpio_output.o gpio_axis.o

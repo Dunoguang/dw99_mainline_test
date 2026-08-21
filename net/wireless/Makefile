@@ -54,3 +54,12 @@ $(obj)/extra-certs.c: $(CONFIG_CFG80211_EXTRA_REGDB_KEYDIR) \
 	  ) > $@)
 
 clean-files += shipped-certs.c extra-certs.c
+
+ifeq ($(CONFIG_CFG80211_INTERNAL_REGDB),y)
+cfg80211-y += regdb.o
+endif
+
+$(obj)/regdb.c: $(src)/db.txt $(src)/genregdb.awk
+	@$(AWK) -f $(src)/genregdb.awk < $< > $@
+
+clean-files += regdb.c

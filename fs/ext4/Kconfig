@@ -90,3 +90,11 @@ config EXT4_KUNIT_TESTS
 	  to the KUnit documentation in Documentation/dev-tools/kunit/.
 
 	  If unsure, say N.
+
+config EXT4_RESERVE_SPACE_FILTER
+	bool "reserve space black and white list filter function."
+	depends on EXT4_FS
+	default y
+	help
+		Support for reserve space black and white list filter feature.
+		If you say Y here, it will enable the feature.

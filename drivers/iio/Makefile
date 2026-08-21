@@ -46,3 +46,6 @@ obj-y += resolver/
 obj-y += temperature/
 obj-y += test/
 obj-y += trigger/
+
+# ---- SPRD iio (ported) ----
+obj-$(CONFIG_SPRD_SENSOR_HUB) += sprd_hub/

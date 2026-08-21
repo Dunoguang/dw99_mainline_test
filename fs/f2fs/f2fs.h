@@ -2533,6 +2533,10 @@ static inline bool f2fs_has_xattr_block(unsigned int ofs)
 	return ofs == XATTR_NODE_OFFSET;
 }
 
+#ifdef CONFIG_F2FS_RESERVE_SPACE_FILTER
+extern bool check_have_permission(int log_print);
+#endif
+
 static inline bool __allow_reserved_root(struct f2fs_sb_info *sbi,
 					struct inode *inode, bool cap)
 {
@@ -2540,7 +2544,11 @@ static inline bool __allow_reserved_root(struct f2fs_sb_info *sbi,
 		return true;
 	if (IS_NOQUOTA(inode))
 		return true;
-	if (uid_eq(F2FS_OPTION(sbi).s_resuid, current_fsuid()))
+	if (uid_eq(F2FS_OPTION(sbi).s_resuid, current_fsuid()) ||
+#ifdef CONFIG_F2FS_RESERVE_SPACE_FILTER
+			check_have_permission(0) ||
+#endif
+			false)
 		return true;
 	if (!gid_eq(F2FS_OPTION(sbi).s_resgid, GLOBAL_ROOT_GID) &&
 					in_group_p(F2FS_OPTION(sbi).s_resgid))

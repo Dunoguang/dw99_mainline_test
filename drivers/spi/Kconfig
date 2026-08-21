@@ -1454,3 +1454,18 @@ config SPI_OFFLOAD_TRIGGER_PWM
 endif # SPI_OFFLOAD
 
 endif # SPI
+
+# ==== SPRD SPI (ported from 4.4 vendor tree) ====
+
+config SPI_SPRD_SHARKLE
+	tristate "Spreadtrum SPI controller"
+	select SPI_BITBANG
+	depends on ARCH_SPRD
+	help
+	  SPI driver for spreadtrum SoCs.
+
+config SPI_SPRD_ADI_SHARKLE
+	tristate "Spreadtrum ADI controller based on SPI"
+	select SPI_BITBANG
+	help
+	  ADI master controller for spreadtrum soc.

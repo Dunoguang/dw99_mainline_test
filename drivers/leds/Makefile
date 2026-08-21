@@ -126,3 +126,8 @@ obj-y					+= blink/
 
 # Simatic LED drivers
 obj-y					+= simatic/
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_LEDS_SPRD_KPLED) 		+= leds-sprd-kpled.o
+obj-$(CONFIG_LEDS_SPRD_BLTC_RGB)	+= leds-sprd-bltc-rgb.o
+obj-$(CONFIG_LEDS_SPRD_GPIO_RGB)	+= leds-sprd-gpio-rgb.o

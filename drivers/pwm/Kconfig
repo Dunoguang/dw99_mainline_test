@@ -867,3 +867,21 @@ config PWM_XILINX
 	  allowing driver logic to be written in safe Rust.
 
 endif
+
+# ==== SPRD PWM (ported from 4.4 vendor tree) ====
+
+config PWM_SPRD_SHARKLE
+	tristate "SPRD PWM support"
+	help
+	  Generic PWM framework driver for SPRD.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pwm-sprd.
+
+config PWM_SPRD_PMIC
+        tristate "SPRD PMIC PWM support"
+        help
+          Generic PWM framework driver for SPRD PMIC chip.
+
+          To compile this driver as a module, choose M here: the module
+          will be called pwm-pmic.

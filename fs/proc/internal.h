@@ -409,7 +409,24 @@ extern const struct file_operations proc_pid_numa_maps_operations;
 extern const struct file_operations proc_pid_smaps_operations;
 extern const struct file_operations proc_pid_smaps_rollup_operations;
 extern const struct file_operations proc_clear_refs_operations;
+#ifdef CONFIG_PROCESS_RECLAIM
+extern const struct file_operations proc_reclaim_operations;
+#endif
+
+#ifdef CONFIG_SMART_RECLAIM
+extern void smart_soft_shrink(struct mm_struct *);
+#else
+static inline void smart_soft_shrink(struct mm_struct *mm) { }
+#endif
+
 extern const struct file_operations proc_pagemap_operations;
+#ifdef CONFIG_CPU_FREQ_TIMES
+extern int proc_time_in_state_show(struct seq_file *m,
+				   struct pid_namespace *ns,
+				   struct pid *pid,
+				   struct task_struct *tsk);
+#endif
+
 
 extern unsigned long task_vsize(struct mm_struct *);
 extern unsigned long task_statm(struct mm_struct *,
@@ -435,3 +452,14 @@ static inline struct dentry *proc_splice_unmountable(struct inode *inode,
 	dont_mount(dentry);
 	return d_splice_alias_ops(inode, dentry, d_ops);
 }
+
+#ifdef CONFIG_SWAP_ZDATA
+extern int process_reclaim_result_read(struct seq_file *m,
+					struct pid_namespace *ns,
+					struct pid *pid,
+					struct task_struct *tsk);
+extern void process_reclaim_result_write(struct task_struct *task,
+					unsigned nr_reclaimed,
+					unsigned nr_writedblock,
+					s64 elapsed_centisecs64);
+#endif

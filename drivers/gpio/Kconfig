@@ -2157,3 +2157,20 @@ config GPIO_VIRTUSER
 endmenu
 
 endif
+
+# ==== SPRD GPIO (ported from 4.4 vendor tree) ====
+
+config GPIO_SPRD_AP
+	tristate "Spreadtrum GPIO support"
+	depends on GPIOLIB && ARCH_SPRD
+	help
+	  Say yes here to support Spreadtrum's GPIO interface. Most pins
+	  on Spreadtrum SoCs can be selected for GPIO which are
+	  controlled by this driver
+
+config GPIO_SPRD_PMIC
+	tristate "Spreadtrum PMIC eic support"
+	depends on GPIO_SPRD_AP
+	help
+	  Say yes here to support Spreadtrum's PMIC eic interface. Most pins
+	  on PMIC can be selected for eic which are controlled by this driver

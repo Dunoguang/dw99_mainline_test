@@ -266,3 +266,5 @@ source "drivers/media/dvb-frontends/Kconfig"
 endmenu
 
 endif # MEDIA_SUPPORT
+source "drivers/media/gsp/Kconfig"
+source "drivers/media/radio/sprd2331/Kconfig"

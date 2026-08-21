@@ -13,6 +13,13 @@
 
 #include <linux/slab.h>
 #include <linux/export.h>
+
+#ifdef CONFIG_BOOST_KILL
+/* Add apportunity to config enable/disable boost
+ * killing action
+ */
+int sysctl_boost_killing __read_mostly;
+#endif
 #include <linux/init.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/user.h>
@@ -964,6 +971,9 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 {
 	struct signal_struct *signal = p->signal;
 	struct task_struct *t;
+#ifdef CONFIG_BOOST_KILL
+	cpumask_t new_mask = CPU_MASK_NONE;
+#endif
 
 	/*
 	 * Now find a thread we can wake up to take the signal off the queue.
@@ -1016,6 +1026,13 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 			signal->group_exit_code = sig;
 			signal->group_stop_count = 0;
 			__for_each_thread(signal, t) {
+#ifdef CONFIG_BOOST_KILL
+				if (sysctl_boost_killing) {
+					if (can_nice(t, -20))
+						set_user_nice(t, -20);
+					arch_get_fast_cpus(&new_mask);
+				}
+#endif
 				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 				sigaddset(&t->pending.signal, SIGKILL);
 				signal_wake_up(t, 1);
@@ -5060,3 +5077,11 @@ void kdb_send_sig(struct task_struct *t, int sig)
 		kdb_printf("Signal %d is sent to process %d.\n", sig, t->pid);
 }
 #endif	/* CONFIG_KGDB_KDB */
+
+#ifdef CONFIG_SWAP_ZDATA
+int reclaim_sigusr_pending(struct task_struct *tsk)
+{
+	return	sigismember(&tsk->pending.signal, SIGUSR2) ||
+		sigismember(&tsk->signal->shared_pending.signal, SIGUSR2);
+}
+#endif

@@ -92,3 +92,6 @@ obj-y += qcom/
 obj-y += stm32/
 obj-y += ti/
 obj-y += xilinx/
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_SPRD_DMA_VENDOR) += sprd_dma.o

@@ -87,6 +87,16 @@ int gpio_request_one(unsigned gpio, unsigned long flags, const char *label);
 int devm_gpio_request_one(struct device *dev, unsigned gpio,
 			  unsigned long flags, const char *label);
 
+static inline int devm_gpio_request(struct device *dev, unsigned gpio,
+				    const char *label)
+{
+	return devm_gpio_request_one(dev, gpio, GPIOF_IN, label);
+}
+
+static inline void devm_gpio_free(struct device *dev, unsigned gpio)
+{
+}
+
 #else /* ! CONFIG_GPIOLIB */
 
 #include <linux/kernel.h>
@@ -166,6 +176,17 @@ static inline int devm_gpio_request_one(struct device *dev, unsigned gpio,
 {
 	WARN_ON(1);
 	return -EINVAL;
+}
+
+static inline int devm_gpio_request(struct device *dev, unsigned gpio,
+				    const char *label)
+{
+	WARN_ON(1);
+	return -EINVAL;
+}
+
+static inline void devm_gpio_free(struct device *dev, unsigned gpio)
+{
 }
 
 #endif /* ! CONFIG_GPIOLIB */

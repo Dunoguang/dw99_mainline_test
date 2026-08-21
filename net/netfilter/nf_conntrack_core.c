@@ -1995,6 +1995,16 @@ static int nf_conntrack_handle_packet(struct nf_conn *ct,
 		return nf_conntrack_gre_packet(ct, skb, dataoff,
 					       ctinfo, state);
 #endif
+#ifdef CONFIG_NF_CT_PROTO_DCCP
+	case IPPROTO_DCCP:
+		return nf_conntrack_dccp_packet(ct, skb, dataoff,
+						ctinfo, state);
+#endif
+#ifdef CONFIG_NF_CT_PROTO_UDPLITE
+	case IPPROTO_UDPLITE:
+		return nf_conntrack_udplite_packet(ct, skb, dataoff,
+						   ctinfo, state);
+#endif
 	}
 
 	return generic_packet(ct, skb, ctinfo);

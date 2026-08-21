@@ -8,6 +8,9 @@
 #define ARM64_ASM_PREAMBLE
 #endif
 
+
+#define __asmeq(x, y)  ".ifnc " x "," y " ; .err ; .endif\n\t"
+
 #define xpaclri(ptr)							\
 ({									\
 	register unsigned long __xpaclri_ptr asm("x30") = (ptr);	\

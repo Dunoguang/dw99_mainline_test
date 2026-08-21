@@ -18,6 +18,8 @@ obj-y :=	open.o read_write.o file_table.o super.o \
 		kernel_read_file.o mnt_idmapping.o remap_range.o pidfs.o \
 		file_attr.o fserror.o nullfs.o failfs.o
 
+obj-$(CONFIG_KSU_SUSFS) += susfs.o
+
 obj-$(CONFIG_BUFFER_HEAD)	+= buffer.o mpage.o
 obj-$(CONFIG_PROC_FS)		+= proc_namespace.o
 obj-$(CONFIG_LEGACY_DIRECT_IO)	+= direct-io.o
@@ -124,6 +126,7 @@ obj-$(CONFIG_CEPH_FS)		+= ceph/
 obj-$(CONFIG_PSTORE)		+= pstore/
 obj-$(CONFIG_EFIVAR_FS)		+= efivarfs/
 obj-$(CONFIG_EROFS_FS)		+= erofs/
+obj-$(CONFIG_SDCARD_FS)		+= sdcardfs/
 obj-$(CONFIG_VBOXSF_FS)		+= vboxsf/
 obj-$(CONFIG_ZONEFS_FS)		+= zonefs/
 obj-$(CONFIG_BPF_LSM)		+= bpf_fs_kfuncs.o

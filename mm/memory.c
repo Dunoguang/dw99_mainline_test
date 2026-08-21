@@ -79,6 +79,9 @@
 #include <linux/pgalloc.h>
 #include <linux/uaccess.h>
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+#include <linux/susfs_def.h>
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 #include <trace/events/kmem.h>
 
 #include <asm/io.h>
@@ -7167,8 +7170,18 @@ static int __access_remote_vm(struct mm_struct *mm, unsigned long addr,
 		void *maddr;
 		struct folio *folio;
 		struct vm_area_struct *vma = NULL;
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		struct page *page = NULL;
+
+		if (vma && vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
+			break;
+		
+		page = get_user_page_vma_remote(mm, addr,
+							     gup_flags, &vma);
+#else
 		struct page *page = get_user_page_vma_remote(mm, addr,
 							     gup_flags, &vma);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
 		if (IS_ERR(page)) {
 			/* We might need to expand the stack to access it */
@@ -7681,3 +7694,41 @@ void vma_pgtable_walk_end(struct vm_area_struct *vma)
 	if (is_vm_hugetlb_page(vma))
 		hugetlb_vma_unlock_read(vma);
 }
+
+
+#ifdef CONFIG_BOOST_SIGKILL_FREE
+#include <linux/boost_sigkill_free.h>
+
+int sysctl_boost_sigkill_free;
+
+static void __fast_free_user_mem(struct mm_struct *mm)
+{
+	struct vm_area_struct *vma;
+	MA_STATE(mas, &mm->mm_mt, ULONG_MAX, ULONG_MAX);
+
+	mas_for_each_rev(&mas, vma, 0) {
+		if (vma->vm_flags & (VM_LOCKED|VM_HUGETLB|VM_PFNMAP))
+			continue;
+		if (vma_is_anonymous(vma) || !(vma->vm_flags & VM_SHARED))
+			zap_vma_for_reaping(vma);
+	}
+}
+
+void fast_free_user_mem(void)
+{
+	struct mm_struct *mm = current->mm;
+
+	if (!mm)
+		return;
+
+	mmap_read_lock(mm);
+	if (test_and_set_bit(MMF_FAST_FREEING, ACCESS_PRIVATE(&mm->flags, __mm_flags))) {
+		mmap_read_unlock(mm);
+		return;
+	}
+
+	__fast_free_user_mem(mm);
+
+	mmap_read_unlock(mm);
+}
+#endif

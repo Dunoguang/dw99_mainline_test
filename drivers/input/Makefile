@@ -10,6 +10,7 @@ input-core-y := input.o input-compat.o input-mt.o input-poller.o ff-core.o
 input-core-y += touchscreen.o touch-overlay.o
 
 obj-$(CONFIG_INPUT_FF_MEMLESS)	+= ff-memless.o
+obj-$(CONFIG_INPUT_POLLDEV)	+= input-polldev.o
 obj-$(CONFIG_INPUT_SPARSEKMAP)	+= sparse-keymap.o
 obj-$(CONFIG_INPUT_MATRIXKMAP)	+= matrix-keymap.o
 obj-$(CONFIG_INPUT_VIVALDIFMAP)	+= vivaldi-fmap.o
@@ -30,3 +31,7 @@ obj-$(CONFIG_INPUT_KUNIT_TEST)	+= tests/
 obj-$(CONFIG_INPUT_APMPOWER)	+= apm-power.o
 
 obj-$(CONFIG_RMI4_CORE)		+= rmi4/
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o
+obj-$(CONFIG_INPUT_KEYCOMBO)	+= keycombo.o

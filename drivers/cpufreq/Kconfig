@@ -105,6 +105,11 @@ config CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
 	  have a look at the help section of that governor. The fallback
 	  governor will be 'performance'.
 
+config CPU_FREQ_DEFAULT_GOV_INTERACTIVE
+	bool "interactive"
+	select CPU_FREQ_GOV_INTERACTIVE
+	help
+	  Use the CPUFreq governor 'interactive' as default.
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -367,3 +372,73 @@ config ACPI_CPPC_CPUFREQ_FIE
 endif # CPU_FREQ
 
 endmenu
+
+# ==== SPRD cpufreq governor (ported from 4.4 vendor tree) ====
+
+config CPU_FREQ_DEFAULT_GOV_SPRDEMAND
+	bool "sprdemand"
+	select CPU_FREQ_GOV_SPRDEMAND
+	select CPU_FREQ_GOV_PERFORMANCE
+	help
+	 Use the CPUFreq governor 'sprdemand' as default. This allows
+	 you to get a full dynamic frequency capable system by simply
+	 loading your cpufreq low-level hardware driver.
+	 Be aware that not all cpufreq drivers support the ondemand
+	 governor. If unsure have a look at the help section of the
+	 driver. Fallback governor will be the performance governor.
+
+config CPU_FREQ_GOV_SPRDEMAND
+	tristate "'sprdemand' cpufreq policy governor"
+	select CPU_FREQ_GOV_COMMON
+	help
+	  'sprdemand' - this driver mimics the frequency scaling behavior
+	  in 'ondemand', but with some key differences. 'sprdemand' will
+	  offline auxillary CPUs when the system is idle, and online those
+	  CPUs once the system becomes busy again. This last feature is needed for
+	  architectures which transition to low power states when only
+	  the "master" CPU is online, or for thermally constrained
+	  devices.
+	  If you don't have one of these architectures or devices, use
+	  'ondemand' instead.
+
+# ==== SPRD cpufreq drivers (ported) ====
+config ARM_SPRD_CPUFREQ
+	bool "Spreadtrum CPUFreq driver"
+	depends on ARCH_SPRD
+	help
+	  Spreadtrum SoC cpufreq driver (sharkle).
+
+config ARM_SPRD_CPUFREQHW_SHARKL3
+	bool "Spreadtrum Sharkl3 CPUFreq HW driver"
+	depends on ARCH_SPRD
+	help
+	  Spreadtrum sharkl3 cpufreq hardware driver.
+
+config ARM_SPRD_DUMMY_CPUFREQ
+	bool "Spreadtrum dummy cpufreq"
+	depends on ARCH_SPRD
+	help
+	  Spreadtrum dummy cpufreq driver (used when no real cpufreq hw).
+
+config CPU_FREQ_TIMES
+	bool "CPU frequency time-in-state statistics"
+	default y
+	help
+	  This driver exports CPU time-in-state information through procfs.
+
+
+config CPU_FREQ_GOV_INTERACTIVE
+	bool "'interactive' cpufreq policy governor"
+	help
+	  'interactive' - This driver adds a dynamic cpufreq policy governor
+	  designed for latency-sensitive workloads.
+
+	  This governor attempts to reduce the latency of clock
+	  frequency ramping by setting a higher frequency more
+	  aggressively.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cpufreq_interactive.
+
+	  If in doubt, say N.
+

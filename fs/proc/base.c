@@ -100,6 +100,10 @@
 #include <linux/ksm.h>
 #include <uapi/linux/lsm.h>
 #include <trace/events/oom.h>
+#if defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
+#include <linux/susfs_def.h>
+#endif // #if defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
+
 #include "internal.h"
 #include "fd.h"
 
@@ -1812,6 +1816,10 @@ static const char *proc_pid_get_link(struct dentry *dentry,
 	return ERR_PTR(error);
 }
 
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+extern int susfs_open_redirect_spoof_do_proc_readlink(struct inode *inode, char *tmp_buf, int buflen);
+#endif
+
 static int do_proc_readlink(const struct path *path, char __user *buffer, int buflen)
 {
 	char *tmp = kmalloc(PATH_MAX, GFP_KERNEL);
@@ -1820,6 +1828,18 @@ static int do_proc_readlink(const struct path *path, char __user *buffer, int bu
 
 	if (!tmp)
 		return -ENOMEM;
+
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+	if (SUSFS_IS_INODE_OPEN_REDIRECT(path->dentry->d_inode)) {
+		if (!susfs_open_redirect_spoof_do_proc_readlink(path->dentry->d_inode, tmp, buflen)) {
+			len = strlen(tmp);
+			if (copy_to_user(buffer, tmp, len))
+				len = -EFAULT;
+			kfree(tmp);
+			return len;
+		}
+	}
+#endif
 
 	pathname = d_path(path, tmp, PATH_MAX);
 	len = PTR_ERR(pathname);
@@ -2425,6 +2445,10 @@ proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 	for_each_vma(vmi, vma) {
 		if (!vma->vm_file)
 			continue;
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		if (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
+			continue;
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		if (++pos <= ctx->pos)
 			continue;
 
@@ -3307,6 +3331,9 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("cmdline",    S_IRUGO, proc_pid_cmdline_ops),
 	ONE("stat",       S_IRUGO, proc_tgid_stat),
 	ONE("statm",      S_IRUGO, proc_pid_statm),
+#ifdef CONFIG_CPU_FREQ_TIMES
+	ONE("time_in_state", 0444, proc_time_in_state_show),
+#endif
 	REG("maps",       S_IRUGO, proc_pid_maps_operations),
 #ifdef CONFIG_NUMA
 	REG("numa_maps",  S_IRUGO, proc_pid_numa_maps_operations),
@@ -3318,6 +3345,12 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("mounts",     S_IRUGO, proc_mounts_operations),
 	REG("mountinfo",  S_IRUGO, proc_mountinfo_operations),
 	REG("mountstats", S_IRUSR, proc_mountstats_operations),
+#ifdef CONFIG_PROCESS_RECLAIM
+	REG("reclaim", S_IWUSR, proc_reclaim_operations),
+#ifdef CONFIG_SWAP_ZDATA
+	ONE("reclaim_result", S_IRUSR, process_reclaim_result_read),
+#endif
+#endif
 #ifdef CONFIG_PROC_PAGE_MONITOR
 	REG("clear_refs", S_IWUSR, proc_clear_refs_operations),
 	REG("smaps",      S_IRUGO, proc_pid_smaps_operations),
@@ -3660,6 +3693,9 @@ static const struct pid_entry tid_base_stuff[] = {
 	REG("cmdline",   S_IRUGO, proc_pid_cmdline_ops),
 	ONE("stat",      S_IRUGO, proc_tid_stat),
 	ONE("statm",     S_IRUGO, proc_pid_statm),
+#ifdef CONFIG_CPU_FREQ_TIMES
+	ONE("time_in_state", 0444, proc_time_in_state_show),
+#endif
 	REG("maps",      S_IRUGO, proc_pid_maps_operations),
 #ifdef CONFIG_PROC_CHILDREN
 	REG("children",  S_IRUGO, proc_tid_children_operations),

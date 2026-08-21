@@ -220,3 +220,11 @@ obj-$(CONFIG_REGULATOR_WM8400) += wm8400-regulator.o
 obj-$(CONFIG_REGULATOR_WM8994) += wm8994-regulator.o
 
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_REGULATOR_SC2703) += sc2703-regulator.o sc2703-lcd-regulator.o
+obj-$(CONFIG_REGULATOR_SC2723) += sc2723-regulator.o
+obj-$(CONFIG_REGULATOR_SC2731) += sc2731-regulator.o
+obj-$(CONFIG_REGULATOR_IWHALE2) += sprd_iwhale2.o
+obj-$(CONFIG_REGULATOR_SC2721) += sc2721-regulator.o
+obj-$(CONFIG_REGULATOR_SC2720) += sc2720-regulator.o

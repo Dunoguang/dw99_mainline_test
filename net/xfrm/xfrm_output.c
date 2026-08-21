@@ -25,6 +25,9 @@
 #include "xfrm_inout.h"
 
 static int xfrm_output2(struct net *net, struct sock *sk, struct sk_buff *skb);
+#ifdef CONFIG_XFRM_FRAGMENT
+static int xfrm_output_resume_frag(struct sk_buff *skb, int err);
+#endif
 static int xfrm_inner_extract_output(struct xfrm_state *x, struct sk_buff *skb);
 
 static int xfrm_skb_check_space(struct sk_buff *skb)
@@ -594,6 +597,14 @@ int xfrm_output_resume(struct sock *sk, struct sk_buff *skb, int err)
 {
 	struct net *net = xs_net(skb_dst(skb)->xfrm);
 
+#ifdef CONFIG_XFRM_FRAGMENT
+	/*err=0 means that hw crypto callback to call this func.
+	 *err=1 the normal processing flow.
+	 */
+	if (net && net->xfrm.enable_xfrm_fragment)
+		return xfrm_output_resume_frag(skb, err);
+#endif
+
 	while (likely((err = xfrm_output_one(skb, err)) == 0)) {
 		nf_reset_ct(skb);
 
@@ -618,6 +629,35 @@ out:
 	return err;
 }
 EXPORT_SYMBOL_GPL(xfrm_output_resume);
+
+#ifdef CONFIG_XFRM_FRAGMENT
+
+static inline int ipv4v6_skb_dst_mtu(struct sk_buff *skb)
+{
+	struct iphdr *iph = ip_hdr(skb);
+
+	if (iph->version == 0x04)
+		return skb_dst(skb)->dev->mtu;
+	else
+		return IPV6_MIN_MTU;
+}
+
+static int xfrm_output_resume_frag(struct sk_buff *skb, int err)
+{
+	int mtu, offset;
+
+	mtu = ipv4v6_skb_dst_mtu(skb);
+	offset = 0;
+	while (err > 0) {
+		mtu = skb_dst(skb)->dev->mtu;
+		err = xfrm_output_one(skb, err);
+		if (err == -EINPROGRESS)
+			return err;
+		offset += mtu;
+	}
+	return err;
+}
+#endif
 
 static int xfrm_dev_direct_output(struct sock *sk, struct xfrm_state *x,
 				  struct sk_buff *skb)

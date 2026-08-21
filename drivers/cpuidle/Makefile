@@ -42,3 +42,5 @@ obj-$(CONFIG_POWERNV_CPUIDLE)		+= cpuidle-powernv.o
 ###############################################################################
 # RISC-V drivers
 obj-$(CONFIG_RISCV_SBI_CPUIDLE)		+= cpuidle-riscv-sbi.o
+obj-$(CONFIG_ARM_SPRD_DUMMY_CPUIDLE)	+= cpuidle-sprd-dummy.o
+obj-$(CONFIG_ARM_SPRD_CPUIDLE)		+= cpuidle-sprd.o

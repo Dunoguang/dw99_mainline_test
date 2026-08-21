@@ -54,21 +54,37 @@ config DT_IDLE_GENPD
 menu "ARM CPU Idle Drivers"
 depends on ARM || ARM64
 source "drivers/cpuidle/Kconfig.arm"
+config CPU_IDLE_GOV_SPRD
+	bool "Sprd governor (based on menu governor)"
+	default n
+
 endmenu
 
 menu "MIPS CPU Idle Drivers"
 depends on MIPS
 source "drivers/cpuidle/Kconfig.mips"
+config CPU_IDLE_GOV_SPRD
+	bool "Sprd governor (based on menu governor)"
+	default n
+
 endmenu
 
 menu "POWERPC CPU Idle Drivers"
 depends on PPC
 source "drivers/cpuidle/Kconfig.powerpc"
+config CPU_IDLE_GOV_SPRD
+	bool "Sprd governor (based on menu governor)"
+	default n
+
 endmenu
 
 menu "RISC-V CPU Idle Drivers"
 depends on RISCV
 source "drivers/cpuidle/Kconfig.riscv"
+config CPU_IDLE_GOV_SPRD
+	bool "Sprd governor (based on menu governor)"
+	default n
+
 endmenu
 
 config HALTPOLL_CPUIDLE
@@ -85,4 +101,8 @@ endif # CPU_IDLE
 
 config ARCH_NEEDS_CPU_IDLE_COUPLED
 	def_bool n
+config CPU_IDLE_GOV_SPRD
+	bool "Sprd governor (based on menu governor)"
+	default n
+
 endmenu

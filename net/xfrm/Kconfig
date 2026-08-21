@@ -158,3 +158,12 @@ config XFRM_ESPINTCP
 	bool
 
 endif # INET
+
+config XFRM_FRAGMENT
+	bool "fragment pkts before doing xfrm to avoiding pkts fraged in ip layer"
+	depends on XFRM_SUB_POLICY
+	default n
+	help
+	  Support pkt fragment in ip layer before esp. By using this one,
+	  control parameter will be set to one. It is only for sprd until
+	  now.

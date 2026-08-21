@@ -490,4 +490,8 @@ static inline void __user *arch_untagged_si_addr(void __user *addr,
 }
 #endif
 
+#ifdef CONFIG_SWAP_ZDATA
+int reclaim_sigusr_pending(struct task_struct *tsk);
+#endif
+
 #endif /* _LINUX_SIGNAL_H */

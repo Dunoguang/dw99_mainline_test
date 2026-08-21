@@ -54,3 +54,6 @@ obj-$(CONFIG_GENERIC_PHY)		+= allwinner/	\
 					   tegra/	\
 					   ti/		\
 					   xilinx/
+
+# ---- SPRD dsi phy (ported) ----
+obj-$(CONFIG_DSI_CTRL_R1P0) += dsi_1_21a/

@@ -1,0 +1,8 @@
+# ==== SPRD power reset (ported from 4.4 vendor tree) ====
+
+config POWER_RESET_SC2723
+	bool "PMIC SC2723 power off driver"
+	depends on PMIC_SC2723
+	help
+	  This driver supports poweroff for Spreadtrum boards.
+

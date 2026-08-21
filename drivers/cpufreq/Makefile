@@ -104,3 +104,11 @@ obj-$(CONFIG_LOONGSON3_CPUFREQ)		+= loongson3_cpufreq.o
 obj-$(CONFIG_SH_CPU_FREQ)		+= sh-cpufreq.o
 obj-$(CONFIG_SPARC_US2E_CPUFREQ)	+= sparc-us2e-cpufreq.o
 obj-$(CONFIG_SPARC_US3_CPUFREQ)		+= sparc-us3-cpufreq.o
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_CPU_FREQ_GOV_SPRDEMAND)	+= cpufreq_sprdemand.o
+obj-$(CONFIG_ARM_SPRD_CPUFREQ)          += sprd-cpufreq.o
+obj-$(CONFIG_ARM_SPRD_CPUFREQHW_SHARKL3)          += sprd-cpufreqhw-sharkl3.o
+obj-$(CONFIG_ARM_SPRD_DUMMY_CPUFREQ)	+= sprd-dummy-cpufreq.o
+obj-$(CONFIG_CPU_FREQ_TIMES)		+= cpufreq_times.o
+obj-$(CONFIG_CPU_FREQ_GOV_INTERACTIVE) += cpufreq_interactive.o

@@ -173,3 +173,7 @@ obj-$(CONFIG_VIPERBOARD_ADC) += viperboard_adc.o
 obj-$(CONFIG_XILINX_AMS) += xilinx-ams.o
 xilinx-xadc-y := xilinx-xadc-core.o xilinx-xadc-events.o
 obj-$(CONFIG_XILINX_XADC) += xilinx-xadc.o
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_SPRD_ADC) += sprd_adc.o
+obj-$(CONFIG_SPRD_SC2720_ADC) += sprd_2720_adc.o

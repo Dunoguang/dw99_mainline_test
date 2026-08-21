@@ -992,4 +992,13 @@ static inline int folio_mkclean(struct folio *folio)
 }
 #endif	/* CONFIG_MMU */
 
+#ifdef CONFIG_SWAP_ZDATA
+extern unsigned long reclaim_pages_from_list(struct list_head *page_list,
+					     struct vm_area_struct *vma, bool hiber,
+					     unsigned *nr_writedblock);
+#elif defined(CONFIG_PROCESS_RECLAIM)
+extern unsigned long reclaim_pages_from_list(struct list_head *page_list,
+					     struct vm_area_struct *vma);
+#endif
+
 #endif	/* _LINUX_RMAP_H */

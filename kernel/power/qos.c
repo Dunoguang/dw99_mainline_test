@@ -792,3 +792,336 @@ int freq_qos_remove_notifier(struct freq_constraints *qos,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(freq_qos_remove_notifier);
+
+/*
+ * ================= sprd pm_qos legacy API (ported from 4.4) =================
+ * 4.4 global pm_qos class mechanism. Uses existing pm_qos_update_target()
+ * and pm_qos_lock from this file.
+ */
+
+struct pm_qos_object {
+	struct pm_qos_constraints *constraints;
+	struct miscdevice pm_qos_power_miscdev;
+	char *name;
+};
+
+static struct pm_qos_object null_pm_qos;
+
+static BLOCKING_NOTIFIER_HEAD(cpu_dma_lat_notifier);
+static struct pm_qos_constraints cpu_dma_constraints = {
+	.list = PLIST_HEAD_INIT(cpu_dma_constraints.list),
+	.target_value = PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE,
+	.default_value = PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE,
+	.type = PM_QOS_MIN,
+	.notifiers = &cpu_dma_lat_notifier,
+};
+static struct pm_qos_object cpu_dma_pm_qos = {
+	.constraints = &cpu_dma_constraints,
+	.name = "cpu_dma_latency",
+};
+
+static BLOCKING_NOTIFIER_HEAD(network_lat_notifier);
+static struct pm_qos_constraints network_lat_constraints = {
+	.list = PLIST_HEAD_INIT(network_lat_constraints.list),
+	.target_value = PM_QOS_NETWORK_LAT_DEFAULT_VALUE,
+	.default_value = PM_QOS_NETWORK_LAT_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_NETWORK_LAT_DEFAULT_VALUE,
+	.type = PM_QOS_MIN,
+	.notifiers = &network_lat_notifier,
+};
+static struct pm_qos_object network_lat_pm_qos = {
+	.constraints = &network_lat_constraints,
+	.name = "network_latency",
+};
+
+static BLOCKING_NOTIFIER_HEAD(network_throughput_notifier);
+static struct pm_qos_constraints network_tput_constraints = {
+	.list = PLIST_HEAD_INIT(network_tput_constraints.list),
+	.target_value = PM_QOS_NETWORK_THROUGHPUT_DEFAULT_VALUE,
+	.default_value = PM_QOS_NETWORK_THROUGHPUT_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_NETWORK_THROUGHPUT_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &network_throughput_notifier,
+};
+static struct pm_qos_object network_throughput_pm_qos = {
+	.constraints = &network_tput_constraints,
+	.name = "network_throughput",
+};
+
+static BLOCKING_NOTIFIER_HEAD(memory_bandwidth_notifier);
+static struct pm_qos_constraints memory_bw_constraints = {
+	.list = PLIST_HEAD_INIT(memory_bw_constraints.list),
+	.target_value = PM_QOS_MEMORY_BANDWIDTH_DEFAULT_VALUE,
+	.default_value = PM_QOS_MEMORY_BANDWIDTH_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_MEMORY_BANDWIDTH_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &memory_bandwidth_notifier,
+};
+static struct pm_qos_object memory_bandwidth_pm_qos = {
+	.constraints = &memory_bw_constraints,
+	.name = "memory_bandwidth",
+};
+
+static BLOCKING_NOTIFIER_HEAD(cluster0_freq_max_notifier);
+static struct pm_qos_constraints cluster0_freq_max_constraints = {
+	.list = PLIST_HEAD_INIT(cluster0_freq_max_constraints.list),
+	.target_value = PM_QOS_FREQ_MAX_DEFAULT_VALUE,
+	.default_value = PM_QOS_FREQ_MAX_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_FREQ_MAX_DEFAULT_VALUE,
+	.type = PM_QOS_MIN,
+	.notifiers = &cluster0_freq_max_notifier,
+};
+static struct pm_qos_object cluster0_freq_max_pm_qos = {
+	.constraints = &cluster0_freq_max_constraints,
+	.name = "cluster0_freq_max",
+};
+
+static BLOCKING_NOTIFIER_HEAD(cluster0_freq_min_notifier);
+static struct pm_qos_constraints cluster0_freq_min_constraints = {
+	.list = PLIST_HEAD_INIT(cluster0_freq_min_constraints.list),
+	.target_value = PM_QOS_FREQ_MIN_DEFAULT_VALUE,
+	.default_value = PM_QOS_FREQ_MIN_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_FREQ_MIN_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &cluster0_freq_min_notifier,
+};
+static struct pm_qos_object cluster0_freq_min_pm_qos = {
+	.constraints = &cluster0_freq_min_constraints,
+	.name = "cluster0_freq_min",
+};
+
+static BLOCKING_NOTIFIER_HEAD(cluster1_freq_max_notifier);
+static struct pm_qos_constraints cluster1_freq_max_constraints = {
+	.list = PLIST_HEAD_INIT(cluster1_freq_max_constraints.list),
+	.target_value = PM_QOS_FREQ_MAX_DEFAULT_VALUE,
+	.default_value = PM_QOS_FREQ_MAX_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_FREQ_MAX_DEFAULT_VALUE,
+	.type = PM_QOS_MIN,
+	.notifiers = &cluster1_freq_max_notifier,
+};
+static struct pm_qos_object cluster1_freq_max_pm_qos = {
+	.constraints = &cluster1_freq_max_constraints,
+	.name = "cluster1_freq_max",
+};
+
+static BLOCKING_NOTIFIER_HEAD(cluster1_freq_min_notifier);
+static struct pm_qos_constraints cluster1_freq_min_constraints = {
+	.list = PLIST_HEAD_INIT(cluster1_freq_min_constraints.list),
+	.target_value = PM_QOS_FREQ_MIN_DEFAULT_VALUE,
+	.default_value = PM_QOS_FREQ_MIN_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_FREQ_MIN_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &cluster1_freq_min_notifier,
+};
+static struct pm_qos_object cluster1_freq_min_pm_qos = {
+	.constraints = &cluster1_freq_min_constraints,
+	.name = "cluster1_freq_min",
+};
+
+static BLOCKING_NOTIFIER_HEAD(cluster0_core_max_notifier);
+static struct pm_qos_constraints cluster0_core_max_constraints = {
+	.list = PLIST_HEAD_INIT(cluster0_core_max_constraints.list),
+	.target_value = PM_QOS_CPU_CORE_MAX_DEFAULT_VALUE,
+	.default_value = PM_QOS_CPU_CORE_MAX_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_CPU_CORE_MAX_DEFAULT_VALUE,
+	.type = PM_QOS_MIN,
+	.notifiers = &cluster0_core_max_notifier,
+};
+static struct pm_qos_object cluster0_core_max_pm_qos = {
+	.constraints = &cluster0_core_max_constraints,
+	.name = "cluster0_core_max",
+};
+
+static BLOCKING_NOTIFIER_HEAD(cluster0_core_min_notifier);
+static struct pm_qos_constraints cluster0_core_min_constraints = {
+	.list = PLIST_HEAD_INIT(cluster0_core_min_constraints.list),
+	.target_value = PM_QOS_CPU_CORE_MIN_DEFAULT_VALUE,
+	.default_value = PM_QOS_CPU_CORE_MIN_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_CPU_CORE_MIN_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &cluster0_core_min_notifier,
+};
+static struct pm_qos_object cluster0_core_min_pm_qos = {
+	.constraints = &cluster0_core_min_constraints,
+	.name = "cluster0_core_min",
+};
+
+static BLOCKING_NOTIFIER_HEAD(cluster1_core_max_notifier);
+static struct pm_qos_constraints cluster1_core_max_constraints = {
+	.list = PLIST_HEAD_INIT(cluster1_core_max_constraints.list),
+	.target_value = PM_QOS_CPU_CORE_MAX_DEFAULT_VALUE,
+	.default_value = PM_QOS_CPU_CORE_MAX_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_CPU_CORE_MAX_DEFAULT_VALUE,
+	.type = PM_QOS_MIN,
+	.notifiers = &cluster1_core_max_notifier,
+};
+static struct pm_qos_object cluster1_core_max_pm_qos = {
+	.constraints = &cluster1_core_max_constraints,
+	.name = "cluster1_core_max",
+};
+
+static BLOCKING_NOTIFIER_HEAD(cluster1_core_min_notifier);
+static struct pm_qos_constraints cluster1_core_min_constraints = {
+	.list = PLIST_HEAD_INIT(cluster1_core_min_constraints.list),
+	.target_value = PM_QOS_CPU_CORE_MIN_DEFAULT_VALUE,
+	.default_value = PM_QOS_CPU_CORE_MIN_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_CPU_CORE_MIN_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &cluster1_core_min_notifier,
+};
+static struct pm_qos_object cluster1_core_min_pm_qos = {
+	.constraints = &cluster1_core_min_constraints,
+	.name = "cluster1_core_min",
+};
+
+static struct pm_qos_object *pm_qos_array[] = {
+	&null_pm_qos,
+	&cpu_dma_pm_qos,
+	&network_lat_pm_qos,
+	&network_throughput_pm_qos,
+	&memory_bandwidth_pm_qos,
+	&cluster0_freq_max_pm_qos,
+	&cluster0_freq_min_pm_qos,
+	&cluster1_freq_max_pm_qos,
+	&cluster1_freq_min_pm_qos,
+	&cluster0_core_max_pm_qos,
+	&cluster0_core_min_pm_qos,
+	&cluster1_core_max_pm_qos,
+	&cluster1_core_min_pm_qos,
+};
+
+static void __pm_qos_update_request(struct pm_qos_request *req,
+			   s32 new_value)
+{
+	trace_pm_qos_update_request(new_value);
+
+	if (new_value != req->node.prio)
+		pm_qos_update_target(
+			pm_qos_array[req->pm_qos_class]->constraints,
+			&req->node, PM_QOS_UPDATE_REQ, new_value);
+}
+
+/**
+ * pm_qos_work_fn - the timeout handler of pm_qos_update_request_timeout
+ * @work: work struct for the delayed work (timeout)
+ *
+ * This cancels the timeout request by falling back to the default at timeout.
+ */
+static void pm_qos_work_fn(struct work_struct *work)
+{
+	struct pm_qos_request *req = container_of(to_delayed_work(work),
+						  struct pm_qos_request,
+						  work);
+
+	__pm_qos_update_request(req, PM_QOS_DEFAULT_VALUE);
+}
+
+int pm_qos_request_active(struct pm_qos_request *req)
+{
+	return req->pm_qos_class != 0;
+}
+EXPORT_SYMBOL_GPL(pm_qos_request_active);
+
+void pm_qos_add_request(struct pm_qos_request *req,
+			int pm_qos_class, s32 value)
+{
+	if (!req) /*guard against callers passing in null */
+		return;
+
+	if (pm_qos_request_active(req)) {
+		WARN(1, KERN_ERR "pm_qos_add_request() called for already added request\n");
+		return;
+	}
+	req->pm_qos_class = pm_qos_class;
+	INIT_DELAYED_WORK(&req->work, pm_qos_work_fn);
+	trace_pm_qos_add_request(value);
+	pm_qos_update_target(pm_qos_array[pm_qos_class]->constraints,
+			     &req->node, PM_QOS_ADD_REQ, value);
+}
+EXPORT_SYMBOL_GPL(pm_qos_add_request);
+
+void pm_qos_update_request(struct pm_qos_request *req,
+			   s32 new_value)
+{
+	if (!req) /*guard against callers passing in null */
+		return;
+
+	if (!pm_qos_request_active(req)) {
+		WARN(1, KERN_ERR "pm_qos_update_request() called for unknown object\n");
+		return;
+	}
+
+	cancel_delayed_work_sync(&req->work);
+	__pm_qos_update_request(req, new_value);
+}
+EXPORT_SYMBOL_GPL(pm_qos_update_request);
+
+void pm_qos_update_request_timeout(struct pm_qos_request *req, s32 new_value,
+				   unsigned long timeout_us)
+{
+	if (!req)
+		return;
+	if (WARN(!pm_qos_request_active(req),
+		 "%s called for unknown object.", __func__))
+		return;
+
+	cancel_delayed_work_sync(&req->work);
+
+	if (new_value != req->node.prio)
+		pm_qos_update_target(
+			pm_qos_array[req->pm_qos_class]->constraints,
+			&req->node, PM_QOS_UPDATE_REQ, new_value);
+
+	schedule_delayed_work(&req->work, usecs_to_jiffies(timeout_us));
+}
+EXPORT_SYMBOL_GPL(pm_qos_update_request_timeout);
+
+s32 pm_qos_request(int pm_qos_class)
+{
+	return pm_qos_array[pm_qos_class]->constraints->target_value;
+}
+EXPORT_SYMBOL_GPL(pm_qos_request);
+
+int pm_qos_add_notifier(int pm_qos_class, struct notifier_block *notifier)
+{
+	int retval;
+
+	retval = blocking_notifier_chain_register(
+			pm_qos_array[pm_qos_class]->constraints->notifiers,
+			notifier);
+
+	return retval;
+}
+EXPORT_SYMBOL_GPL(pm_qos_add_notifier);
+
+int pm_qos_remove_notifier(int pm_qos_class, struct notifier_block *notifier)
+{
+	int retval;
+
+	retval = blocking_notifier_chain_unregister(
+			pm_qos_array[pm_qos_class]->constraints->notifiers,
+			notifier);
+
+	return retval;
+}
+EXPORT_SYMBOL_GPL(pm_qos_remove_notifier);
+
+void pm_qos_remove_request(struct pm_qos_request *req)
+{
+	if (!req) /*guard against callers passing in null */
+		return;
+
+	if (!pm_qos_request_active(req)) {
+		WARN(1, KERN_ERR "pm_qos_remove_request() called for unknown object\n");
+		return;
+	}
+
+	cancel_delayed_work_sync(&req->work);
+	trace_pm_qos_remove_request(PM_QOS_DEFAULT_VALUE);
+	pm_qos_update_target(pm_qos_array[req->pm_qos_class]->constraints,
+			     &req->node, PM_QOS_REMOVE_REQ,
+			     PM_QOS_DEFAULT_VALUE);
+	memset(req, 0, sizeof(*req));
+}
+EXPORT_SYMBOL_GPL(pm_qos_remove_request);

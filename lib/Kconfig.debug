@@ -3628,3 +3628,11 @@ config RUST_INLINE_HELPERS
 endmenu # "Rust"
 
 endmenu # Kernel hacking
+
+config TIMER_STATS
+	bool "Collect kernel timers statistics"
+	depends on DEBUG_KERNEL && PROC_FS
+	help
+	  If you say Y here, /proc/timer_stats will be written to at the
+	  end of each boot... (sprd port)
+

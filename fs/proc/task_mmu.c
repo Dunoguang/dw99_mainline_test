@@ -23,6 +23,9 @@
 #include <linux/minmax.h>
 #include <linux/overflow.h>
 #include <linux/buildid.h>
+#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
+#include <linux/susfs_def.h>
+#endif
 
 #include <asm/elf.h>
 #include <asm/tlb.h>
@@ -472,6 +475,14 @@ static void get_vma_name(struct vm_area_struct *vma,
 	}
 }
 
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern void susfs_sus_kstat_spoof_show_map_vma(struct inode *inode, dev_t *out_dev, u64 *out_ino);
+#endif
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+extern struct srcu_struct susfs_srcu_open_redirect;
+extern int susfs_open_redirect_spoof_show_map_vma_srcu(struct inode *inode, u64 *out_ino, dev_t *out_dev, char **out_spoofed_name);
+#endif
+
 static void show_vma_header_prefix(struct seq_file *m,
 				   unsigned long start, unsigned long end,
 				   vm_flags_t flags, unsigned long long pgoff,
@@ -505,10 +516,36 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 
 	if (vma->vm_file) {
 		const struct inode *inode = file_user_inode(vma->vm_file);
-
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+		if (SUSFS_IS_INODE_OPEN_REDIRECT(inode)) {
+			char *spoofed_redirected_name = NULL;
+			int srcu_idx = srcu_read_lock(&susfs_srcu_open_redirect);
+			int ret = susfs_open_redirect_spoof_show_map_vma_srcu((struct inode*)inode, &ino, &dev, &spoofed_redirected_name);
+			if (!ret) {
+				pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
+				start = vma->vm_start;
+				end = vma->vm_end;
+				show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
+				seq_pad(m, ' ');
+				if (spoofed_redirected_name)
+					seq_puts(m, spoofed_redirected_name);
+				seq_putc(m, '\n');
+				srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
+				return;
+			}
+			srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
+		}
+#endif
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		if (SUSFS_IS_INODE_SUS_MAP(inode))
+			return;
+#endif
 		dev = inode->i_sb->s_dev;
 		ino = inode->i_ino;
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+		susfs_sus_kstat_spoof_show_map_vma((struct inode *)inode, &dev, &ino);
+#endif
 	}
 
 	start = vma->vm_start;
@@ -1462,6 +1499,13 @@ static int show_smap(struct seq_file *m, void *v)
 	struct vm_area_struct *vma = v;
 	struct mem_size_stats mss = {};
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+	if (vma->vm_file) {
+		if (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
+			return 0;
+	}
+#endif
+
 	smap_gather_stats(priv, vma, &mss, 0);
 
 	show_map_vma(m, vma);
@@ -1515,7 +1559,14 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 
 	vma_start = vma->vm_start;
 	do {
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		if (vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
+			goto bypass_orig_flow;
+#endif
 		smap_gather_stats(priv, vma, &mss, 0);
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+bypass_orig_flow:
+#endif
 		last_vma_end = vma->vm_end;
 
 		/*
@@ -1581,8 +1632,15 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 
 			/* Case 4 above */
 			if (vma->vm_end > last_vma_end) {
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+				if (!vma->vm_file || !(SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))) {
+					smap_gather_stats(priv, vma, &mss, last_vma_end);
+					last_vma_end = vma->vm_end;
+				}
+#else
 				smap_gather_stats(priv, vma, &mss, last_vma_end);
 				last_vma_end = vma->vm_end;
+#endif
 			}
 		}
 	} for_each_vma(vmi, vma);
@@ -2361,6 +2419,9 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 	while (count && (start_vaddr < end_vaddr)) {
 		int len;
 		unsigned long end;
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		struct vm_area_struct *vma;
+#endif
 
 		pm.pos = 0;
 		end = (start_vaddr + PAGEMAP_WALK_SIZE) & PAGEMAP_WALK_MASK;
@@ -2370,7 +2431,15 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 		ret = mmap_read_lock_killable(mm);
 		if (ret)
 			goto out_free;
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		vma = vma_lookup(mm, start_vaddr);
+		if (vma && vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
+			goto bypass_orig_flow;
+#endif
 		ret = walk_page_range(mm, start_vaddr, end, &pagemap_ops, &pm);
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+bypass_orig_flow:
+#endif
 		mmap_read_unlock(mm);
 		start_vaddr = end;
 
@@ -3629,3 +3698,307 @@ const struct file_operations proc_pid_numa_maps_operations = {
 };
 
 #endif /* CONFIG_NUMA */
+
+#ifdef CONFIG_PROCESS_RECLAIM
+extern bool folio_isolate_lru(struct folio *folio);
+
+static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
+				unsigned long end, struct mm_walk *walk)
+{
+	struct reclaim_param *rp = walk->private;
+	struct vm_area_struct *vma = rp->vma;
+	pte_t *pte, ptent;
+	spinlock_t *ptl;
+	struct page *page;
+	struct folio *folio;
+	LIST_HEAD(page_list);
+	int isolated;
+	int reclaimed = 0;
+
+	split_huge_pmd(vma, pmd, addr);
+
+	if (rp->is_task_anon && !rp->nr_to_reclaim)
+		return 0;
+
+cont:
+	isolated = 0;
+	pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
+	for (; addr != end; pte++, addr += PAGE_SIZE) {
+		ptent = *pte;
+		if (!pte_present(ptent))
+			continue;
+
+		page = vm_normal_page(vma, addr, ptent);
+		if (!page)
+			continue;
+		folio = page_folio(page);
+
+		/* we don't reclaim page in active lru list */
+		if (rp->inactive_lru && (folio_test_active(folio) ||
+		    folio_test_unevictable(folio)))
+			continue;
+
+		if (rp->type == RECLAIM_ANON && !folio_test_anon(folio))
+			continue;
+		if (rp->type == RECLAIM_FILE && folio_test_anon(folio))
+			continue;
+
+		if (folio_isolate_lru(folio))
+			continue;
+
+		list_add(&folio->lru, &page_list);
+		isolated++;
+		rp->nr_scanned++;
+
+		if (rp->is_task_anon) {
+			if ((isolated >= SWAP_CLUSTER_MAX) || !rp->nr_to_reclaim)
+				break;
+		} else {
+			if (isolated >= SWAP_CLUSTER_MAX)
+				break;
+		}
+	}
+	pte_unmap_unlock(pte - 1, ptl);
+#ifdef CONFIG_SWAP_ZDATA
+	reclaimed = reclaim_pages_from_list(&page_list, vma,
+				rp->hiber, &rp->nr_writedblock);
+	rp->nr_reclaimed += reclaimed;
+#else
+	reclaimed = reclaim_pages_from_list(&page_list, vma);
+#endif
+	rp->nr_reclaimed += reclaimed;
+	rp->nr_to_reclaim -= reclaimed;
+	if (rp->nr_to_reclaim < 0)
+		rp->nr_to_reclaim = 0;
+
+	if (rp->is_task_anon) {
+		if (rp->nr_to_reclaim && (addr != end))
+			goto cont;
+	} else {
+		if (addr != end)
+			goto cont;
+	}
+
+	cond_resched();
+	return 0;
+}
+
+static const struct mm_walk_ops reclaim_ops = {
+	.pmd_entry		= reclaim_pte_range,
+};
+
+struct reclaim_param reclaim_task_anon(struct task_struct *task,
+		int nr_to_reclaim)
+{
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+	struct reclaim_param rp;
+
+	rp.nr_reclaimed = 0;
+	rp.nr_scanned = 0;
+	rp.type = RECLAIM_ANON;
+
+	get_task_struct(task);
+	mm = get_task_mm(task);
+	if (!mm)
+		goto out;
+
+	rp.nr_to_reclaim = nr_to_reclaim;
+	rp.is_task_anon = true;
+
+	mmap_read_lock(mm);
+	{
+		MA_STATE(mas, &mm->mm_mt, 0, 0);
+		mas_for_each(&mas, vma, ULONG_MAX) {
+			if (is_vm_hugetlb_page(vma))
+				continue;
+
+			if (vma->vm_file)
+				continue;
+
+			if (!rp.nr_to_reclaim)
+				break;
+
+			rp.vma = vma;
+			walk_page_range(mm, vma->vm_start, vma->vm_end,
+					&reclaim_ops, &rp);
+		}
+	}
+	flush_tlb_mm(mm);
+	mmap_read_unlock(mm);
+	mmput(mm);
+out:
+	put_task_struct(task);
+	return rp;
+}
+
+static ssize_t reclaim_write(struct file *file, const char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	struct task_struct *task;
+	char buffer[200];
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+	enum reclaim_type type;
+	char *type_buf;
+	unsigned long start = 0;
+	unsigned long end = 0;
+	struct reclaim_param rp;
+#ifdef CONFIG_SWAP_ZDATA
+	ktime_t start_time, stop_time;
+	s64 elapsed_centisecs64;
+#endif
+
+	rp.is_task_anon = false;
+	rp.inactive_lru = false;
+	rp.type = RECLAIM_ANON;
+#ifdef CONFIG_SWAP_ZDATA
+	rp.nr_reclaimed = 0;
+	rp.nr_writedblock = 0;
+	rp.hiber = false;
+#endif
+
+	memset(buffer, 0, sizeof(buffer));
+	if (count > sizeof(buffer) - 1)
+		count = sizeof(buffer) - 1;
+
+	if (copy_from_user(buffer, buf, count))
+		return -EFAULT;
+
+	type_buf = strstrip(buffer);
+	if (!strcmp(type_buf, "soft"))
+		type = RECLAIM_SOFT;
+	else if (!strcmp(type_buf, "inactive"))
+		type = RECLAIM_INACTIVE;
+	else if (!strcmp(type_buf, "file"))
+		type = RECLAIM_FILE;
+	else if (!strcmp(type_buf, "anon"))
+		type = RECLAIM_ANON;
+	else if (!strcmp(type_buf, "all"))
+		type = RECLAIM_ALL;
+#ifdef CONFIG_SWAP_ZDATA
+	else if (!strcmp(type_buf, "hiber")) {
+		type = RECLAIM_ALL;
+		rp.hiber = true;
+	} else if (!strcmp(type_buf, "hiber_anon")) {
+		type = RECLAIM_ANON;
+		rp.hiber = true;
+	} else if (!strcmp(type_buf, "hiber_file")) {
+		type = RECLAIM_FILE;
+		rp.hiber = true;
+	}
+#endif
+	else if (isdigit(*type_buf))
+		type = RECLAIM_RANGE;
+	else
+		goto out_err;
+
+	rp.type = type;
+
+	if (type == RECLAIM_RANGE) {
+		char *token;
+		unsigned long long len, len_in, tmp;
+		token = strsep(&type_buf, " ");
+		if (!token)
+			goto out_err;
+		tmp = memparse(token, &token);
+		if (tmp & ~PAGE_MASK || tmp > ULONG_MAX)
+			goto out_err;
+		start = tmp;
+
+		token = strsep(&type_buf, " ");
+		if (!token)
+			goto out_err;
+		len_in = memparse(token, &token);
+		len = (len_in + ~PAGE_MASK) & PAGE_MASK;
+		if (len > ULONG_MAX)
+			goto out_err;
+		/*
+		 * Check to see whether len was rounded up from small -ve
+		 * to zero.
+		 */
+		if (len_in && !len)
+			goto out_err;
+
+		end = start + len;
+		if (end < start)
+			goto out_err;
+	}
+
+	task = get_proc_task(file_inode(file));
+	if (!task)
+		return -ESRCH;
+
+	mm = get_task_mm(task);
+	if (!mm)
+		goto out;
+
+	/* here we add a soft shrinker for reclaim */
+	if (type == RECLAIM_SOFT) {
+		smart_soft_shrink(mm);
+		mmput(mm);
+		goto out;
+	}
+
+	if (type == RECLAIM_INACTIVE)
+		rp.inactive_lru = true;
+
+	rp.nr_to_reclaim = ~0;
+	rp.nr_reclaimed = 0;
+
+	mmap_read_lock(mm);
+	if (type == RECLAIM_RANGE) {
+#ifdef CONFIG_SWAP_ZDATA
+		if (rp.hiber)
+			start_time = ktime_get();
+#endif
+		MA_STATE(mas, &mm->mm_mt, start, ULONG_MAX);
+		mas_for_each(&mas, vma, end) {
+			if (is_vm_hugetlb_page(vma))
+				continue;
+#ifdef CONFIG_SWAP_ZDATA
+			if (rp.hiber &&
+					reclaim_sigusr_pending(current))
+				break;
+#endif
+			rp.vma = vma;
+			walk_page_range(mm, max(vma->vm_start, start),
+					min(vma->vm_end, end),
+					&reclaim_ops, &rp);
+		}
+	} else {
+		MA_STATE(mas, &mm->mm_mt, 0, 0);
+		mas_for_each(&mas, vma, ULONG_MAX) {
+			if (is_vm_hugetlb_page(vma))
+				continue;
+			rp.vma = vma;
+			walk_page_range(mm, vma->vm_start, vma->vm_end,
+					&reclaim_ops, &rp);
+		}
+	}
+
+	flush_tlb_mm(mm);
+	mmap_read_unlock(mm);
+	mmput(mm);
+#ifdef CONFIG_SWAP_ZDATA
+	if (rp.hiber) {
+		stop_time = ktime_get();
+		elapsed_centisecs64 = ktime_us_delta(stop_time, start_time) *
+				     NSEC_PER_USEC;
+		process_reclaim_result_write(task, rp.nr_reclaimed,
+			rp.nr_writedblock, elapsed_centisecs64);
+	}
+#endif
+out:
+	put_task_struct(task);
+	return count;
+
+out_err:
+	return -EINVAL;
+}
+
+const struct file_operations proc_reclaim_operations = {
+	.write		= reclaim_write,
+	.llseek		= noop_llseek,
+};
+#endif

@@ -13,3 +13,8 @@ obj-$(CONFIG_MOST)		+= most/
 obj-$(CONFIG_GREYBUS)		+= greybus/
 obj-$(CONFIG_BCM2835_VCHIQ)	+= vc04_services/
 obj-$(CONFIG_XIL_AXIS_FIFO)	+= axis-fifo/
+
+# ---- SPRD staging (ported) ----
+obj-y += android/
+obj-$(CONFIG_ARCH_SPRD) += sprd/
+obj-$(CONFIG_USB_SPRD_DWC) += sprd_usb/

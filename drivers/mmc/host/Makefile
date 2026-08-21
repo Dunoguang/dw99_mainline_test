@@ -115,3 +115,13 @@ endif
 
 obj-$(CONFIG_MMC_SDHCI_XENON)	+= sdhci-xenon-driver.o
 sdhci-xenon-driver-y		+= sdhci-xenon.o sdhci-xenon-phy.o
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_MMC_TIFM_SD)	+= tifm_sd.o
+obj-$(CONFIG_MMC_DW_PLTFM)	+= dw_mmc-pltfm.o
+obj-$(CONFIG_MMC_SDHC_SPRD)		+= sprd-sdhc.o
+obj-$(CONFIG_MMC_SPRD_SDHCR7)		+= sprd-sdhcr7.o
+obj-$(CONFIG_MMC_SPRD_SDHCR8)		+= sprd-sdhcr8.o
+obj-$(CONFIG_MMC_SPRD_SDHCR10)		+= sprd-sdhcr10.o
+obj-$(CONFIG_MMC_SPRD_SDHCR11)		+= sprd-sdhcr11.o
+obj-$(CONFIG_MMC_SDHCI_PLTFM)		+= sdhci-pltfm.o

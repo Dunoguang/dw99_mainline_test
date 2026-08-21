@@ -65,6 +65,7 @@ struct netns_xfrm {
 	u32			sysctl_aevent_etime;
 	u32			sysctl_aevent_rseqth;
 	int			sysctl_larval_drop;
+	int			enable_xfrm_fragment;
 	u32			sysctl_acq_expires;
 
 	u8			policy_default[XFRM_POLICY_MAX];

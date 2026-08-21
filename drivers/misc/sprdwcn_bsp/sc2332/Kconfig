@@ -1,0 +1,7 @@
+config SPRDWL_NG
+	tristate "SPRD Next Generation Wireless LAN Support"
+	depends on CFG80211
+	help
+	  This is a driver for the Spreadtrum IEEE802.11 WLAN devices.
+
+	  When compiled as a module, this driver will be called sprdwl_ng.

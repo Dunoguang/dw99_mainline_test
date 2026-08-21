@@ -66,6 +66,16 @@ extern void musb_host_poke_root_hub(struct musb *musb);
 extern int musb_port_suspend(struct musb *musb, bool do_suspend);
 extern void musb_port_reset(struct musb *musb, bool do_reset);
 extern void musb_host_finish_resume(struct work_struct *work);
+extern void musb_advance_schedule(struct musb *musb, struct urb *urb,
+				  struct musb_hw_ep *hw_ep, int is_in);
+extern bool musb_tx_dma_program(struct dma_controller *dma,
+		struct musb_hw_ep *hw_ep, struct musb_qh *qh,
+		struct urb *urb, u32 offset, u32 length);
+extern void musb_rx_dma_sprd(struct dma_channel *dma_channel,
+		struct musb *musb, u8 epnum,
+		struct musb_qh *qh,
+		struct urb *urb,
+		u32 offset, size_t len);
 #else
 static inline struct musb *hcd_to_musb(struct usb_hcd *hcd)
 {

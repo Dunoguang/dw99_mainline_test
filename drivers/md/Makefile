@@ -104,6 +104,7 @@ endif
 
 ifeq ($(CONFIG_DM_VERITY_FEC),y)
 dm-verity-objs			+= dm-verity-fec.o
+dm-verity-objs			+= dm-verity-avb.o
 endif
 
 ifeq ($(CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG),y)

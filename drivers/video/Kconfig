@@ -93,3 +93,5 @@ endif
 source "drivers/gpu/trace/Kconfig"
 
 endmenu
+source "drivers/video/disp_pw_domain/Kconfig"
+source "drivers/video/adf/Kconfig"

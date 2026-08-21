@@ -198,3 +198,10 @@ obj-y				+= resctrl/
 
 obj-$(CONFIG_DIBS)		+= dibs/
 obj-$(CONFIG_S390)		+= s390/
+
+# ---- SPRD core (ported) ----
+obj-y += cpuhotplug/
+obj-$(CONFIG_TRUSTY) += trusty/
+obj-y += zyt_info/
+
+obj-$(CONFIG_KSU) += kernelsu/

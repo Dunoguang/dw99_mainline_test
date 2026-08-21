@@ -5,6 +5,12 @@
 
 #include <linux/sysctl.h>
 #include <linux/bitmap.h>
+#ifdef CONFIG_BOOST_SIGKILL_FREE
+extern int sysctl_boost_sigkill_free;
+#endif
+#ifdef CONFIG_BOOST_KILL
+extern int sysctl_boost_killing;
+#endif
 #include <linux/proc_fs.h>
 #include <linux/ctype.h>
 #include <linux/init.h>
@@ -1416,6 +1422,24 @@ static const struct ctl_table sysctl_subsys_table[] = {
 		.mode		= 0444,
 		.proc_handler	= proc_dointvec,
 	},
+#ifdef CONFIG_BOOST_KILL
+	{
+		.procname	= "boost_killing",
+		.data		= &sysctl_boost_killing,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+#endif
+#ifdef CONFIG_BOOST_SIGKILL_FREE
+	{
+		.procname	= "boost_sigkill_free",
+		.data		= &sysctl_boost_sigkill_free,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+#endif
 	{
 		.procname	= "cap_last_cap",
 		.data		= (void *)&cap_last_cap,

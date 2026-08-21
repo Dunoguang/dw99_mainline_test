@@ -169,3 +169,6 @@ endif
 obj-y					+= xilinx/
 obj-$(CONFIG_ARCH_ZYNQ)			+= zynq/
 obj-$(CONFIG_COMMON_CLK_ZYNQMP)         += zynqmp/
+
+# ---- SPRD clk (ported) ----
+obj-y += sprd_sharkle/

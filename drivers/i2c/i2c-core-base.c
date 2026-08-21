@@ -1407,6 +1407,10 @@ struct i2c_adapter *i2c_verify_adapter(struct device *dev)
 }
 EXPORT_SYMBOL(i2c_verify_adapter);
 
+#ifdef CONFIG_I2C_COMPAT
+static struct class_compat *i2c_adapter_compat_class;
+#endif
+
 static void i2c_scan_static_board_info(struct i2c_adapter *adapter)
 {
 	struct i2c_devinfo	*devinfo;
@@ -1618,6 +1622,12 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 		pr_err("adapter '%s': can't register device (%d)\n", adap->name, res);
 		goto err_replace_id;
 	}
+#ifdef CONFIG_I2C_COMPAT
+	res = class_compat_create_link(i2c_adapter_compat_class, &adap->dev);
+	if (res)
+		dev_warn(&adap->dev,
+			 "Failed to create compatibility class link\n");
+#endif
 
 	res = i2c_setup_smbus_alert(adap);
 	if (res)
@@ -1836,6 +1846,9 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 	 * device from the i2c_adapter, like spi or netdev do. Any solution
 	 * should be thoroughly tested with DEBUG_KOBJECT_RELEASE enabled!
 	 */
+#ifdef CONFIG_I2C_COMPAT
+	class_compat_remove_link(i2c_adapter_compat_class, &adap->dev);
+#endif
 	init_completion(&adap->dev_released);
 	device_unregister(&adap->dev);
 	wait_for_completion(&adap->dev_released);
@@ -2125,6 +2138,13 @@ static int __init i2c_init(void)
 		return retval;
 
 	is_registered = true;
+#ifdef CONFIG_I2C_COMPAT
+	i2c_adapter_compat_class = class_compat_register("i2c-adapter");
+	if (!i2c_adapter_compat_class) {
+		retval = -ENOMEM;
+		goto class_err;
+	}
+#endif
 
 	i2c_debugfs_root = debugfs_create_dir("i2c", NULL);
 
@@ -2153,7 +2173,13 @@ static void __exit i2c_exit(void)
 		WARN_ON(of_reconfig_notifier_unregister(&i2c_of_notifier));
 	i2c_del_driver(&dummy_driver);
 	debugfs_remove_recursive(i2c_debugfs_root);
+#ifdef CONFIG_I2C_COMPAT
+	class_compat_unregister(i2c_adapter_compat_class);
+class_err:
 	bus_unregister(&i2c_bus_type);
+#else
+	bus_unregister(&i2c_bus_type);
+#endif
 	tracepoint_synchronize_unregister();
 }
 

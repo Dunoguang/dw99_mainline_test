@@ -2021,3 +2021,17 @@ config XILINX_AMS
 	  xilinx-ams.
 
 endmenu
+
+# ==== SPRD ADC (ported from 4.4 vendor tree) ====
+
+config SPRD_ADC
+	tristate "SPRD ADC driver"
+	depends on IIO
+	help
+	  Say yes here to have support for the SPRD PMIC ADC. The driver .
+
+config SPRD_SC2720_ADC
+	tristate "SPRD SC2720 ADC driver"
+	depends on IIO
+	help
+	  Say yes here to have support for the SPRD PMIC SC2720 ADC.

@@ -34,8 +34,17 @@
 #include <linux/mnt_idmapping.h>
 #include <linux/pidfs.h>
 #include <linux/nstree.h>
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+#include <linux/susfs_def.h>
+#endif
 
 #include "pnode.h"
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
+extern bool susfs_is_current_ksu_domain(void);
+extern bool susfs_is_current_proc_umounted(void);
+extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+#endif
 #include "internal.h"
 
 /* Maximum number of mounts in a mount namespace */
@@ -215,7 +224,13 @@ static int mnt_alloc_id(struct mount *mnt)
 	int res;
 
 	xa_lock(&mnt_id_xa);
-	res = __xa_alloc(&mnt_id_xa, &mnt->mnt_id, mnt, xa_limit_31b, GFP_KERNEL);
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	if (susfs_is_current_ksu_domain()) {
+		struct xa_limit ksu_limit = XA_LIMIT(DEFAULT_KSU_MNT_ID, INT_MAX);
+		res = __xa_alloc(&mnt_id_xa, &mnt->mnt_id, mnt, ksu_limit, GFP_KERNEL);
+	} else
+#endif
+		res = __xa_alloc(&mnt_id_xa, &mnt->mnt_id, mnt, xa_limit_31b, GFP_KERNEL);
 	if (!res)
 		mnt->mnt_id_unique = ++mnt_id_ctr;
 	xa_unlock(&mnt_id_xa);
@@ -224,6 +239,10 @@ static int mnt_alloc_id(struct mount *mnt)
 
 static void mnt_free_id(struct mount *mnt)
 {
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	if (mnt->mnt.mnt_flags & VFSMOUNT_MNT_FLAGS_KSU_UNSHARED_MNT)
+		return;
+#endif
 	xa_erase(&mnt_id_xa, mnt->mnt_id);
 }
 
@@ -232,8 +251,19 @@ static void mnt_free_id(struct mount *mnt)
  */
 static int mnt_alloc_group_id(struct mount *mnt)
 {
-	int res = ida_alloc_min(&mnt_group_ida, 1, GFP_KERNEL);
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	int res;
 
+	if (susfs_is_current_ksu_domain()) {
+		res = ida_alloc_min(&mnt_group_ida, DEFAULT_KSU_MNT_GROUP_ID, GFP_KERNEL);
+		goto bypass_orig_flow;
+	}
+
+	res = ida_alloc_min(&mnt_group_ida, 1, GFP_KERNEL);
+bypass_orig_flow:
+#else
+	int res = ida_alloc_min(&mnt_group_ida, 1, GFP_KERNEL);
+#endif
 	if (res < 0)
 		return res;
 	mnt->mnt_group_id = res;
@@ -281,6 +311,102 @@ int mnt_get_count(struct mount *mnt)
 	return mnt->mnt_count;
 #endif
 }
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+static struct mount *susfs_alloc_unshare_ksu_vfsmnt(const char *name, int old_mnt_id)
+{
+	struct mount *mnt = kmem_cache_zalloc(mnt_cache, GFP_KERNEL);
+
+	if (mnt) {
+		mnt->mnt_id = old_mnt_id;
+		mnt->mnt_id_unique = ++mnt_id_ctr;
+		if (name)
+			mnt->mnt_devname = kstrdup_const(name, GFP_KERNEL_ACCOUNT);
+		else
+			mnt->mnt_devname = "none";
+		if (!mnt->mnt_devname)
+			goto out_free_cache;
+#ifdef CONFIG_SMP
+		mnt->mnt_pcp = alloc_percpu(struct mnt_pcp);
+		if (!mnt->mnt_pcp)
+			goto out_free_devname;
+		this_cpu_add(mnt->mnt_pcp->mnt_count, 1);
+#else
+		mnt->mnt_count = 1;
+		mnt->mnt_writers = 0;
+#endif
+		INIT_HLIST_NODE(&mnt->mnt_hash);
+		INIT_LIST_HEAD(&mnt->mnt_child);
+		INIT_LIST_HEAD(&mnt->mnt_mounts);
+		INIT_LIST_HEAD(&mnt->mnt_list);
+		INIT_LIST_HEAD(&mnt->mnt_expire);
+		INIT_LIST_HEAD(&mnt->mnt_share);
+		INIT_HLIST_HEAD(&mnt->mnt_slave_list);
+		INIT_HLIST_NODE(&mnt->mnt_slave);
+		INIT_HLIST_NODE(&mnt->mnt_mp_list);
+		INIT_HLIST_HEAD(&mnt->mnt_stuck_children);
+		INIT_HLIST_NODE(&mnt->mnt_ns_visible);
+		RB_CLEAR_NODE(&mnt->mnt_node);
+		mnt->mnt.mnt_idmap = &nop_mnt_idmap;
+	}
+	return mnt;
+
+out_free_devname:
+	kfree_const(mnt->mnt_devname);
+out_free_cache:
+	kmem_cache_free(mnt_cache, mnt);
+	return NULL;
+}
+
+static struct mount *susfs_alloc_non_unshare_ksu_vfsmnt(const char *name)
+{
+	struct mount *mnt = kmem_cache_zalloc(mnt_cache, GFP_KERNEL);
+
+	if (mnt) {
+		int err;
+
+		err = mnt_alloc_id(mnt);
+		if (err)
+			goto out_free_cache;
+		if (name)
+			mnt->mnt_devname = kstrdup_const(name, GFP_KERNEL_ACCOUNT);
+		else
+			mnt->mnt_devname = "none";
+		if (!mnt->mnt_devname)
+			goto out_free_id;
+#ifdef CONFIG_SMP
+		mnt->mnt_pcp = alloc_percpu(struct mnt_pcp);
+		if (!mnt->mnt_pcp)
+			goto out_free_devname;
+		this_cpu_add(mnt->mnt_pcp->mnt_count, 1);
+#else
+		mnt->mnt_count = 1;
+		mnt->mnt_writers = 0;
+#endif
+		INIT_HLIST_NODE(&mnt->mnt_hash);
+		INIT_LIST_HEAD(&mnt->mnt_child);
+		INIT_LIST_HEAD(&mnt->mnt_mounts);
+		INIT_LIST_HEAD(&mnt->mnt_list);
+		INIT_LIST_HEAD(&mnt->mnt_expire);
+		INIT_LIST_HEAD(&mnt->mnt_share);
+		INIT_HLIST_HEAD(&mnt->mnt_slave_list);
+		INIT_HLIST_NODE(&mnt->mnt_slave);
+		INIT_HLIST_NODE(&mnt->mnt_mp_list);
+		INIT_HLIST_HEAD(&mnt->mnt_stuck_children);
+		INIT_HLIST_NODE(&mnt->mnt_ns_visible);
+		RB_CLEAR_NODE(&mnt->mnt_node);
+		mnt->mnt.mnt_idmap = &nop_mnt_idmap;
+	}
+	return mnt;
+
+out_free_devname:
+	kfree_const(mnt->mnt_devname);
+out_free_id:
+	mnt_free_id(mnt);
+out_free_cache:
+	kmem_cache_free(mnt_cache, mnt);
+	return NULL;
+}
+#endif
 
 static struct mount *alloc_vfsmnt(const char *name)
 {
@@ -1183,12 +1309,23 @@ struct vfsmount *vfs_create_mount(struct fs_context *fc)
 	mnt = alloc_vfsmnt(fc->source);
 	if (!mnt)
 		return ERR_PTR(-ENOMEM);
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted)) {
+		if (susfs_is_current_ksu_domain()) {
+			mnt = susfs_alloc_non_unshare_ksu_vfsmnt(fc->source ?: "none");
+			goto bypass_orig_flow;
+		}
+	}
+#endif
 
 	if (fc->sb_flags & SB_KERNMOUNT)
 		mnt->mnt.mnt_flags = MNT_INTERNAL;
 
 	setup_mnt(mnt, fc->root);
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+bypass_orig_flow:
+#endif
 	return &mnt->mnt;
 }
 EXPORT_SYMBOL(vfs_create_mount);
@@ -1251,6 +1388,25 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
 	mnt = alloc_vfsmnt(old->mnt_devname);
 	if (!mnt)
 		return ERR_PTR(-ENOMEM);
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	{
+		bool is_mnt_ksu_unshared = false;
+
+		if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted)) {
+			if (susfs_is_current_ksu_domain()) {
+				is_mnt_ksu_unshared = true;
+			}
+		}
+		if (unlikely(is_mnt_ksu_unshared)) {
+			mnt = susfs_alloc_unshare_ksu_vfsmnt(old->mnt_devname, old->mnt_id);
+			if (!mnt)
+				return ERR_PTR(-ENOMEM);
+			mnt->mnt.mnt_flags |= VFSMOUNT_MNT_FLAGS_KSU_UNSHARED_MNT;
+			mnt->mnt_group_id = old->mnt_group_id;
+			goto setup_clone;
+		}
+	}
+#endif
 
 	mnt->mnt.mnt_flags = READ_ONCE(old->mnt.mnt_flags) &
 			     ~MNT_INTERNAL_FLAGS;
@@ -1271,6 +1427,9 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
 
 	mnt->mnt.mnt_idmap = mnt_idmap_get(mnt_idmap(&old->mnt));
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+setup_clone:
+#endif
 	setup_mnt(mnt, root);
 
 	if (flag & CL_PRIVATE)	// we are done with it
@@ -1503,6 +1662,11 @@ static struct mount *mnt_find_id_at(struct mnt_namespace *ns, u64 mnt_id)
 			node = node->rb_right;
 		}
 	}
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	if (ret && ret->mnt_id >= DEFAULT_KSU_MNT_ID &&
+		susfs_is_current_proc_umounted())
+		ret = NULL;
+#endif
 	return ret;
 }
 
@@ -4239,6 +4403,9 @@ __latent_entropy
 struct mnt_namespace *copy_mnt_ns(u64 flags, struct mnt_namespace *ns,
 		struct user_namespace *user_ns, struct fs_struct *new_fs)
 {
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	flags |= CL_COPY_MNT_NS;
+#endif
 	struct mnt_namespace *new_ns;
 	struct path old_root __free(path_put) = {};
 	struct path old_pwd __free(path_put) = {};
@@ -6085,6 +6252,11 @@ static ssize_t do_listmount(struct klistmount *kls, bool reverse)
 			continue;
 		if (!is_path_reachable(r, r->mnt.mnt_root, &orig))
 			continue;
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+		if (r && r->mnt_id >= DEFAULT_KSU_MNT_ID &&
+			susfs_is_current_proc_umounted())
+			continue;
+#endif
 		*mnt_ids = r->mnt_id_unique;
 		mnt_ids++;
 		nr_mnt_ids--;
@@ -6564,3 +6736,27 @@ static int __init init_fs_namespace_sysctls(void)
 fs_initcall(init_fs_namespace_sysctls);
 
 #endif /* CONFIG_SYSCTL */
+
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+int susfs_get_non_sus_mnt_id_from_mnt(struct mount *orig_mnt)
+{
+	struct mount *mnt = orig_mnt;
+	int mnt_id;
+
+	lock_mount_hash();
+	for (; mnt && mnt->mnt_parent && mnt != mnt->mnt_parent && mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_master);
+	mnt_id = mnt->mnt_id;
+	unlock_mount_hash();
+	return mnt_id;
+}
+
+u64 susfs_get_non_sus_mnt_id_unique_from_mnt(struct mount *orig_mnt)
+{
+	struct mount *mnt = orig_mnt;
+
+	lock_mount_hash();
+	for (; mnt && mnt->mnt_parent && mnt != mnt->mnt_parent && mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_master);
+	unlock_mount_hash();
+	return mnt->mnt_id_unique;
+}
+#endif

@@ -8,6 +8,7 @@ udc-core-y			:= core.o trace.o
 # USB peripheral controller drivers
 #
 obj-$(CONFIG_USB_GADGET)	+= udc-core.o
+obj-$(CONFIG_USB_CHARGER)	+= charger.o
 obj-$(CONFIG_USB_DUMMY_HCD)	+= dummy_hcd.o
 obj-$(CONFIG_USB_NET2280)	+= net2280.o
 obj-$(CONFIG_USB_SNP_CORE)	+= snps_udc_core.o

@@ -219,6 +219,12 @@
 #define MUSB_DEVCTL		0x60	/* 8 bit */
 #define MUSB_BABBLE_CTL		0x61	/* 8 bit */
 
+/* sprd vendor regs (ported from 4.4) */
+#define MUSB_OTG_EXT_CSR	0x34b
+#define MUSB_HOST_FORCE_EN	0x01
+#define MUSB_CLEAR_TXBUFF	0x10
+#define MUSB_CLEAR_RXBUFF	0x20
+
 /* These are always controlled through the INDEX register */
 #define MUSB_TXFIFOSZ		0x62	/* 8-bit (see masks) */
 #define MUSB_RXFIFOSZ		0x63	/* 8-bit (see masks) */

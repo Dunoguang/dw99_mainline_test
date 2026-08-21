@@ -119,3 +119,9 @@ obj-$(CONFIG_TOUCHSCREEN_IQS5XX)	+= iqs5xx.o
 obj-$(CONFIG_TOUCHSCREEN_IQS7211)	+= iqs7211.o
 obj-$(CONFIG_TOUCHSCREEN_ZINITIX)	+= zinitix.o
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_HX83112B)	+= himax_hx83112b.o
+
+# ---- SPRD touch (ported) ----
+obj-$(CONFIG_TOUCHSCREEN_ADAPTIVE) += adaptive-ts/
+obj-$(CONFIG_TOUCHSCREEN_TLSC6X) += tlsc6x_ts/
+
+obj-$(CONFIG_TOUCHSCREEN_CST9217)	+= hynitron_cst9217.o

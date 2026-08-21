@@ -728,3 +728,4 @@ source "drivers/pinctrl/visconti/Kconfig"
 source "drivers/pinctrl/vt8500/Kconfig"
 
 endif
+source "drivers/pinctrl/sprd_sharkle/Kconfig"

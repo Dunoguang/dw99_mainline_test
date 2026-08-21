@@ -40,6 +40,12 @@
 #include <linux/cgroup.h>
 #include <linux/syscalls.h>
 #include <linux/signal.h>
+#ifdef CONFIG_UID_SYS_STATS
+extern void uid_stat_task_exit(struct task_struct *tsk);
+#endif
+#ifdef CONFIG_BOOST_SIGKILL_FREE
+#include <linux/boost_sigkill_free.h>
+#endif
 #include <linux/posix-timers.h>
 #include <linux/cn_proc.h>
 #include <linux/mutex.h>
@@ -582,6 +588,9 @@ static void exit_mm(void)
 	struct mm_struct *mm = current->mm;
 
 	exit_mm_release(current, mm);
+#ifdef CONFIG_SWAP_ZDATA
+	exit_proc_reclaim(current);
+#endif
 	if (!mm)
 		return;
 
@@ -1010,6 +1019,9 @@ void __noreturn do_exit(long code)
 
 	sched_autogroup_exit_task(tsk);
 	cgroup_task_exit(tsk);
+#ifdef CONFIG_UID_SYS_STATS
+	uid_stat_task_exit(tsk);
+#endif
 
 	/*
 	 * FIXME: do that only when needed, using sched_exit tracepoint
@@ -1148,6 +1160,10 @@ do_group_exit(int exit_code)
 		spin_unlock_irq(&sighand->siglock);
 	}
 
+#ifdef CONFIG_BOOST_SIGKILL_FREE
+	if (sysctl_boost_sigkill_free && sig_kernel_kill(exit_code))
+		fast_free_user_mem();
+#endif
 	do_exit(exit_code);
 	/* NOTREACHED */
 }

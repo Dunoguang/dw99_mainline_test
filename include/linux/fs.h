@@ -1798,6 +1798,8 @@ struct renamedata {
 } __randomize_layout;
 
 int vfs_rename(struct renamedata *);
+extern struct dentry *lock_rename(struct dentry *, struct dentry *);
+extern void unlock_rename(struct dentry *, struct dentry *);
 
 static inline int vfs_whiteout(struct mnt_idmap *idmap,
 			       struct inode *dir, struct dentry *dentry)

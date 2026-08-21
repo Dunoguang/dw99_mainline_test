@@ -26,6 +26,7 @@ obj-$(CONFIG_SGI_XP)		+= sgi-xp/
 obj-$(CONFIG_SGI_GRU)		+= sgi-gru/
 obj-$(CONFIG_SMPRO_ERRMON)	+= smpro-errmon.o
 obj-$(CONFIG_SMPRO_MISC)	+= smpro-misc.o
+obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
 obj-$(CONFIG_CS5535_MFGPT)	+= cs5535-mfgpt.o
 obj-$(CONFIG_GEHC_ACHC)		+= gehc-achc.o
 obj-$(CONFIG_HP_ILO)		+= hpilo.o
@@ -74,3 +75,20 @@ obj-$(CONFIG_MCHP_LAN966X_PCI)	+= lan966x-pci.o
 obj-y				+= keba/
 obj-y				+= amd-sbi/
 obj-$(CONFIG_MISC_RP1)		+= rp1/
+
+# ---- SPRD misc dirs (ported) ----
+obj-y += sprdwcn_bsp/sc2332/
+obj-$(CONFIG_SC23XX) += sprdwcn_bsp/sc23xx/
+obj-y += sprd_audio/
+obj-y += sprd_map/
+
+# ==== SPRD DW99 (SC9832e/sharkle) vendor drivers, ported from 4.4 ====
+obj-$(CONFIG_SPRD_VSP)          += sprd_vsp/
+obj-$(CONFIG_SPRD_VPP)          += sprd_vpp/
+obj-$(CONFIG_OTP_SPRD)          += sprd_otp/
+obj-$(CONFIG_SPRD_JPG)          += sprd_jpg/
+obj-$(CONFIG_SPRD_CAMERA)       += sprd_camera/
+obj-$(CONFIG_SPRD_7SRESET)      += sprd_7sreset.o
+obj-$(CONFIG_SPRD_TMC)          += sprd_tmc.o
+obj-$(CONFIG_SPRD_MCDT)         += mcdt/
+obj-$(CONFIG_UID_SYS_STATS) += uid_sys_stats.o

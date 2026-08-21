@@ -32,3 +32,6 @@ obj-$(CONFIG_CEC_CORE) += cec/
 obj-y += common/ platform/ pci/ usb/ mmc/ firewire/ spi/ test-drivers/
 obj-$(CONFIG_VIDEO_DEV) += radio/
 
+# ---- SPRD media (ported) ----
+obj-$(CONFIG_SPRD_GSP) += gsp/
+obj-$(CONFIG_RADIO_SC2331) += radio/sprd2331/

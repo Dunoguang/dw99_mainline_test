@@ -107,6 +107,12 @@ struct scan_control {
 	/* zone_reclaim_mode, boost reclaim */
 	unsigned int may_writepage:1;
 
+#ifdef CONFIG_SWAP_ZDATA
+	bool ishibernation_rec;
+	/* the number of blocks that was writebacked */
+	unsigned nr_writedblock;
+#endif
+
 	/* zone_reclaim_mode */
 	unsigned int may_unmap:1;
 
@@ -199,6 +205,14 @@ struct scan_control {
  */
 int vm_swappiness = 60;
 
+#ifdef CONFIG_DIRECT_SWAPPINESS
+/*
+ * Direct reclaim swappiness, expect 0 - 60. Higher means more
+ * swappy and slower.
+ */
+int direct_vm_swappiness = 60;
+#endif
+
 #ifdef CONFIG_MEMCG
 
 /* Returns true for reclaim through cgroup limits or cgroup interfaces. */
@@ -244,6 +258,10 @@ static int sc_swappiness(struct scan_control *sc, struct mem_cgroup *memcg)
 {
 	if (sc->proactive && sc->proactive_swappiness)
 		return *sc->proactive_swappiness;
+#ifdef CONFIG_DIRECT_SWAPPINESS
+	if (!current_is_kswapd())
+		return direct_vm_swappiness;
+#endif
 	return mem_cgroup_swappiness(memcg);
 }
 #else
@@ -264,6 +282,10 @@ static bool writeback_throttling_sane(struct scan_control *sc)
 
 static int sc_swappiness(struct scan_control *sc, struct mem_cgroup *memcg)
 {
+#ifdef CONFIG_DIRECT_SWAPPINESS
+	if (!current_is_kswapd())
+		return direct_vm_swappiness;
+#endif
 	return READ_ONCE(vm_swappiness);
 }
 #endif
@@ -7659,6 +7681,17 @@ static const struct ctl_table vmscan_sysctl_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_TWO_HUNDRED,
 	},
+#ifdef CONFIG_DIRECT_SWAPPINESS
+	{
+		.procname	= "direct_swappiness",
+		.data		= &direct_vm_swappiness,
+		.maxlen		= sizeof(direct_vm_swappiness),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_TWO_HUNDRED,
+	},
+#endif
 #ifdef CONFIG_NUMA
 	{
 		.procname	= "zone_reclaim_mode",
@@ -8057,3 +8090,47 @@ void reclaim_unregister_node(struct node *node)
 	return device_remove_file(&node->dev, &dev_attr_reclaim);
 }
 #endif
+
+#ifdef CONFIG_SWAP_ZDATA
+unsigned long reclaim_pages_from_list(struct list_head *page_list,
+					struct vm_area_struct *vma,
+					bool hiber, unsigned *nr_writedblock)
+#elif defined(CONFIG_PROCESS_RECLAIM)
+unsigned long reclaim_pages_from_list(struct list_head *page_list,
+					struct vm_area_struct *vma)
+#endif
+{
+	struct scan_control sc = {
+		.gfp_mask = GFP_KERNEL,
+		.priority = DEF_PRIORITY,
+		.may_writepage = 1,
+		.may_unmap = 1,
+		.may_swap = 1,
+	};
+	struct reclaim_stat stat = {};
+	unsigned long nr_reclaimed;
+	struct folio *folio;
+
+#ifdef CONFIG_SWAP_ZDATA
+	sc.nr_writedblock = 0;
+	if (hiber)
+		sc.ishibernation_rec = true;
+	else
+		sc.ishibernation_rec = false;
+#endif
+
+	list_for_each_entry(folio, page_list, lru)
+		__folio_clear_active(folio);
+
+	nr_reclaimed = shrink_folio_list(page_list, NODE_DATA(0), &sc,
+			&stat, true, NULL);
+
+	move_folios_to_lru(page_list);
+
+#ifdef CONFIG_SWAP_ZDATA
+	if (hiber)
+		*nr_writedblock += sc.nr_writedblock;
+#endif
+	return nr_reclaimed;
+}
+

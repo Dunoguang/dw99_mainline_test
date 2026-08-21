@@ -147,3 +147,7 @@ obj-$(CONFIG_EXECMEM) += execmem.o
 obj-$(CONFIG_TMPFS_QUOTA) += shmem_quota.o
 obj-$(CONFIG_LAZY_MMU_MODE_KUNIT_TEST) += tests/lazy_mmu_mode_kunit.o
 obj-$(CONFIG_MEM_ALLOC_PROFILING) += alloc_tag.o
+obj-$(CONFIG_PROCESS_RECLAIM) += process_reclaim.o
+obj-$(CONFIG_CLEANCACHE) += cleancache.o
+obj-$(CONFIG_ZPOOL) += zpool.o
+obj-$(CONFIG_ZBUD) += zbud.o

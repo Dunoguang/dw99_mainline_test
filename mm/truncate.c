@@ -13,6 +13,7 @@
 #include <linux/dax.h>
 #include <linux/gfp.h>
 #include <linux/mm.h>
+#include <linux/cleancache.h>
 #include <linux/swap.h>
 #include <linux/export.h>
 #include <linux/pagemap.h>
@@ -153,6 +154,7 @@ EXPORT_SYMBOL_GPL(folio_invalidate);
  */
 static void truncate_cleanup_folio(struct folio *folio)
 {
+	cleancache_invalidate_page(folio->mapping, &folio->page);
 	if (folio_mapped(folio))
 		unmap_mapping_folio(folio);
 
@@ -366,6 +368,7 @@ long mapping_evict_folio(struct address_space *mapping, struct folio *folio)
 void truncate_inode_pages_range(struct address_space *mapping,
 				loff_t lstart, uoff_t lend)
 {
+	cleancache_invalidate_inode(mapping);
 	pgoff_t		start;		/* inclusive */
 	pgoff_t		end;		/* exclusive */
 	struct folio_batch fbatch;
@@ -676,6 +679,7 @@ failed:
 int invalidate_inode_pages2_range(struct address_space *mapping,
 				  pgoff_t start, pgoff_t end)
 {
+	cleancache_invalidate_inode(mapping);
 	pgoff_t indices[FOLIO_BATCH_SIZE];
 	struct folio_batch fbatch;
 	pgoff_t index;

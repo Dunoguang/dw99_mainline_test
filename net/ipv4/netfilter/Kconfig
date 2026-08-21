@@ -366,3 +366,19 @@ config IP_NF_ARP_MANGLE
 
 endmenu
 
+# ==== VoWiFi debug (ported from 4.4 vendor tree) ====
+
+config IP_NF_VOWIFI_DEC_TCPDUMP
+	bool "vowifi decoding pkts and save them with tcpdump"
+	depends on IP_NF_FILTER
+	default n
+	help
+	  This IP_NF_VOWIFI_DEC_TCPDUMP module to debug for decode ipsec pkt
+	  for software engineer.Use this module,the esp pkt which apk allowed,
+	  will be save in the tcpdump with its orignal message.The module will
+	  save the ipv4 esp pkt.
+
+	  If unsure, say N.
+
+# NAT + specific targets: nf_conntrack
+

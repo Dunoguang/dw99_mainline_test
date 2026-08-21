@@ -114,3 +114,4 @@ source "drivers/iio/resolver/Kconfig"
 source "drivers/iio/temperature/Kconfig"
 
 endif # IIO
+source "drivers/iio/sprd_hub/Kconfig"

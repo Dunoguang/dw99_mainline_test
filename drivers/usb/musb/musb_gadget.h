@@ -94,6 +94,11 @@ struct musb_ep {
 	u8				busy;
 
 	u8				hb_mult;
+
+#ifdef CONFIG_USB_SPRD_DMA_VENDOR
+	struct linklist_node_s	*dma_linklist;
+	dma_addr_t list_dma_addr;
+#endif
 };
 
 #define to_musb_ep(ep)	container_of((ep), struct musb_ep, end_point)

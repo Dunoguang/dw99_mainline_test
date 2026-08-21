@@ -12,3 +12,7 @@ obj-$(CONFIG_PPP_SYNC_TTY) += ppp_synctty.o
 obj-$(CONFIG_PPPOX) += pppox.o
 obj-$(CONFIG_PPPOE) += pppoe.o
 obj-$(CONFIG_PPTP) += pptp.o
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_PPPOL2TP) += pppox.o
+obj-$(CONFIG_PPPOLAC) += pppox.o pppolac.o

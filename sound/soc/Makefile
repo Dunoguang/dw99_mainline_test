@@ -85,3 +85,6 @@ obj-$(CONFIG_SND_SOC)	+= ux500/
 obj-$(CONFIG_SND_SOC)	+= xilinx/
 obj-$(CONFIG_SND_SOC)	+= xtensa/
 obj-$(CONFIG_SND_SOC)	+= sdw_utils/
+
+# ---- SPRD sound (ported) ----
+obj-$(CONFIG_SND_SOC_SPRD_SHARKLE) += sprd_sharkle/

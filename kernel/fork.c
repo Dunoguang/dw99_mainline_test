@@ -50,6 +50,7 @@
 #include <linux/ns/ns_common_types.h>
 #include <linux/capability.h>
 #include <linux/cpu.h>
+#include <linux/cpufreq_times.h>
 #include <linux/cgroup.h>
 #include <linux/security.h>
 #include <linux/hugetlb.h>
@@ -532,6 +533,7 @@ void put_task_stack(struct task_struct *tsk)
 
 void free_task(struct task_struct *tsk)
 {
+	cpufreq_task_times_exit(tsk);
 #ifdef CONFIG_SECCOMP
 	WARN_ON_ONCE(tsk->seccomp.filter);
 #endif
@@ -2166,6 +2168,7 @@ __latent_entropy struct task_struct *copy_process(
 	p->clear_child_tid = (clone_flags & CLONE_CHILD_CLEARTID) ? args->child_tid : NULL;
 
 	ftrace_graph_init_task(p);
+	cpufreq_task_times_init(p);
 
 	rt_mutex_init_task(p);
 	raw_spin_lock_init(&p->blocked_lock);
@@ -2779,6 +2782,7 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 	 * Do this prior waking up the new thread - the thread pointer
 	 * might get invalid after that point, if the thread exits quickly.
 	 */
+	cpufreq_task_times_alloc(p);
 	trace_sched_process_fork(current, p);
 
 	pid = get_task_pid(p, PIDTYPE_PID);

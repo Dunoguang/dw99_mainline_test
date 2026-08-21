@@ -19,3 +19,6 @@ obj-$(CONFIG_ARM_TEGRA_DEVFREQ)		+= tegra30-devfreq.o
 
 # DEVFREQ Event Drivers
 obj-$(CONFIG_PM_DEVFREQ_EVENT)		+= event/
+
+# ---- SPRD vendor drivers (ported from 4.4) ----
+obj-$(CONFIG_ARCH_SPRD)		     	+= sprd/

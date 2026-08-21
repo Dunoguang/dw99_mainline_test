@@ -63,3 +63,12 @@ config ANDROID_BINDER_ALLOC_KUNIT_TEST
 	  for testing without interfering with a running system.
 
 endmenu
+
+config ANDROID_BINDER_BUFFER_DEBUG
+	bool "Android Binder buffer debug"
+	depends on ANDROID_BINDER_IPC
+	default n
+	help
+	  Binder buffer debug function is used to dump binder buffer to
+	  diagnose some abnormal suituation. E.g. process' binder buffer
+	  is exhausted and new transaction fails.

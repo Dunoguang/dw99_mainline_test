@@ -22,3 +22,17 @@ config EXFAT_DEFAULT_IOCHARSET
 	  filenames and the UTF-16 character encoding that the exFAT
 	  filesystem uses.  This can be overridden with the "iocharset" mount
 	  option for the exFAT filesystems.
+
+config EXFAT_VIRTUAL_XATTR
+	bool "Virtual xattr support for exFAT filesystem"
+	default n
+	depends on EXFAT_FS
+	help
+	  Modification of exFAT filesystem for virtual xattr
+
+config EXFAT_VIRTUAL_XATTR_SELINUX_LABEL
+	string "Default string for SELinux label"
+	depends on EXFAT_FS && EXFAT_VIRTUAL_XATTR
+	default "u:object_r:sdcard_external:s0"
+	help
+	  Set this to the default string for SELinux label.

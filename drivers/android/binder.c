@@ -78,6 +78,15 @@
 #include "binder_internal.h"
 #include "binder_trace.h"
 
+#ifdef CONFIG_ANDROID_BINDER_BUFFER_DEBUG
+#define LINE_PRINT_BYTE_LENGTH 10
+#define DUMP_BUFFER_LENGTH 120
+static u8 g_dump_buf[DUMP_BUFFER_LENGTH];
+static int g_buf_no_space_times;
+static int g_previous_pid;
+static int g_dump_buffer_loglevel;
+#endif
+
 static HLIST_HEAD(binder_deferred_list);
 static DEFINE_MUTEX(binder_deferred_lock);
 
@@ -3392,6 +3401,69 @@ static void binder_transaction(struct binder_proc *proc,
 	t->buffer = binder_alloc_new_buf(&target_proc->alloc, tr->data_size,
 		tr->offsets_size, extra_buffers_size,
 		!reply && (t->flags & TF_ONE_WAY));
+#ifdef CONFIG_ANDROID_BINDER_BUFFER_DEBUG
+	{
+		int to_dump_buffer = 0;
+		int dump_length = 0;
+		size_t left_length = 0;
+		u8 *dump_buf = NULL;
+
+		if ((binder_debug_mask & g_dump_buffer_loglevel ||
+			binder_debug_mask & BINDER_DEBUG_FAILED_TRANSACTION) &&
+			ERR_PTR(-ENOSPC) == t->buffer) {
+			if (g_buf_no_space_times++%20 == 0 ||
+				target_proc->pid != g_previous_pid)
+				to_dump_buffer = 1;
+
+			if (to_dump_buffer) {
+				if (tr->data_size > DUMP_BUFFER_LENGTH)
+					dump_length = DUMP_BUFFER_LENGTH;
+				else
+					dump_length = tr->data_size;
+				if (copy_from_user((void *)g_dump_buf,
+					(const void __user *) (uintptr_t)
+					tr->data.ptr.buffer, dump_length)) {
+					binder_user_error("%d:%d invalid data ptr\n",
+							proc->pid, thread->pid);
+				} else {
+					left_length = dump_length;
+					dump_buf = g_dump_buf;
+					while (left_length) {
+						if (left_length <
+							LINE_PRINT_BYTE_LENGTH) {
+							binder_debug(
+							g_dump_buffer_loglevel,
+							"dump buf: %0x\n",
+							*(dump_buf++));
+							--left_length;
+						} else {
+							binder_debug(
+							g_dump_buffer_loglevel,
+							"dump:%0x:%0x:%0x:%0x:%0x\n",
+							*dump_buf, *(dump_buf + 1),
+							*(dump_buf + 2),
+							*(dump_buf + 3),
+							*(dump_buf + 4));
+							binder_debug(
+							g_dump_buffer_loglevel,
+							"dump:%0x:%0x:%0x:%0x:%0x\n",
+							*(dump_buf + 5),
+							*(dump_buf + 6),
+							*(dump_buf + 7),
+							*(dump_buf + 8),
+							*(dump_buf + 9));
+							left_length -=
+							LINE_PRINT_BYTE_LENGTH;
+							dump_buf +=
+							LINE_PRINT_BYTE_LENGTH;
+						}
+					}
+				}
+			}
+			g_previous_pid = target_proc->pid;
+		}
+	}
+#endif
 	if (IS_ERR(t->buffer)) {
 		char *s;
 
@@ -7115,6 +7187,9 @@ static int __init binder_init(void)
 	ret = binder_alloc_shrinker_init();
 	if (ret)
 		return ret;
+#ifdef CONFIG_ANDROID_BINDER_BUFFER_DEBUG
+	g_dump_buffer_loglevel = BINDER_DEBUG_FAILED_TRANSACTION;
+#endif
 
 	atomic_set(&binder_transaction_log.cur, ~0U);
 	atomic_set(&binder_transaction_log_failed.cur, ~0U);

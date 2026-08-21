@@ -1014,8 +1014,38 @@ static struct timer_base *lock_timer_base(struct timer_list *timer,
 #define MOD_TIMER_REDUCE		0x02
 #define MOD_TIMER_NOTPENDING		0x04
 
-static inline int
-__mod_timer(struct timer_list *timer, unsigned long expires, unsigned int options)
+#ifdef CONFIG_TIMER_STATS
+void __timer_stats_timer_set_start_info(struct timer_list *timer, void *addr)
+{
+	if (timer->start_site)
+		return;
+
+	timer->start_site = addr;
+	memcpy(timer->start_comm, current->comm, TASK_COMM_LEN);
+	timer->start_pid = current->pid;
+}
+
+static void timer_stats_account_timer(struct timer_list *timer)
+{
+	void *site;
+
+	/*
+	 * start_site can be concurrently reset by
+	 * timer_stats_timer_clear_start_info()
+	 */
+	site = READ_ONCE(timer->start_site);
+	if (likely(!site))
+		return;
+
+	timer_stats_update_stats(timer, timer->start_pid, site,
+				 timer->function, timer->start_comm,
+				 timer->flags);
+}
+#else
+static void timer_stats_account_timer(struct timer_list *timer) {}
+#endif
+
+static inline int __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int options)
 {
 	unsigned long clk = 0, flags, bucket_expiry;
 	struct timer_base *base, *new_base;
@@ -1780,6 +1810,8 @@ static void expire_timers(struct timer_base *base, struct hlist_head *head)
 
 		base->running_timer = timer;
 		detach_timer(timer, true);
+
+		timer_stats_account_timer(timer);
 
 		fn = timer->function;
 
@@ -2577,4 +2609,5 @@ void __init timers_init(void)
 	init_timer_cpus();
 	posix_cputimers_init_work();
 	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);
+	init_timer_stats();
 }

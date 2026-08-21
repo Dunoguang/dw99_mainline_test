@@ -51,6 +51,7 @@
 #include <net/cfg80211.h>
 #include "core.h"
 #include "reg.h"
+#include "regdb.h"
 #include "rdev-ops.h"
 #include "nl80211.h"
 
@@ -513,6 +514,43 @@ static int reg_schedule_apply(const struct ieee80211_regdomain *regdom)
 	schedule_work(&reg_regdb_work);
 	return 0;
 }
+
+#ifdef CONFIG_CFG80211_INTERNAL_REGDB
+static int reg_query_builtin(const char *alpha2)
+{
+	const struct ieee80211_regdomain *regdom = NULL;
+	unsigned int i;
+
+	for (i = 0; i < reg_regdb_size; i++) {
+		if (alpha2_equal(alpha2, reg_regdb[i]->alpha2)) {
+			regdom = reg_regdb[i];
+			break;
+		}
+	}
+
+	if (!regdom)
+		return -ENODATA;
+
+	regdom = reg_copy_regd(regdom);
+	if (IS_ERR_OR_NULL(regdom))
+		return -ENOMEM;
+
+	return reg_schedule_apply(regdom);
+}
+
+/* Feel free to add any other sanity checks here */
+static void reg_regdb_size_check(void)
+{
+	/* We should ideally BUILD_BUG_ON() but then random builds would fail */
+	WARN_ONCE(!reg_regdb_size, "db.txt is empty, you should update it...");
+}
+#else
+static inline void reg_regdb_size_check(void) {}
+static inline int reg_query_builtin(const char *alpha2)
+{
+	return -ENODATA;
+}
+#endif
 
 #ifdef CONFIG_CFG80211_CRDA_SUPPORT
 /* Max number of consecutive attempts to communicate with CRDA  */
@@ -1110,6 +1148,9 @@ out_unlock:
 
 static bool reg_query_database(struct regulatory_request *request)
 {
+	if (reg_query_builtin(request->alpha2) == 0)
+		return true;
+
 	if (query_regdb_file(request->alpha2) == 0)
 		return true;
 
@@ -4339,6 +4380,8 @@ int __init regulatory_init(void)
 
 	user_alpha2[0] = '9';
 	user_alpha2[1] = '7';
+
+	reg_regdb_size_check();
 
 #ifdef MODULE
 	return regulatory_init_db();
