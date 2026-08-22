@@ -22,7 +22,8 @@ struct ksu_sulog_pending_event *ksu_sulog_capture_root_execve_tracepoint(const c
 struct ksu_sulog_pending_event *ksu_sulog_capture_sucompat_tracepoint(const char __user *filename_user,
                                                                       const char __user *const __user *argv_user,
                                                                       gfp_t gfp);
-#else
+#endif
+#if !defined(CONFIG_KSU_TRACEPOINT_HOOK) || defined(CONFIG_KSU_SUSFS)
 struct ksu_sulog_pending_event *ksu_sulog_capture_root_execve_manual(const char *filename,
                                                                      const struct user_arg_ptr argv, gfp_t gfp);
 struct ksu_sulog_pending_event *ksu_sulog_capture_sucompat_manual(const char *filename, const struct user_arg_ptr argv,

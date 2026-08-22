@@ -228,8 +228,9 @@ long ksu_adb_root_handle_execveat_tracepoint(struct pt_regs *regs)
     }
     return 0;
 }
-#else
-static long do_ksu_adb_root_handle_execve(const char *filename, struct user_arg_ptr *envp)
+#endif
+#if !defined(CONFIG_KSU_TRACEPOINT_HOOK) || defined(CONFIG_KSU_SUSFS)
+static long do_ksu_adb_root_handle_execve_manual(const char *filename, struct user_arg_ptr *envp)
 {
     if (likely(is_exec_adbd(filename) != 1)) {
         return 0;
@@ -253,11 +254,11 @@ long ksu_adb_root_handle_execve_manual(const char *filename, struct user_arg_ptr
 {
 #ifdef KSU_COMPAT_USE_STATIC_KEY
     if (static_branch_unlikely(&ksu_adb_root)) {
-        return do_ksu_adb_root_handle_execve(filename, envp);
+        return do_ksu_adb_root_handle_execve_manual(filename, envp);
     }
 #else
     if (unlikely(ksu_adb_root)) {
-        return do_ksu_adb_root_handle_execve(filename, envp);
+        return do_ksu_adb_root_handle_execve_manual(filename, envp);
     }
 #endif
     return 0;

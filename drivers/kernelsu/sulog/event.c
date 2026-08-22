@@ -340,7 +340,8 @@ struct ksu_sulog_pending_event *ksu_sulog_capture_sucompat_tracepoint(const char
 {
     return ksu_sulog_capture_tracepoint(KSU_SULOG_EVENT_SUCOMPAT, filename_user, argv_user, gfp);
 }
-#else
+#endif
+#if !defined(CONFIG_KSU_TRACEPOINT_HOOK) || defined(CONFIG_KSU_SUSFS)
 // Manual hook / SuSFS Inline Hook
 struct ksu_sulog_pending_event *ksu_sulog_capture_root_execve_manual(const char *filename,
                                                                      const struct user_arg_ptr argv, gfp_t gfp)

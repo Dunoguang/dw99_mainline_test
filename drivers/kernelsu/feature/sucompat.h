@@ -28,8 +28,10 @@ long ksu_handle_faccessat_sucompat_internal(int orig_nr, struct pt_regs *regs);
 long ksu_handle_stat_sucompa_internal(int orig_nr, struct pt_regs *regs);
 long ksu_handle_execve_sucompat_internal(const char __user **filename_user, int orig_nr, struct pt_regs *regs);
 long ksu_handle_execveat_sucompat_internal(const char __user **filename_user, int orig_nr, struct pt_regs *regs);
-#else // #ifndef CONFIG_KSU_TRACEPOINT_HOOK
+#endif
 
+// TIF_PROC_NON_PRIVILEGE + helpers are needed by the SUSFS sucompat path
+// (ksu_handle_stat etc.) regardless of the hook method.
 // 63 already used as TIF_KSU_DISABLE_ESCAPE_WITH_ROOT (64bit)
 // 31 already used as TIF_KSU_DISABLE_ESCAPE_WITH_ROOT (32bit)
 #ifdef CONFIG_64BIT
@@ -52,6 +54,5 @@ static inline void ksu_clear_current_proc_unprivillege(void)
 {
     clear_thread_flag(TIF_PROC_NON_PRIVILEGE);
 }
-#endif
 
 #endif
