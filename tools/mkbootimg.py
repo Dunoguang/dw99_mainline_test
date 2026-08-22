@@ -10,10 +10,22 @@ script works from any working directory.
 import argparse, os, struct, sys, tempfile
 
 # ── defaults tied to the kernel tree this script lives in ────────────────
+# tools/mkbootimg.py → repo root is one level up; resolve defaults there so
+# the script works from any working directory (explicit CLI args still
+# resolve relative to the caller's CWD).
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT  = os.path.dirname(_SCRIPT_DIR)
 _TOOLS_DIR  = _SCRIPT_DIR
-_KERNEL_DEF = 'arch/arm64/boot/Image'
-_DTB_DEF    = 'arch/arm64/boot/dts/sprd/dw99.dtb'
+def _pick_build_output(rel: str) -> str:
+    """Prefer the out-of-tree build dir (dw99_out) over the source tree."""
+    for root in (os.path.join(_REPO_ROOT, 'dw99_out'), _REPO_ROOT):
+        p = os.path.join(root, rel)
+        if os.path.exists(p):
+            return p
+    return os.path.join(_REPO_ROOT, rel)
+
+_KERNEL_DEF = _pick_build_output('arch/arm64/boot/Image')
+_DTB_DEF    = _pick_build_output('arch/arm64/boot/dts/sprd/dw99.dtb')
 _RAMDISK_DEF = os.path.join(_TOOLS_DIR, 'ramdisk.gz')
 _HDR_DEF     = os.path.join(_TOOLS_DIR, 'sprd_header.bin')
 _OUT_DEF     = 'boot.img'
