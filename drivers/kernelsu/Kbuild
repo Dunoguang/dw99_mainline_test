@@ -65,12 +65,13 @@ KSU_SRC := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 LOCAL_GIT_EXISTS := $(shell test -e $(KSU_SRC)/../.git && echo 1 || echo 0)
 
 ifeq ($(LOCAL_GIT_EXISTS),0)
-$(info -- $(REPO_NAME) sources are vendored in-tree; using fallback version info)
-KSU_LOCAL_VERSION := 0
-KSU_VERSION := 30700
-KSU_TAG_NAME := v4.1.0
-KSU_COMMIT_SHA := vendored
-KSU_BRANCH_NAME := unknown
+$(info -- $(REPO_NAME) sources are vendored in-tree; using pinned version info)
+# Pinned to ReSukiSU/ReSukiSU @ 74668639 (2026-08-21, v4.2.0-rc1)
+KSU_LOCAL_VERSION := 4388
+KSU_VERSION := 35088
+KSU_TAG_NAME := v4.2.0-rc1
+KSU_COMMIT_SHA := 74668639
+KSU_BRANCH_NAME := main
 else
 ifdef KBUILD_EXTMOD
 include $(KSU_SRC)/tools/ddk_compatible.mk

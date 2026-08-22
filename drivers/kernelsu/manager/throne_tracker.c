@@ -134,7 +134,7 @@ FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name, int namelen, lo
             return FILLDIR_ACTOR_CONTINUE;
         }
 
-        strncpy(data->dirpath, dirpath, DATA_PATH_LEN - 1);
+        strscpy(data->dirpath, dirpath, DATA_PATH_LEN - 1);
         data->depth = my_ctx->depth - 1;
         list_add_tail(&data->list, my_ctx->data_path_list);
         return FILLDIR_ACTOR_CONTINUE;
@@ -166,7 +166,7 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
     INIT_LIST_HEAD(&data_path_list);
 
     // First depth
-    strncpy(data.dirpath, path, DATA_PATH_LEN - 1);
+    strscpy(data.dirpath, path, DATA_PATH_LEN - 1);
     data.depth = depth;
     list_add_tail(&data.list, &data_path_list);
 
@@ -354,7 +354,7 @@ void do_track_throne(void *data)
             break;
         }
         data->uid = res;
-        strncpy(data->package, package, KSU_MAX_PACKAGE_NAME);
+        strscpy(data->package, package, KSU_MAX_PACKAGE_NAME);
         list_add_tail(&data->list, &uid_list);
 
         u16 appid = res % PER_USER_RANGE;
