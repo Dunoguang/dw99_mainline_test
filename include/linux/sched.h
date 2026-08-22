@@ -839,7 +839,6 @@ struct reclaim_result {
 	s64 elapsed_centisecs64;
 };
 #endif
-#endif
 
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
