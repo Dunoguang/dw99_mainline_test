@@ -1880,25 +1880,24 @@ void sprdwl_cfg80211_dump_frame_prot_info(int send, int freq,
 static int sprdwl_cfg80211_remain_on_channel(struct wiphy *wiphy,
 					     struct wireless_dev *wdev,
 					     struct ieee80211_channel *chan,
-					     unsigned int duration, u64 *cookie,
+					     unsigned int duration, u64 cookie,
 					     const u8 *rx_addr)
 {
 	struct sprdwl_vif *vif = container_of(wdev, struct sprdwl_vif, wdev);
 	enum nl80211_channel_type channel_type = 0;
-	static u64 remain_index;
 	int ret;
 
-	*cookie = vif->listen_cookie = ++remain_index;
+	vif->listen_cookie = cookie;
 	netdev_info(wdev->netdev, "%s %d for %dms, cookie 0x%lld\n",
-		    __func__, chan->center_freq, duration, *cookie);
+		    __func__, chan->center_freq, duration, cookie);
 	memcpy(&vif->listen_channel, chan, sizeof(struct ieee80211_channel));
 
 	ret = sprdwl_remain_chan(vif->priv, vif->mode, chan,
-				 channel_type, duration, cookie);
+				 channel_type, duration, &cookie);
 	if (ret)
 		return ret;
 
-	cfg80211_ready_on_channel(wdev, *cookie, chan, duration, GFP_KERNEL);
+	cfg80211_ready_on_channel(wdev, cookie, chan, duration, GFP_KERNEL);
 
 	return 0;
 }
@@ -1917,7 +1916,7 @@ static int sprdwl_cfg80211_cancel_remain_on_channel(struct wiphy *wiphy,
 static int sprdwl_cfg80211_mgmt_tx(struct wiphy *wiphy,
 				   struct wireless_dev *wdev,
 				   struct cfg80211_mgmt_tx_params *params,
-				   u64 *cookie)
+				   u64 cookie)
 {
 	struct sprdwl_vif *vif = container_of(wdev, struct sprdwl_vif, wdev);
 	struct ieee80211_channel *chan = params->chan;
@@ -1925,11 +1924,9 @@ static int sprdwl_cfg80211_mgmt_tx(struct wiphy *wiphy,
 	size_t len = params->len;
 	unsigned int wait = params->wait;
 	bool dont_wait_for_ack = params->dont_wait_for_ack;
-	static u64 mgmt_index;
 	int ret = 0;
 
-	*cookie = ++mgmt_index;
-	netdev_info(wdev->netdev, "%s cookie %lld\n", __func__, *cookie);
+	netdev_info(wdev->netdev, "%s cookie %lld\n", __func__, cookie);
 
 	sprdwl_cfg80211_dump_frame_prot_info(1, chan->center_freq, buf, len);
 	/* send tx mgmt */
@@ -1937,10 +1934,10 @@ static int sprdwl_cfg80211_mgmt_tx(struct wiphy *wiphy,
 		ret = sprdwl_tx_mgmt(vif->priv, vif->mode,
 				     ieee80211_frequency_to_channel
 				     (chan->center_freq), dont_wait_for_ack,
-				     wait, cookie, buf, len);
+				     wait, &cookie, buf, len);
 		if (ret)
 			if (!dont_wait_for_ack)
-				cfg80211_mgmt_tx_status(wdev, *cookie, buf, len,
+				cfg80211_mgmt_tx_status(wdev, cookie, buf, len,
 							0, GFP_KERNEL);
 	}
 
