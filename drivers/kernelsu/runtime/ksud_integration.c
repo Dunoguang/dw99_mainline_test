@@ -77,7 +77,9 @@ static void stop_execve_hook(void);
 // clang-format off
 #if defined(CONFIG_KSU_TRACEPOINT_HOOK)
     static struct work_struct stop_input_hook_work;
+#endif
 
+#if defined(CONFIG_KSU_TRACEPOINT_HOOK) && !defined(CONFIG_KSU_SUSFS)
     // tp hook will ask kernel unregister hook when we no need
     #define ksu_init_rc_hook_inactive() false
     #define ksu_input_hook_inactive() false
