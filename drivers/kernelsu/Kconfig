@@ -101,16 +101,19 @@ config KSU_MANUAL_HOOK
 	  with a manually-patched function.
 	  Support for kernel 3.4+
 
+endchoice
+
+# SUSFS is independent from the hook-method choice: it can be combined
+# with either TRACEPOINT_HOOK or MANUAL_HOOK (matches the pre-v4.2 layout
+# used by the DW99 7.2 port; ReSukiSU moved it into the choice upstream).
 config KSU_SUSFS
 	bool "SUSFS Inline Hook"
-	depends on THREAD_INFO_IN_TASK && 64BIT
+	depends on KSU && THREAD_INFO_IN_TASK && 64BIT
 	help
 	  Patch and Enable SUSFS to kernel with KernelSU.
 	  SuSFS Officially support kernel 5.10+
 	  This KSU driver support it for 4.3+ in KSU side, 
 	  But the kernel side susfs compatibility MUST completed by yourself.
-
-endchoice
 
 menu "KernelSU - Manual Hook Auto hook"
     depends on KSU_MANUAL_HOOK

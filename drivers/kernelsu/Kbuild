@@ -178,6 +178,11 @@ ifdef CONFIG_KSU_TRACEPOINT_HOOK
     endif
   endif
 
+  # DW99 port: SUSFS is combined with the tracepoint hook (both enabled).
+  # Keep the selinux_hide compat macros so ksu_selinux_hide_* / fake_status
+  # stay global symbols referenced by security/selinux/selinuxfs.c.
+  include $(KSU_SRC)/tools/susfs_compat.mk
+
 else ifdef CONFIG_KSU_MANUAL_HOOK
   $(info -- $(REPO_NAME): using Manual Hook)
   include $(KSU_SRC)/tools/manual_hook_check.mk
