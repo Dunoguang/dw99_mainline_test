@@ -291,6 +291,7 @@ EXPORT_SYMBOL(vfs_getattr);
 #ifdef CONFIG_KSU_SUSFS
 extern struct static_key_true ksu_is_init_rc_hook_enabled;
 extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
+extern int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
 #endif
 
 int vfs_fstat(int fd, struct kstat *stat)
@@ -389,6 +390,10 @@ static int vfs_statx(int dfd, struct filename *filename, int flags,
 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH |
 		      AT_STATX_SYNC_TYPE))
 		return -EINVAL;
+
+#ifdef CONFIG_KSU_SUSFS
+	ksu_handle_stat(&dfd, &filename, &flags);
+#endif
 
 retry:
 	error = filename_lookup(dfd, filename, lookup_flags, &path, NULL);
