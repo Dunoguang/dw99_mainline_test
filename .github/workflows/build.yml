@@ -1,0 +1,184 @@
+name: Build Kernel
+
+on:
+  push:
+    branches: [ '**' ]
+    tags-ignore: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      include_resukisu:
+        description: '编入 ReSukiSU + SuSFS（同时开启/关闭，默认开启）'
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 4G
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      CCACHE_NOCOMPRESS: "true"
+      CCACHE_DIR: /home/runner/.ccache
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: master
+          path: kernel
+
+      - name: Checkout Watch-GKI tools
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: Dunoguang/Watch-GKI
+          path: tools-repo
+          sparse-checkout: |
+            tools
+            KernelSU
+
+      - name: Sync tools into kernel tree
+        run: |
+          cp -a tools-repo/tools kernel/tools
+          cp -a tools-repo/KernelSU kernel/KernelSU
+          rm -rf tools-repo
+          ls -la kernel/tools/
+
+      - name: Update ReSukiSU submodule to latest main
+        if: inputs.include_resukisu != 'false'
+        run: |
+          git -C kernel/KernelSU fetch --unshallow origin || true
+          git -C kernel/KernelSU fetch origin main
+          git -C kernel/KernelSU checkout --detach origin/main
+          echo "ReSukiSU HEAD: $(git -C kernel/KernelSU log -1 --format='%h %s')"
+
+      - name: Apply ReSukiSU 4.4 customizations
+        if: inputs.include_resukisu != 'false'
+        run: |
+          git -C kernel/KernelSU apply --whitespace=nowarn ../tools/patches/resukisu-4.4.patch || true
+          echo "✅ ReSukiSU 4.4 patch applied"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu flex bison bc libssl-dev ccache
+
+      - name: Restore ccache
+        id: cache-restore
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('kernel/arch/arm64/configs/lineageos_dw99_72_defconfig') }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ hashFiles('kernel/arch/arm64/configs/lineageos_dw99_72_defconfig') }}-
+            ccache-${{ runner.os }}-
+
+      - name: Setup ccache
+        run: |
+          aarch64-linux-gnu-gcc --version
+          ccache --version
+          mkdir -p ~/.ccache
+          ccache -M 4G
+          ccache -z
+
+      - name: Generate .config
+        id: config
+        run: |
+          cd kernel
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- lineageos_dw99_72_defconfig
+          scripts/config --enable CONFIG_SECCOMP
+          scripts/config --enable CONFIG_SECCOMP_FILTER
+          if [ "${{ inputs.include_resukisu }}" != "false" ]; then
+            echo "::notice::✅ ReSukiSU + SuSFS 编入 (default)"
+            scripts/config --enable CONFIG_KSU
+            scripts/config --disable CONFIG_KSU_KPROBES_KSUD
+            scripts/config --disable CONFIG_KPROBES
+            scripts/config --disable CONFIG_KRETPROBES
+          else
+            echo "::notice::🚫 不编入 ReSukiSU + SuSFS (manual dispatch)"
+            scripts/config --disable CONFIG_KSU
+            scripts/config --disable CONFIG_KSU_MANUAL_HOOK
+            scripts/config --disable CONFIG_KSU_SUSFS
+          fi
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+
+      - name: Build kernel + DTB
+        run: |
+          cd kernel
+          export CROSS_COMPILE="ccache aarch64-linux-gnu-"
+          set -o pipefail
+          make ARCH=arm64 CROSS_COMPILE="ccache aarch64-linux-gnu-" -j$(nproc) Image sprd/dw99.dtb 2>&1 | tee /tmp/build.log
+          echo "::notice::✅ Build complete at $(date)"
+
+      - name: Report ReSukiSU version
+        if: inputs.include_resukisu != 'false'
+        run: |
+          VCODE=$(grep -oE "ReSukiSU version code: [0-9]+" /tmp/build.log | head -1 | awk '{print $NF}')
+          VNAME=$(grep -oE "ReSukiSU version name: .+" /tmp/build.log | head -1 | sed 's/.*name: //')
+          HOOK=$(grep -oE "ReSukiSU: using [A-Za-z ]+Hook" /tmp/build.log | head -1 | sed 's/.*using //')
+          SUSVER=$(grep -E '^#define SUSFS_VERSION' kernel/include/linux/susfs.h | cut -d'"' -f2)
+          { echo "## 🚀 ReSukiSU 版本"; echo ""; echo "- **Version code**: $VCODE"; echo "- **Version name**: $VNAME"; echo "- **Hook method**: $HOOK"; echo "- **SuSFS version**: $SUSVER"; echo "- **Kernel**: $(grep -oE 'KERNEL_VERSION: [^ ]+' /tmp/build.log | head -1 | awk '{print $NF}')"; } >> "$GITHUB_STEP_SUMMARY"
+          echo "vcode=$VCODE" >> "$GITHUB_ENV"
+          echo "susver=$SUSVER" >> "$GITHUB_ENV"
+
+      - name: ccache stats
+        run: |
+          ccache -s
+
+      - name: Package boot.img
+        run: |
+          cd kernel
+          python3 tools/mkbootimg.py
+
+      - name: Rename artifact (WGKI naming)
+        run: |
+          TS=$(TZ=Asia/Shanghai date +%Y%m%d%H%M%S)
+          if [ "${{ inputs.include_resukisu }}" != "false" ]; then
+            ARTIFACT="WGKI-RSSU${vcode}-SuSFS${susver}-SAR-DM-EROFS-ByDunoguang-${TS}"
+          else
+            ARTIFACT="WGKI-NOKSU-SAR-DM-EROFS-ByDunoguang-${TS}"
+          fi
+          mv kernel/boot.img "${ARTIFACT}.img"
+          echo "artifact=$ARTIFACT" >> "$GITHUB_ENV"
+          echo "::notice::✅ 产物: ${ARTIFACT}.img"
+
+      - name: Verify output
+        run: |
+          ls -lh ${artifact}.img kernel/arch/arm64/boot/Image kernel/arch/arm64/boot/dts/sprd/dw99.dtb
+          file kernel/arch/arm64/boot/Image
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('kernel/arch/arm64/configs/lineageos_dw99_72_defconfig') }}-${{ github.run_id }}
+
+      - name: Upload boot.img
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ env.artifact }}
+          path: ${{ env.artifact }}.img
+
+      - name: ☁️ 上传到 Tempfile
+        if: always()
+        continue-on-error: true
+        run: |
+          FILE="${artifact}.img"
+          if [ ! -f "$FILE" ]; then
+            echo "⚠️ 产物不存在 (${FILE})，跳过 Tempfile 上传" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "📤 上传 ${FILE} 到 Tempfile..."
+          RESP=$(curl -sS -X POST https://tempfile.org/api/upload/local \
+            -F "files=@${FILE}" -F "expiryHours=48")
+          URL=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['files'][0]['url'] + 'download')")
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## ☁️ Tempfile 下载
+          | 📦 产物 | 🔗 链接 | 📏 大小 | ⏰ 有效期 |
+          |---------|---------|---------|-----------|
+          | ${FILE} | [点击下载](${URL}) | $(du -h "$FILE" | cut -f1) | 48 小时 |
+          > \`${URL}\`
+          EOF
+          echo "TEMP_URL=${URL}"
