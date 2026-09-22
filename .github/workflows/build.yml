@@ -48,10 +48,11 @@ jobs:
       - name: Update ReSukiSU submodule to latest main
         if: inputs.include_resukisu != 'false'
         run: |
-          git -C kernel/KernelSU fetch --unshallow origin || true
-          git -C kernel/KernelSU fetch origin main
-          git -C kernel/KernelSU checkout --detach origin/main
+          DEFAULT_BRANCH=$(git -C kernel/KernelSU remote show origin | sed -n '/HEAD branch/s/.*: //p')
+          git -C kernel/KernelSU fetch origin "$DEFAULT_BRANCH"
+          git -C kernel/KernelSU checkout --detach "origin/$DEFAULT_BRANCH"
           echo "ReSukiSU HEAD: $(git -C kernel/KernelSU log -1 --format='%h %s')"
+          
 
       - name: Apply ReSukiSU 4.4 customizations
         if: inputs.include_resukisu != 'false'
