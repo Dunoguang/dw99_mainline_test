@@ -109,7 +109,7 @@ jobs:
           cd kernel
           export CROSS_COMPILE="ccache aarch64-linux-gnu-"
           set -o pipefail
-          make ARCH=arm64 CROSS_COMPILE="ccache aarch64-linux-gnu-" -j$(nproc) Image vmlinux System.map sprd/dw99.dtb 2>&1 | tee /tmp/build.log
+          make ARCH=arm64 CROSS_COMPILE="ccache aarch64-linux-gnu-" -j$(nproc) Image vmlinux sprd/dw99.dtb 2>&1 | tee /tmp/build.log
           echo "::notice::✅ Build complete at $(date)"
 
       - name: Report ReSukiSU version
@@ -158,11 +158,18 @@ jobs:
       - name: Dump ELF section sizes (vmlinux)
         run: |
           readelf -S -W kernel/vmlinux > /tmp/readelf.txt || true
+          size -A kernel/vmlinux > /tmp/sizeA.txt || true
           {
-            echo "## vmlinux ELF sections"
+            echo "## vmlinux ELF sections (readelf -S)"
             echo ""
             echo '```'
             grep -E "^ *\[[ 0-9]+\]" /tmp/readelf.txt | sed 's/^ *//' || true
+            echo '```'
+            echo ""
+            echo "## vmlinux section totals (size -A)"
+            echo ""
+            echo '```'
+            cat /tmp/sizeA.txt || true
             echo '```'
             echo ""
             echo "### key symbols (System.map)"
