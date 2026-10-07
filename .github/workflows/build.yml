@@ -109,7 +109,7 @@ jobs:
           cd kernel
           export CROSS_COMPILE="ccache aarch64-linux-gnu-"
           set -o pipefail
-          make ARCH=arm64 CROSS_COMPILE="ccache aarch64-linux-gnu-" -j$(nproc) Image sprd/dw99.dtb 2>&1 | tee /tmp/build.log
+          make ARCH=arm64 CROSS_COMPILE="ccache aarch64-linux-gnu-" -j$(nproc) Image vmlinux System.map sprd/dw99.dtb 2>&1 | tee /tmp/build.log
           echo "::notice::✅ Build complete at $(date)"
 
       - name: Report ReSukiSU version
@@ -146,8 +146,31 @@ jobs:
 
       - name: Verify output
         run: |
-          ls -lh ${artifact}.img kernel/arch/arm64/boot/Image kernel/arch/arm64/boot/dts/sprd/dw99.dtb
-          file kernel/arch/arm64/boot/Image
+          ls -lh ${artifact}.img kernel/vmlinux kernel/System.map kernel/arch/arm64/boot/Image kernel/arch/arm64/boot/dts/sprd/dw99.dtb
+          file kernel/arch/arm64/boot/Image kernel/vmlinux
+          echo "=== vmlinux / System.map sanity ==="
+          test -s kernel/vmlinux     || { echo "::error::kernel/vmlinux missing"; exit 1; }
+          test -s kernel/System.map  || { echo "::error::kernel/System.map missing"; exit 1; }
+          test -s kernel/arch/arm64/boot/Image || { echo "::error::Image missing"; exit 1; }
+          echo "vmlinux size    : $(stat -c%s kernel/vmlinux) bytes"
+          echo "System.map lines: $(wc -l < kernel/System.map)"
+          echo "Image size      : $(stat -c%s kernel/arch/arm64/boot/Image) bytes"
+
+      - name: Dump ELF section sizes (vmlinux)
+        run: |
+          {
+            echo "## vmlinux ELF sections"
+            echo ""
+            echo "| section | size (bytes) | addr |"
+            echo "|---------|-------------:|------|"
+            readelf -S -W kernel/vmlinux \
+              | awk '/^ *\[[ 0-9]+\]/ {match($0,/\[[ 0-9]+\]/); nm=substr($0,RSTART,RLENGTH); gsub(/[][ ]/,"",nm); \$0=substr($0,RSTART+RLENGTH); n=split($0,a," "); name=a[1]; if(name=="")name=a[2]; for(i=1;i<=n;i++) if(a[i] ~ /^[0-9a-f]{16}$/){addr=a[i]; break} sz="-"; for(i=1;i<=n;i++) if(a[i] ~ /^[0-9a-f]{6,}$/ && a[i]!=addr){sz=a[i]; break} if(name!="") printf "| %s | %s | 0x%s |\n", name, sz, addr }'
+            echo ""
+            echo "### key symbols (System.map)"
+            echo '```'
+            grep -E " (_stext|_etext|__init_begin|__init_end|__bss_start|_edata|_end|__start_rodata|__end_rodata)$" kernel/System.map || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save ccache
         if: always()
@@ -156,30 +179,66 @@ jobs:
           path: ~/.ccache
           key: ccache-${{ runner.os }}-${{ hashFiles('kernel/arch/arm64/configs/lineageos_dw99_72_defconfig') }}-${{ github.run_id }}
 
-      - name: Upload boot.img
+      - name: Upload boot.img + vmlinux + System.map + Image + dtb
         uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ env.artifact }}
-          path: ${{ env.artifact }}.img
+          path: |
+            ${{ env.artifact }}.img
+            kernel/vmlinux
+            kernel/System.map
+            kernel/arch/arm64/boot/Image
+            kernel/arch/arm64/boot/dts/sprd/dw99.dtb
 
       - name: ☁️ 上传到 Tempfile
         if: always()
         continue-on-error: true
         run: |
-          FILE="${artifact}.img"
-          if [ ! -f "$FILE" ]; then
-            echo "⚠️ 产物不存在 (${FILE})，跳过 Tempfile 上传" >> "$GITHUB_STEP_SUMMARY"
+          FILES=( "${artifact}.img" )
+
+          if [ ! -f "${artifact}.img" ]; then
+            echo "⚠️ 产物不存在 (${artifact}.img)，跳过 Tempfile 上传" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          echo "📤 上传 ${FILE} 到 Tempfile..."
+
+          for f in \
+              "${artifact}.img" \
+              "kernel/vmlinux" \
+              "kernel/System.map" \
+              "kernel/arch/arm64/boot/Image" \
+              "kernel/arch/arm64/boot/dts/sprd/dw99.dtb" ; do
+            [ -f "$f" ] && FILES+=( "$f" )
+          done
+
+          echo "📤 上传 ${#FILES[@]} 个文件到 Tempfile..."
+          FORM=()
+          for f in "${FILES[@]}"; do FORM+=( -F "files=@${f}" ); done
           RESP=$(curl -sS -X POST https://tempfile.org/api/upload/local \
-            -F "files=@${FILE}" -F "expiryHours=48")
-          URL=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['files'][0]['url'] + 'download')")
-          cat >> "$GITHUB_STEP_SUMMARY" << EOF
-          ## ☁️ Tempfile 下载
-          | 📦 产物 | 🔗 链接 | 📏 大小 | ⏰ 有效期 |
-          |---------|---------|---------|-----------|
-          | ${FILE} | [点击下载](${URL}) | $(du -h "$FILE" | cut -f1) | 48 小时 |
-          > \`${URL}\`
-          EOF
+            "${FORM[@]}" -F "expiryHours=48")
+          echo "$RESP" > /tmp/tempfile.json
+          cat /tmp/tempfile.json | head -c 500
+          URL=$(python3 -c "import sys,json; d=json.load(open('/tmp/tempfile.json')); print(d['files'][0]['url'] + 'download')")
+          {
+            echo "## ☁️ Tempfile 下载"
+            echo ""
+            echo "| 📦 产物 | 🔗 链接 | 📏 大小 | ⏰ 有效期 |"
+            echo "|---------|---------|---------|-----------|"
+            python3 -c "
+import json,os
+d=json.load(open('/tmp/tempfile.json'))
+for it in d['files']:
+    u=it['url']+'download'
+    nm=it.get('name') or it.get('filename') or u
+    p=os.path.basename(nm)
+    for cand in ['${artifact}.img','kernel/arch/arm64/boot/dts/sprd/dw99.dtb','kernel/arch/arm64/boot/Image','kernel/vmlinux','kernel/System.map']:
+        if os.path.basename(cand)==p:
+            p=cand; break
+    sz=''
+    try:
+        sz=os.path.getsize(p)
+        sz='%.1f MiB'%(sz/1048576.0)
+    except Exception: pass
+    print('| %s | [点击下载](%s) | %s | 48 小时 |'%(p,u,sz))
+"
+          } >> "$GITHUB_STEP_SUMMARY"
           echo "TEMP_URL=${URL}"
