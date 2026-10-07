@@ -148,7 +148,6 @@ jobs:
         run: |
           ls -lh ${artifact}.img kernel/vmlinux kernel/System.map kernel/arch/arm64/boot/Image kernel/arch/arm64/boot/dts/sprd/dw99.dtb
           file kernel/arch/arm64/boot/Image kernel/vmlinux
-          echo "=== vmlinux / System.map sanity ==="
           test -s kernel/vmlinux     || { echo "::error::kernel/vmlinux missing"; exit 1; }
           test -s kernel/System.map  || { echo "::error::kernel/System.map missing"; exit 1; }
           test -s kernel/arch/arm64/boot/Image || { echo "::error::Image missing"; exit 1; }
@@ -158,13 +157,13 @@ jobs:
 
       - name: Dump ELF section sizes (vmlinux)
         run: |
+          readelf -S -W kernel/vmlinux > /tmp/readelf.txt || true
           {
             echo "## vmlinux ELF sections"
             echo ""
-            echo "| section | size (bytes) | addr |"
-            echo "|---------|-------------:|------|"
-            readelf -S -W kernel/vmlinux \
-              | awk '/^ *\[[ 0-9]+\]/ {match($0,/\[[ 0-9]+\]/); nm=substr($0,RSTART,RLENGTH); gsub(/[][ ]/,"",nm); \$0=substr($0,RSTART+RLENGTH); n=split($0,a," "); name=a[1]; if(name=="")name=a[2]; for(i=1;i<=n;i++) if(a[i] ~ /^[0-9a-f]{16}$/){addr=a[i]; break} sz="-"; for(i=1;i<=n;i++) if(a[i] ~ /^[0-9a-f]{6,}$/ && a[i]!=addr){sz=a[i]; break} if(name!="") printf "| %s | %s | 0x%s |\n", name, sz, addr }'
+            echo '```'
+            grep -E "^ *\[[ 0-9]+\]" /tmp/readelf.txt | sed 's/^ *//' || true
+            echo '```'
             echo ""
             echo "### key symbols (System.map)"
             echo '```'
@@ -194,51 +193,25 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          FILES=( "${artifact}.img" )
-
-          if [ ! -f "${artifact}.img" ]; then
-            echo "⚠️ 产物不存在 (${artifact}.img)，跳过 Tempfile 上传" >> "$GITHUB_STEP_SUMMARY"
+          FILES=()
+          for f in "${artifact}.img" kernel/vmlinux kernel/System.map kernel/arch/arm64/boot/Image kernel/arch/arm64/boot/dts/sprd/dw99.dtb ; do
+            if [ -f "$f" ]; then FILES+=("$f"); fi
+          done
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "⚠️ 无产物，跳过 Tempfile 上传" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-
-          for f in \
-              "${artifact}.img" \
-              "kernel/vmlinux" \
-              "kernel/System.map" \
-              "kernel/arch/arm64/boot/Image" \
-              "kernel/arch/arm64/boot/dts/sprd/dw99.dtb" ; do
-            [ -f "$f" ] && FILES+=( "$f" )
-          done
-
-          echo "📤 上传 ${#FILES[@]} 个文件到 Tempfile..."
+          echo "📤 上传 ${#FILES[@]} 个文件到 Tempfile: ${FILES[*]}"
           FORM=()
           for f in "${FILES[@]}"; do FORM+=( -F "files=@${f}" ); done
-          RESP=$(curl -sS -X POST https://tempfile.org/api/upload/local \
-            "${FORM[@]}" -F "expiryHours=48")
-          echo "$RESP" > /tmp/tempfile.json
-          cat /tmp/tempfile.json | head -c 500
-          URL=$(python3 -c "import sys,json; d=json.load(open('/tmp/tempfile.json')); print(d['files'][0]['url'] + 'download')")
-          {
-            echo "## ☁️ Tempfile 下载"
-            echo ""
-            echo "| 📦 产物 | 🔗 链接 | 📏 大小 | ⏰ 有效期 |"
-            echo "|---------|---------|---------|-----------|"
-            python3 -c "
-import json,os
-d=json.load(open('/tmp/tempfile.json'))
-for it in d['files']:
-    u=it['url']+'download'
-    nm=it.get('name') or it.get('filename') or u
-    p=os.path.basename(nm)
-    for cand in ['${artifact}.img','kernel/arch/arm64/boot/dts/sprd/dw99.dtb','kernel/arch/arm64/boot/Image','kernel/vmlinux','kernel/System.map']:
-        if os.path.basename(cand)==p:
-            p=cand; break
-    sz=''
-    try:
-        sz=os.path.getsize(p)
-        sz='%.1f MiB'%(sz/1048576.0)
-    except Exception: pass
-    print('| %s | [点击下载](%s) | %s | 48 小时 |'%(p,u,sz))
-"
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "TEMP_URL=${URL}"
+          curl -sS -X POST https://tempfile.org/api/upload/local "${FORM[@]}" -F "expiryHours=48" -o /tmp/tempfile.json || true
+          head -c 300 /tmp/tempfile.json || true
+          echo ""
+          for f in "${FILES[@]}"; do
+            P=$(python3 -c "import sys,json; d=json.load(open('/tmp/tempfile.json')); import os; tgt=os.path.basename('$f'); print(next((i['url']+'download' for i in d['files'] if os.path.basename(i.get('name') or i.get('filename') or '')==tgt), d['files'][0]['url']+'download'))" 2>/dev/null || echo "")
+            if [ -z "$P" ]; then continue; fi
+            SZ=$(stat -c%s "$f")
+            MIB=$(awk -v s="$SZ" 'BEGIN{printf "%.1f", s/1048576}')
+            echo "| ${f} | [点击下载](${P}) | ${MIB} MiB | 48 小时 |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "TEMP_URL=$(python3 -c "import json; print(json.load(open('/tmp/tempfile.json'))['files'][0]['url']+'download')" 2>/dev/null || echo '')"
