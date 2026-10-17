@@ -16,6 +16,7 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_of.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/clients/drm_client_setup.h>
 #include <drm/drm_vblank.h>
 
 #include "sprd_drm.h"
@@ -104,6 +105,8 @@ static int sprd_drm_bind(struct device *dev)
 	ret = drm_dev_register(drm, 0);
 	if (ret < 0)
 		goto err_kms_helper_poll_fini;
+
+	drm_client_setup(drm, NULL);
 
 	return 0;
 
