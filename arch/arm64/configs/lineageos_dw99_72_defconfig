@@ -840,3 +840,8 @@ CONFIG_CPU_FREQ_GOV_PERFORMANCE=y
 
 # fbdev console on top of sprd DRM: kernel log on the panel
 CONFIG_DRM_FBDEV_EMULATION=y
+
+# SL8541e is Cortex-A53 (ARMv8.0): 48-bit VA, 40-bit PA.
+# 52-bit VA/PA needs ARMv8.2 LVA/FEAT_LPA and breaks phys_to_ttbr.
+CONFIG_ARM64_VA_BITS_48=y
+CONFIG_ARM64_PA_BITS_48=y
