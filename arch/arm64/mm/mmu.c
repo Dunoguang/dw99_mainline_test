@@ -50,7 +50,7 @@
 #define NO_CONT_MAPPINGS	BIT(1)
 #define NO_EXEC_MAPPINGS	BIT(2)	/* assumes FEAT_HPDS is not used */
 
-u64 kimage_voffset __ro_after_init;
+u64 kimage_voffset;
 EXPORT_SYMBOL(kimage_voffset);
 
 u32 __boot_cpu_mode[] = { BOOT_CPU_MODE_EL2, BOOT_CPU_MODE_EL1 };
