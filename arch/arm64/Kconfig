@@ -2587,3 +2587,12 @@ source "drivers/acpi/Kconfig"
 source "arch/arm64/kvm/Kconfig"
 
 source "kernel/livepatch/Kconfig"
+
+config USB_MUSB_EARLYCON
+bool "Early console on the MUSB bulk IN endpoint (bootloader set up)"
+default n
+help
+  Send all early printk output directly to the MUSB USB controller
+  register window.  The endpoint must already be configured by the
+  bootloader; this only writes the FIFO and arms TXPKTRDY.  Needs
+  MUSB_EARLYCON_VA mapped by the pi code.
