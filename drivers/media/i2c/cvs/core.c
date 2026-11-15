@@ -31,6 +31,7 @@
 
 #define PCI_DEVICE_ID_INTEL_IPU7		0x645d	/* MTL / LNL */
 #define PCI_DEVICE_ID_INTEL_IPU7P5		0xb05d	/* ARL / PTL */
+#define PCI_DEVICE_ID_INTEL_IPU8		0xd719	/* NVL */
 
 /*
  * IPU7 PCI device IDs not covered by ipu6_pci_tbl in ipu6-pci-table.h.
@@ -39,6 +40,7 @@
 static const struct pci_device_id icvs_ipu7_tbl[] = {
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU7) },
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU7P5) },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU8) },
 	{ }
 };
 
@@ -723,8 +725,6 @@ static int cvs_core_probe(struct device *dev, struct i2c_client *i2c)
 	}
 
 	if (ctx->res == ICVS_FULLCAP) {
-		struct gpio_desc *wake;
-
 		ctx->rst = devm_gpiod_get(dev, "rst", GPIOD_OUT_HIGH);
 		if (IS_ERR(ctx->rst)) {
 			ret = dev_err_probe(dev, PTR_ERR(ctx->rst),
@@ -732,14 +732,12 @@ static int cvs_core_probe(struct device *dev, struct i2c_client *i2c)
 			goto err_put_ipu;
 		}
 
-		wake = devm_gpiod_get(dev, "wake", GPIOD_IN);
-		if (IS_ERR(wake)) {
-			ret = dev_err_probe(dev, PTR_ERR(wake),
-					    "failed to get wake GPIO\n");
-			goto err_put_ipu;
-		}
-
-		ctx->irq = gpiod_to_irq(wake);
+		/*
+		 * Do not request the line: another device's _CRS may list
+		 * the same pin, and its driver would then fail with -EBUSY.
+		 */
+		ctx->irq = acpi_dev_gpio_irq_get_by(ACPI_COMPANION(dev),
+						    "wake", 0);
 		if (ctx->irq < 0) {
 			ret = dev_err_probe(dev, ctx->irq,
 					    "failed to get wake IRQ\n");
@@ -962,6 +960,7 @@ static const struct acpi_device_id intel_cvs_acpi_match[] = {
 	{ "INTC10DE" }, /* LNL */
 	{ "INTC10E0" }, /* ARL */
 	{ "INTC10E1" }, /* PTL */
+	{ "INTC10FA" }, /* NVL */
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, intel_cvs_acpi_match);

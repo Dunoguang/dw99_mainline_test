@@ -13,6 +13,7 @@
 #include <media/v4l2-async.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>
+#include <media/v4l2-device.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-mc.h>
@@ -46,6 +47,7 @@ static const struct v4l2_mbus_framefmt cvs_csi_format_mbus_default = {
 /**
  * csi_set_link_cfg - Program default CSI-2 link parameters
  * @ctx: CVS device context
+ * @link_freq: Link frequency (Hz)
  *
  * Populates a HOST_SET_MIPI_CONFIG command using current lane count and
  * link frequency, then submits it to the device.
@@ -53,12 +55,12 @@ static const struct v4l2_mbus_framefmt cvs_csi_format_mbus_default = {
  *
  * Return: 0 on success or negative errno.
  */
-static int csi_set_link_cfg(struct icvs *ctx)
+static int csi_set_link_cfg(struct icvs *ctx, u64 link_freq)
 {
 	struct icvs_cmd cmd = {
 		.cmd_id = cpu_to_be16(ICVS_HOST_SET_MIPI_CONFIG),
 		.param.conf.nr_of_lanes = ctx->nr_of_lanes,
-		.param.conf.link_freq = ctx->link_freq,
+		.param.conf.link_freq = link_freq,
 	};
 	size_t cmd_size = sizeof(cmd.cmd_id) + sizeof(cmd.param.conf);
 
@@ -91,7 +93,7 @@ static int cvs_csi_enable_streams(struct v4l2_subdev *sd,
 	struct v4l2_subdev *remote_sd =
 			    media_entity_to_v4l2_subdev(ctx->remote->entity);
 	struct device *dev = cvs_dev(ctx);
-	s64 freq;
+	s64 link_freq;
 	int ret;
 
 	/* cvs_set_link_owner(ICVS_CSI_LINK_HOST) */
@@ -99,15 +101,14 @@ static int cvs_csi_enable_streams(struct v4l2_subdev *sd,
 	if (ret < 0)
 		return ret;
 
-	freq = v4l2_get_link_freq(ctx->remote, 0, 0);
-	if (freq < 0) {
-		ret = freq;
+	link_freq = v4l2_get_link_freq(ctx->remote, 0, 0);
+	if (link_freq < 0) {
+		ret = link_freq;
 		goto err_rpm_put;
 	}
-	ctx->link_freq = freq;
 
 	if (ctx->i2c_client) {
-		ret = csi_set_link_cfg(ctx);
+		ret = csi_set_link_cfg(ctx, link_freq);
 		if (ret < 0)
 			goto err_rpm_put_sync;
 	}
@@ -345,7 +346,6 @@ static int cvs_csi_get_mbus_config(struct v4l2_subdev *sd, unsigned int pad,
 	if (freq < 0)
 		return -EINVAL;
 
-	ctx->link_freq = freq;
 	cfg->link_freq = freq;
 
 	return 0;
@@ -401,7 +401,7 @@ static int cvs_csi_notify_bound(struct v4l2_async_notifier *notifier,
 				struct v4l2_async_connection *asc)
 {
 	struct icvs *ctx = notifier_to_csi(notifier);
-	int pad;
+	int pad, ret;
 
 	pad = media_entity_get_fwnode_pad(&sd->entity, asc->match.fwnode,
 					  MEDIA_PAD_FL_SOURCE);
@@ -410,9 +410,13 @@ static int cvs_csi_notify_bound(struct v4l2_async_notifier *notifier,
 
 	ctx->remote = &sd->entity.pads[pad];
 
-	return media_create_pad_link(&sd->entity, pad, &ctx->subdev.entity,
-				     ICVS_CSI_PAD_SINK, MEDIA_LNK_FL_ENABLED |
-				     MEDIA_LNK_FL_IMMUTABLE);
+	ret = media_create_pad_link(&sd->entity, pad, &ctx->subdev.entity,
+				    ICVS_CSI_PAD_SINK, MEDIA_LNK_FL_ENABLED |
+				    MEDIA_LNK_FL_IMMUTABLE);
+	if (ret)
+		return ret;
+
+	return v4l2_device_register_subdev_nodes(sd->v4l2_dev);
 }
 
 /**

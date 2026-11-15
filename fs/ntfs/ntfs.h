@@ -19,6 +19,7 @@
 #include <linux/nls.h>
 #include <linux/smp.h>
 #include <linux/pagemap.h>
+#include <linux/blk_types.h>
 #include <linux/uidgid.h>
 
 #include "volume.h"
@@ -71,8 +72,6 @@
 #define NTFS_CLU_TO_POFS(vol, clu) (((u64)(clu) << (vol)->cluster_size_bits) & \
 				    ~PAGE_MASK)
 
-#define NTFS_B_TO_SECTOR(vol, b) ((b) >> ((vol)->sb)->s_blocksize_bits)
-
 enum {
 	NTFS_BLOCK_SIZE		= 512,
 	NTFS_BLOCK_SIZE_BITS	= 9,
@@ -80,6 +79,8 @@ enum {
 	NTFS_MAX_NAME_LEN	= 255,
 	NTFS_MAX_LABEL_LEN	= 128,
 };
+
+#define NTFS_MAX_ATTR_LIST_SIZE	(256 * 1024)
 
 enum {
 	CASE_SENSITIVE = 0,
@@ -154,11 +155,10 @@ static inline u64 ntfs_cluster_to_poff(const struct ntfs_volume *vol,
 	return (clu << vol->cluster_size_bits) & ~PAGE_MASK;
 }
 
-/* Convert byte offset to sector (block) number. */
-static inline sector_t ntfs_bytes_to_sector(const struct ntfs_volume *vol,
-		u64 bytes)
+/* Convert a byte offset on the volume to a bio sector number. */
+static inline sector_t ntfs_bytes_to_bio_sector(u64 bytes)
 {
-	return bytes >> vol->sb->s_blocksize_bits;
+	return bytes >> SECTOR_SHIFT;
 }
 
 /* Global variables. */
@@ -202,6 +202,10 @@ static inline struct ntfs_volume *NTFS_SB(struct super_block *sb)
 
 /* From fs/ntfs/compress.c */
 int ntfs_read_compressed_block(struct folio *folio);
+#ifdef CONFIG_NTFS_FS_WOF_COMPRESSION
+int ntfs_read_wof_compressed_block(struct folio *folio);
+void ntfs_wof_free_workspaces(void);
+#endif
 int allocate_compression_buffers(void);
 void free_compression_buffers(void);
 int ntfs_compress_write(struct ntfs_inode *ni, loff_t pos, size_t count,
@@ -217,7 +221,6 @@ struct option_t {
 };
 extern const struct option_t on_errors_arr[];
 int ntfs_set_volume_flags(struct ntfs_volume *vol, __le16 flags);
-int ntfs_clear_volume_flags(struct ntfs_volume *vol, __le16 flags);
 int ntfs_write_volume_label(struct ntfs_volume *vol, char *label);
 
 /* From fs/ntfs/mst.c */
