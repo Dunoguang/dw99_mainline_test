@@ -132,6 +132,15 @@ static void __init map_kernel(u64 kaslr_offset, u64 va_offset, int root_level)
 			    __inittext_end, text_prot, false, root_level);
 	}
 
+
+#ifdef CONFIG_USB_MUSB_EARLYCON
+/* Map the M USB controller for the early USB console.  Shares PUD[2]
+ * with the kernel image so no extra page table pages are needed.
+ */
+map_range(&pgdp, MUSB_EARLYCON_VA, MUSB_EARLYCON_VA + SZ_2M,
+  MUSB_EARLYCON_PA, PAGE_KERNEL_IO, root_level,
+  (pte_t *)init_pg_dir, false, 0);
+#endif
 	/* Copy the root page table to its final location */
 	memcpy((void *)swapper_pg_dir + va_offset, init_pg_dir, PAGE_SIZE);
 	dsb(ishst);
