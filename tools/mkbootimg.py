@@ -91,6 +91,19 @@ def main() -> None:
     else:
         print(f'DTB magic={magic.hex()}, assuming already wrapped')
 
+    # ── gzip the kernel (SPRD bootloader expects a compressed kernel) ─
+    import gzip as _gzip, io as _io
+    with open(kernel, 'rb') as f:
+        raw_kern = f.read()
+    _buf = _io.BytesIO()
+    with _gzip.GzipFile(fileobj=_buf, mode='wb', compresslevel=9, mtime=0) as gz:
+        gz.write(raw_kern)
+    kern_gz = _buf.getvalue()
+    kernel = kernel + '.gz'
+    with open(kernel, 'wb') as f:
+        f.write(kern_gz)
+    print(f'Kernel gzipped: {len(raw_kern)} → {len(kern_gz)} bytes')
+
     # ── sizes & offsets ─────────────────────────────────────────────
     kernel_sz  = os.path.getsize(kernel)
     ramdisk_sz = os.path.getsize(ramdisk)
