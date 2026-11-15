@@ -138,7 +138,7 @@ static void __init map_kernel(u64 kaslr_offset, u64 va_offset, int root_level)
  * with the kernel image so no extra page table pages are needed.
  */
 map_range(&pgdp, MUSB_EARLYCON_VA, MUSB_EARLYCON_VA + SZ_2M,
-  MUSB_EARLYCON_PA, PAGE_KERNEL_IO, root_level,
+  MUSB_EARLYCON_PA, pgprot_device(PAGE_KERNEL), root_level,
   (pte_t *)init_pg_dir, false, 0);
 #endif
 	/* Copy the root page table to its final location */
