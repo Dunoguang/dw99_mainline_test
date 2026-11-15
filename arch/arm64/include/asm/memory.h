@@ -449,4 +449,13 @@ void dump_mem_limit(void);
 #endif
 
 
+
+#ifdef CONFIG_USB_MUSB_EARLYCON
+/* MUSB controller for the early USB console (vp19: USB3 base @0x20200000,
+ * EP5 bulk IN configured by the bootloader).
+ */
+#define MUSB_EARLYCON_PA0x20200000UL
+#define MUSB_EARLYCON_VA0xffff800090000000UL
+#endif
+
 #endif /* __ASM_MEMORY_H */
