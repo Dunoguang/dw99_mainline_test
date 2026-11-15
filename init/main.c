@@ -980,6 +980,10 @@ void start_kernel(void)
 	char *command_line;
 	char *after_dashes;
 
+#ifdef CONFIG_USB_MUSB_EARLYCON
+extern void musb_earlycon_init(void);
+musb_earlycon_init();
+#endif
 	set_task_stack_end_magic(&init_task);
 	smp_setup_processor_id();
 	debug_objects_early_init();
