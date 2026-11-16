@@ -448,3 +448,16 @@ COMPAT_SYSCALL_DEFINE2(ustat, unsigned, dev, struct compat_ustat __user *, u)
 	return 0;
 }
 #endif
+
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+/* DW99 compat: wrappers the 2.4 core resolves through extern declarations. */
+int statfs_by_dentry_wrapper(struct dentry *dentry, struct kstatfs *buf)
+{
+	return statfs_by_dentry(dentry, buf);
+}
+
+int calculate_f_flags_wrapper(struct vfsmount *mnt)
+{
+	return calculate_f_flags(mnt);
+}
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
