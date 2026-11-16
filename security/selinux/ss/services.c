@@ -531,18 +531,6 @@ out:
 	kfree(scontext_name);
 }
 
-#ifdef CONFIG_KSU_SUSFS
-void security_dump_masked_av_fn(struct policydb *policydb,
-				    struct context *scontext,
-				    struct context *tcontext,
-				    u16 tclass,
-				    u32 permissions,
-				    const char *reason)
-{
-	security_dump_masked_av(policydb, scontext, tcontext, tclass, permissions, reason);
-}
-#endif // #ifdef CONFIG_KSU_SUSFS
-
 /*
  * security_boundary_permission - drops violated permissions
  * on boundary constraint.
@@ -741,18 +729,6 @@ static void context_struct_compute_av(struct policydb *policydb,
 	type_attribute_bounds_av(policydb, scontext, tcontext,
 				 tclass, avd);
 }
-
-#ifdef CONFIG_KSU_SUSFS
-void context_struct_compute_av_fn(struct policydb *policydb,
-				      struct context *scontext,
-				      struct context *tcontext,
-				      u16 tclass,
-				      struct av_decision *avd,
-				      struct extended_perms *xperms)
-{
-	context_struct_compute_av(policydb, scontext, tcontext, tclass, avd, xperms);
-}
-#endif // #ifdef CONFIG_KSU_SUSFS
 
 static int security_validtrans_handle_fail(struct selinux_policy *policy,
 					struct sidtab_entry *oentry,
@@ -2288,11 +2264,23 @@ void selinux_policy_commit(struct selinux_load_state *load_state)
 			pr_info("SELinux: Enabling MLS support...\n");
 	}
 
+#ifdef CONFIG_KSU_SUSFS
+	if (susfs_is_current_ksu_domain()) {
+		if (oldpolicy) {
+			newpolicy->latest_granting = oldpolicy->latest_granting;
+			goto bypass_orig;
+		}
+	}
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 	/* Set latest granting seqno for new policy. */
 	if (oldpolicy)
 		newpolicy->latest_granting = oldpolicy->latest_granting + 1;
 	else
 		newpolicy->latest_granting = 1;
+#ifdef CONFIG_KSU_SUSFS
+bypass_orig:
+#endif // #ifdef CONFIG_KSU_SUSFS
 	seqno = newpolicy->latest_granting;
 
 	/* Install the new policy. */
@@ -3056,8 +3044,18 @@ int security_set_bools(u32 len, const int *values)
 	/* Re-evaluate the conditional rules in the copy */
 	evaluate_cond_nodes(&newpolicy->policydb);
 
+#ifdef CONFIG_KSU_SUSFS
+	if (susfs_is_current_ksu_domain()) {
+		newpolicy->latest_granting = oldpolicy->latest_granting;
+		goto bypass_orig;
+	}
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 	/* Set latest granting seqno for new policy */
 	newpolicy->latest_granting = oldpolicy->latest_granting + 1;
+#ifdef CONFIG_KSU_SUSFS
+bypass_orig:
+#endif // #ifdef CONFIG_KSU_SUSFS
 	seqno = newpolicy->latest_granting;
 
 	/* Install the new policy */

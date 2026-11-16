@@ -25,7 +25,7 @@
 #include <linux/buildid.h>
 #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 #include <linux/susfs_def.h>
-#endif
+#endif // #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 
 #include <asm/elf.h>
 #include <asm/tlb.h>
@@ -475,14 +475,6 @@ static void get_vma_name(struct vm_area_struct *vma,
 	}
 }
 
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-extern void susfs_sus_kstat_spoof_show_map_vma(struct inode *inode, dev_t *out_dev, u64 *out_ino);
-#endif
-#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-extern struct srcu_struct susfs_srcu_open_redirect;
-extern int susfs_open_redirect_spoof_show_map_vma_srcu(struct inode *inode, u64 *out_ino, dev_t *out_dev, char **out_spoofed_name);
-#endif
-
 static void show_vma_header_prefix(struct seq_file *m,
 				   unsigned long start, unsigned long end,
 				   vm_flags_t flags, unsigned long long pgoff,
@@ -503,13 +495,21 @@ static void show_vma_header_prefix(struct seq_file *m,
 	seq_putc(m, ' ');
 }
 
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern void susfs_sus_kstat_spoof_show_map_vma(struct inode *inode, dev_t *out_dev, unsigned long *out_ino);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+extern struct srcu_struct susfs_srcu_open_redirect;
+extern int susfs_open_redirect_spoof_show_map_vma_srcu(struct inode *inode, unsigned long *out_ino, dev_t *out_dev, char **out_spoofed_name);
+#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+
 static void
 show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 {
 	const struct path *path;
 	const char *name_fmt, *name;
 	vm_flags_t flags = vma->vm_flags;
-	u64 ino = 0;
+	unsigned long ino = 0;
 	unsigned long long pgoff = 0;
 	unsigned long start, end;
 	dev_t dev = 0;
@@ -535,17 +535,17 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 			}
 			srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
 		}
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		if (SUSFS_IS_INODE_SUS_MAP(inode))
 			return;
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		dev = inode->i_sb->s_dev;
 		ino = inode->i_ino;
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 		susfs_sus_kstat_spoof_show_map_vma((struct inode *)inode, &dev, &ino);
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 	}
 
 	start = vma->vm_start;
@@ -1504,7 +1504,7 @@ static int show_smap(struct seq_file *m, void *v)
 		if (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
 			return 0;
 	}
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
 	smap_gather_stats(priv, vma, &mss, 0);
 
@@ -1562,11 +1562,11 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		if (vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
 			goto bypass_orig_flow;
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		smap_gather_stats(priv, vma, &mss, 0);
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 bypass_orig_flow:
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		last_vma_end = vma->vm_end;
 
 		/*
@@ -1632,15 +1632,8 @@ bypass_orig_flow:
 
 			/* Case 4 above */
 			if (vma->vm_end > last_vma_end) {
-#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-				if (!vma->vm_file || !(SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))) {
-					smap_gather_stats(priv, vma, &mss, last_vma_end);
-					last_vma_end = vma->vm_end;
-				}
-#else
 				smap_gather_stats(priv, vma, &mss, last_vma_end);
 				last_vma_end = vma->vm_end;
-#endif
 			}
 		}
 	} for_each_vma(vmi, vma);
@@ -2423,7 +2416,7 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 		unsigned long end;
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		struct vm_area_struct *vma;
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
 		pm.pos = 0;
 		end = (start_vaddr + PAGEMAP_WALK_SIZE) & PAGEMAP_WALK_MASK;
@@ -2437,11 +2430,11 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 		vma = vma_lookup(mm, start_vaddr);
 		if (vma && vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
 			goto bypass_orig_flow;
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		ret = walk_page_range(mm, start_vaddr, end, &pagemap_ops, &pm);
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 bypass_orig_flow:
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		mmap_read_unlock(mm);
 		start_vaddr = end;
 

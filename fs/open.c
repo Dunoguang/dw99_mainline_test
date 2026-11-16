@@ -21,6 +21,9 @@
 #include <linux/fcntl.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
 #include <linux/fs.h>
 #include <linux/personality.h>
 #include <linux/pagemap.h>
@@ -33,9 +36,6 @@
 #include <linux/compat.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/filelock.h>
-#ifdef CONFIG_KSU_SUSFS
-#include <linux/susfs_def.h>
-#endif
 
 #include "internal.h"
 
@@ -462,12 +462,12 @@ static const struct cred *access_override_creds(void)
 	override_cred->non_rcu = 1;
 	return override_creds(override_cred);
 }
+
 #ifdef CONFIG_KSU_SUSFS
 extern struct static_key_true ksu_su_compat_enabled;
 extern bool __ksu_is_allow_uid_for_current(uid_t uid);
-extern int ksu_handle_faccessat(int *dfd, const char __user **filename, int *mode, int *__unused_flags);
+extern int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);
 #endif
-
 
 static int do_faccessat(int dfd, const char __user *filename, int mode, int flags)
 {
@@ -476,6 +476,9 @@ static int do_faccessat(int dfd, const char __user *filename, int mode, int flag
 	int res;
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
 	const struct cred *old_cred = NULL;
+#ifdef CONFIG_KSU_SUSFS
+	struct filename *fname = NULL;
+#endif
 
 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
 		return -EINVAL;
@@ -495,16 +498,11 @@ static int do_faccessat(int dfd, const char __user *filename, int mode, int flag
 	CLASS(filename_uflags, name)(filename, flags);
 retry:
 #ifdef CONFIG_KSU_SUSFS
-	if (likely(susfs_is_current_proc_no_su()))
-		goto orig_flow;
-
-	if (static_branch_likely(&ksu_su_compat_enabled)) {
+	if (!susfs_is_current_proc_no_su() && static_branch_likely(&ksu_su_compat_enabled)) {
 		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
-			ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+			ksu_handle_faccessat(&dfd, &name, &mode, NULL);
 	}
-
-orig_flow:
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS
 	res = filename_lookup(dfd, name, lookup_flags, &path, NULL);
 	if (res)
 		goto out;

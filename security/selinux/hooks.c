@@ -110,18 +110,12 @@
 #include "ima.h"
 
 #define SELINUX_INODE_INIT_XATTRS 1
+
+struct selinux_state selinux_state;
 #ifdef CONFIG_KSU_SUSFS
 extern bool ksu_selinux_hide_running __read_mostly;
 extern int susfs_security_context_to_sid(const char *scontext, u32 scontext_len, u32 *sid, gfp_t gfp);
 extern int susfs_security_context_to_sid_force(const char *scontext, u32 scontext_len, u32 *sid);
-#endif // #ifdef CONFIG_KSU_SUSFS
-
-struct selinux_state selinux_state;
-#ifdef CONFIG_KSU_SUSFS
-extern struct selinux_policy *backup_sepolicy;
-extern bool ksu_selinux_hide_running __read_mostly;
-extern int security_context_to_sid_with_policy(struct selinux_policy *policy, const char *scontext, u32 scontext_len,
-                                               u32 *sid, u32 def_sid, gfp_t gfp_flags);
 #endif // #ifdef CONFIG_KSU_SUSFS
 
 /* SECMARK reference count */
@@ -7228,41 +7222,6 @@ static int selinux_setprocattr(const char *name, void *value, size_t size)
 }
 
 #ifdef CONFIG_KSU_SUSFS
-static int __maybe_unused my_setprocattr(const char *name, void *value, size_t size)
-{
-	u32 mysid = current_sid(), sid = 0;
-	int error;
-	char *str = value;
-
-	// apply to all app uids
-	if (likely(current_uid().val < 10000 ||
-				!ksu_selinux_hide_running ||
-				strcmp(name, "current")))
-		return selinux_setprocattr(name, value, size);
-
-	error = avc_has_perm(mysid, mysid, SECCLASS_PROCESS,
-				     PROCESS__SETCURRENT, NULL);
-
-	if (error)
-		return error;
-
-	/* Obtain a SID for the context, if one was specified. */
-	if (size && str[0] && str[0] != '\n') {
-		if (str[size-1] == '\n') {
-			str[size-1] = 0;
-			size--;
-		}
-
-		error = security_context_to_sid_with_policy(backup_sepolicy, str, size, &sid, SECSID_NULL, GFP_KERNEL);
-		if (error)
-			return error;
-	}
-
-	return selinux_setprocattr(name, value, size);
-}
-#endif // #ifdef CONFIG_KSU_SUSFS
-
-#ifdef CONFIG_KSU_SUSFS
 static int susfs_selinux_lsm_setattr(u64 attr, void *value, size_t size)
 {
 	struct cred_security_struct *crsec;
@@ -8170,7 +8129,6 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 #else
 	LSM_HOOK_INIT(setprocattr, selinux_setprocattr),
 #endif // #ifdef CONFIG_KSU_SUSFS
-
 	LSM_HOOK_INIT(ismaclabel, selinux_ismaclabel),
 	LSM_HOOK_INIT(secctx_to_secid, selinux_secctx_to_secid),
 	LSM_HOOK_INIT(release_secctx, selinux_release_secctx),

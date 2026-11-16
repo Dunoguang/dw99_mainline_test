@@ -91,6 +91,7 @@ struct mount {
 	union {
 		struct hlist_node mnt_mp_list;	/* list mounts with the same mountpoint */
 		struct hlist_node mnt_umount;	/* on the unmounted list */
+		struct hlist_head mnt_stuck_children;
 	};
 #ifdef CONFIG_FSNOTIFY
 	struct fsnotify_mark_connector __rcu *mnt_fsnotify_marks;
@@ -104,7 +105,6 @@ struct mount {
 	int mnt_group_id;		/* peer group identifier */
 	int mnt_expiry_mark;		/* true if marked for expiry */
 	struct hlist_head mnt_pins;
-	struct hlist_head mnt_stuck_children;
 	struct mnt_cover *mnt_cover;	/* the one it may leave behind */
 	struct hlist_head mnt_covers;	/* left behind by its unmounted children */
 	struct hlist_node mnt_ns_visible; /* link in ns->mnt_visible_mounts */

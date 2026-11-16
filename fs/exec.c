@@ -71,8 +71,11 @@
 #include <linux/rseq.h>
 #include <linux/ksm.h>
 #ifdef CONFIG_KSU_SUSFS
-#include <linux/susfs_def.h>
+#define KSU_NO_PREINIT
 #endif
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1903,12 +1906,35 @@ out:
 #ifdef CONFIG_KSU_SUSFS
 extern struct static_key_true ksu_su_compat_enabled;
 extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
-extern bool __ksu_is_allow_uid_for_current(uid_t uid);
 extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 			void *envp, int *flags);
 extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
 				void *envp, int *flags);
-#endif
+extern int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
+				void *envp, int *flags, int *retval);
+#ifndef KSU_NO_PREINIT
+extern int ksu_setup_preinit_file(struct filename **filename_ptr, struct user_arg_ptr *argv_user);
+extern int ksu_preinit_handle_post_execveat(int *fd, struct filename **filename_ptr,
+				void *argv_user, void *envp_user,
+				int *flags, int *retval, int *preinit_fd);
+#endif // #ifndef KSU_NO_PREINIT
+#endif // #ifdef CONFIG_KSU_SUSFS
+
+#ifdef CONFIG_KSU_SUSFS
+extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
+			       void *argv, void *envp, int *flags);
+extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+					void *argv, void *envp, int *flags);
+extern int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
+					     void *argv, void *envp, int *flags, int *retval);
+#ifndef KSU_NO_PREINIT
+extern int ksu_setup_preinit_file(struct filename **filename_ptr, struct user_arg_ptr *argv_user);
+extern int ksu_preinit_handle_post_execveat(int *fd, struct filename **filename_ptr,
+					    void *argv_user, void *envp_user, int *flags,
+					    int *retval, int *preinit_fd);
+#endif // #ifndef KSU_NO_PREINIT
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr argv,
@@ -1916,22 +1942,38 @@ static int do_execveat_common(int fd, struct filename *filename,
 			      int flags)
 {
 	int retval;
+#ifdef CONFIG_KSU_SUSFS
+	bool is_su_session = false;
+#ifndef KSU_NO_PREINIT
+	bool is_ksu_preinit_session = false;
+	int preinit_fd = 0;
+#endif // #ifndef KSU_NO_PREINIT
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 #ifdef CONFIG_KSU_SUSFS
 	if (likely(susfs_is_current_proc_no_su()))
 		goto orig_flow;
 
-#ifndef CONFIG_KSU_TRACEPOINT_HOOK
 	if (static_branch_likely(&ksu_su_compat_enabled)) {
-		if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted))
-			ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-		else
-			ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
+		if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted)) {
+			is_su_session = !ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
+		} else {
+			is_su_session = !ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
+		}
 	}
-#endif
+
+#ifndef KSU_NO_PREINIT
+	if (unlikely(current->pid == 1) && !is_su_session) {
+		if (fd == AT_FDCWD || !(flags & AT_EMPTY_PATH)) {
+			preinit_fd = ksu_setup_preinit_file(&filename, &argv);
+			if (preinit_fd > 0)
+				is_ksu_preinit_session = true;
+		}
+	}
+#endif // #ifndef KSU_NO_PREINIT
 
 orig_flow:
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 	/*
 	 * We move the actual failure in case of RLIMIT_NPROC excess from
@@ -1994,7 +2036,18 @@ orig_flow:
 			     current->comm, bprm->filename);
 	}
 
-	return bprm_execve(bprm);
+	retval = bprm_execve(bprm);
+#ifdef CONFIG_KSU_SUSFS
+	if (unlikely(is_su_session))
+		(void)ksu_handle_post_execveat_sucompat(&fd, &filename, &argv, &envp, &flags, &retval);
+
+#ifndef KSU_NO_PREINIT
+	if (unlikely(is_ksu_preinit_session))
+		(void)ksu_preinit_handle_post_execveat(&fd, &filename, &argv, &envp, &flags,
+						       &retval, &preinit_fd);
+#endif // #ifndef KSU_NO_PREINIT
+#endif // #ifdef CONFIG_KSU_SUSFS
+	return retval;
 }
 
 int kernel_execve(const char *kernel_filename,
