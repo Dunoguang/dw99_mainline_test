@@ -358,7 +358,7 @@ static struct mount *susfs_alloc_unshare_ksu_vfsmnt(const char *name, int old_mn
 		mnt->mnt_pcp = alloc_percpu(struct mnt_pcp);
 		if (!mnt->mnt_pcp)
 			goto out_free_devname;
-		this_cpu_add(mnt->mnt_pcp->mnt_count, 1);
+		this_cpu_inc(mnt->mnt_pcp->mnt_gets);
 #else
 		mnt->mnt_count = 1;
 		mnt->mnt_writers = 0;
@@ -406,7 +406,7 @@ static struct mount *susfs_alloc_non_unshare_ksu_vfsmnt(const char *name)
 		mnt->mnt_pcp = alloc_percpu(struct mnt_pcp);
 		if (!mnt->mnt_pcp)
 			goto out_free_devname;
-		this_cpu_add(mnt->mnt_pcp->mnt_count, 1);
+		this_cpu_inc(mnt->mnt_pcp->mnt_gets);
 #else
 		mnt->mnt_count = 1;
 		mnt->mnt_writers = 0;

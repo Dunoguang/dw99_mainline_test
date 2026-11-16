@@ -14,9 +14,6 @@
 #define _SPRD_JPG_H
 
 #include <linux/ioctl.h>
-#ifdef CONFIG_COMPAT
-#include <linux/compat.h>
-#endif
 
 #define SPRD_JPG_IOCTL_MAGIC 'm'
 #define JPG_CONFIG_FREQ _IOW(SPRD_JPG_IOCTL_MAGIC, 1, unsigned int)
@@ -32,17 +29,6 @@
 #define JPG_FREE_IOVA   _IOW(SPRD_JPG_IOCTL_MAGIC, 12, struct jpg_iommu_map_data)
 #define JPG_GET_IOMMU_STATUS _IO(SPRD_JPG_IOCTL_MAGIC, 13)
 #define JPG_VERSION _IO(SPRD_JPG_IOCTL_MAGIC, 14)
-
-#ifdef CONFIG_COMPAT
-#define COMPAT_JPG_GET_IOVA    _IOWR(SPRD_JPG_IOCTL_MAGIC, 11, struct compat_jpg_iommu_map_data)
-#define COMPAT_JPG_FREE_IOVA   _IOW(SPRD_JPG_IOCTL_MAGIC, 12, struct compat_jpg_iommu_map_data)
-
-struct compat_jpg_iommu_map_data {
-	compat_int_t fd;
-	compat_size_t size;
-	compat_ulong_t iova_addr;
-};
-#endif
 
 struct jpg_iommu_map_data {
 	int fd;

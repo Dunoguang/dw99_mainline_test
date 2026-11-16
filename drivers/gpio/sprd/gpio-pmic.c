@@ -485,8 +485,8 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 		}
 	}
 	memmove(&sgc->irq_chip, ic, sizeof(struct irq_chip));
-	irq_domain = irq_domain_add_linear(np, sgc->chip.ngpio,
-					   &irq_domain_pmic_ops, sgc);
+	irq_domain = irq_domain_create_linear(of_fwnode_handle(np), sgc->chip.ngpio,
+					     &irq_domain_pmic_ops, sgc);
 	if (!irq_domain) {
 		dev_err(&pdev->dev, "irq domain alloc failed!\n");
 		err = -ENOMEM;

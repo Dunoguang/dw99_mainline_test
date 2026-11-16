@@ -1,4 +1,7 @@
 #include <linux/cdev.h>
+#ifdef CONFIG_COMPAT
+#include "sprd_jpg_compat.h"
+#endif
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/debugfs.h>

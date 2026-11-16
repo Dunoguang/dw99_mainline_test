@@ -665,8 +665,8 @@ static int ap_gpio_probe(struct platform_device *pdev)
 
 	spin_lock_init(&sgc->gpio_lock);
 	memmove(&sgc->irq_chip, ic, sizeof(struct irq_chip));
-	irq_domain = irq_domain_add_linear(np, sgc->chip.ngpio,
-					   &irq_domain_ap_ops, sgc);
+	irq_domain = irq_domain_create_linear(dev_fwnode(dev), sgc->chip.ngpio,
+					     &irq_domain_ap_ops, sgc);
 	if (!irq_domain) {
 		dev_err(dev, "irq domain alloc failed!\n");
 		err = -ENOMEM;

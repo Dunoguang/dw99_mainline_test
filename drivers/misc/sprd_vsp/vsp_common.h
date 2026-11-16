@@ -3,6 +3,9 @@
 
 #include <linux/semaphore.h>
 #include <uapi/video/sprd_vsp.h>
+#ifdef CONFIG_COMPAT
+#include "sprd_vsp_compat.h"
+#endif
 
 extern struct regmap *gpr_aon_apb;
 extern struct regmap *gpr_mm_ahb;

@@ -39,16 +39,6 @@
 #define VSP_GET_SCENE                _IO(SPRD_VSP_IOCTL_MAGIC, 17)
 #define VSP_SYNC_GSP                _IO(SPRD_VSP_IOCTL_MAGIC, 18)
 
-#ifdef CONFIG_COMPAT
-#define COMPAT_VSP_GET_IOVA    _IOWR(SPRD_VSP_IOCTL_MAGIC, 11, struct compat_vsp_iommu_map_data)
-#define COMPAT_VSP_FREE_IOVA   _IOW(SPRD_VSP_IOCTL_MAGIC, 12, struct compat_vsp_iommu_map_data)
-
-struct compat_vsp_iommu_map_data {
-	compat_int_t fd;
-	compat_size_t size;
-	compat_ulong_t iova_addr;
-};
-#endif
 enum sprd_vsp_frequency_e {
 	VSP_FREQENCY_LEVEL_0 = 0,
 	VSP_FREQENCY_LEVEL_1 = 1,

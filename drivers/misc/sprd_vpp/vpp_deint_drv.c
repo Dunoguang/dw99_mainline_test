@@ -41,6 +41,21 @@
 #include <linux/compat.h>
 #include <uapi/video/vpp_deint_drv.h>
 
+/* 32-bit compat ABI for vsp_iommu_map_data; kept out of the uapi header so
+ * that installed headers never leak CONFIG_COMPAT to user space. */
+#ifdef CONFIG_COMPAT
+#include <linux/compat.h>
+#define COMPAT_VPP_GET_IOVA _IOWR(SPRD_VPP_IOCTL_MAGIC, 7, struct compat_vsp_iommu_map_data)
+#define COMPAT_VPP_FREE_IOVA _IOW(SPRD_VPP_IOCTL_MAGIC, 8, struct compat_vsp_iommu_map_data)
+
+struct compat_vsp_iommu_map_data {
+	compat_int_t fd;
+	compat_size_t size;
+	compat_ulong_t iova_addr;
+};
+#endif
+
+
 #ifndef VM_RESERVED
 #define  VM_RESERVED   (VM_DONTEXPAND | VM_DONTDUMP)
 #endif

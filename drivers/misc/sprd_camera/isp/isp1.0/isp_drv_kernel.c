@@ -53,6 +53,9 @@
 #endif
 
 #include <uapi/video/isp_drv_kernel.h>
+#ifdef CONFIG_COMPAT
+#include "isp_drv_kernel_compat.h"
+#endif
 
 #ifdef pr_fmt
 #undef pr_fmt

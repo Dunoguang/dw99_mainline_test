@@ -7,6 +7,8 @@ kernelsu-objs += feature/kernel_umount.o
 kernelsu-objs += feature/sulog.o
 kernelsu-objs += feature/adb_root.o
 kernelsu-objs += feature/selinux_hide.o
+kernelsu-objs += feature/shell_su_adb_only.o
+kernelsu-objs += feature/module_blacklist.o
 kernelsu-objs += hook/setuid_hook.o
 
 ifndef CONFIG_KSU_DISABLE_MANAGER
@@ -24,6 +26,8 @@ kernelsu-objs += infra/event_queue.o
 kernelsu-objs += runtime/boot_event.o
 kernelsu-objs += runtime/ksud_integration.o
 
+kernelsu-objs += infra/btf_parser.o
+kernelsu-objs += selinux/inode.o
 kernelsu-objs += selinux/selinux.o
 kernelsu-objs += selinux/sepolicy.o
 kernelsu-objs += selinux/rules.o
@@ -39,7 +43,7 @@ ifdef CONFIG_ARM64
 kernelsu-objs += compat/apatch_conflict.o
 endif
 
-ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes 
+ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-missing-prototypes
 ccflags-y += $(call cc-disable-warning, int-conversion)
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable -Wno-missing-braces
 ccflags-y += -Wno-int-to-pointer-cast -Wno-declaration-after-statement
@@ -48,9 +52,21 @@ ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
 ccflags-y += -I$(srctree)/$(src) -I$(srctree)/$(src)/include
 ccflags-y += -I$(src) -I$(src)/include
 
+ifdef CONFIG_KSU_SUSFS
+# The kernel side of SuSFS (security/selinux/{hooks,selinuxfs}.c) calls the
+# selinux_hide helpers, so they must be exported instead of file-static.
+ccflags-y += -DKSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE
+endif
+
+ifdef CONFIG_KSU_SUSFS
+# The kernel side of SuSFS (security/selinux/{hooks,selinuxfs}.c) calls the
+# selinux_hide helpers, so they must be exported instead of file-static.
+ccflags-y += -DKSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE
+endif
+
 obj-$(CONFIG_KSU) += kernelsu.o
 
-REPO_NAME := ReSukiSU
+REPO_NAME := BakaSU
 
 KDIR := $(KDIR)
 
@@ -58,21 +74,18 @@ GIT_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git
 
 KSU_SRC := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-# With a git submodule layout the KSU sources live at <repo>/kernel, so
-# $(KSU_SRC)/../.git is the repository root.  When vendored in-tree (e.g.
-# under drivers/kernelsu) there is no submodule .git; fall back to static
-# version info instead of aborting the build.
 LOCAL_GIT_EXISTS := $(shell test -e $(KSU_SRC)/../.git && echo 1 || echo 0)
 
 ifeq ($(LOCAL_GIT_EXISTS),0)
 $(info -- $(REPO_NAME) sources are vendored in-tree; using pinned version info)
-# Pinned to ReSukiSU/ReSukiSU @ 74668639 (2026-08-21, v4.2.0-rc1)
-KSU_LOCAL_VERSION := 4388
-KSU_VERSION := 35088
-KSU_TAG_NAME := v4.2.0-rc1
-KSU_COMMIT_SHA := 74668639
+# Pinned to Baka-SU/BakaSU @ 548d1dda (2026-11-10, after v4.2.0-rc3)
+KSU_LOCAL_VERSION := 4800
+KSU_VERSION := 35500
+KSU_TAG_NAME := v4.2.0-rc3
+KSU_COMMIT_SHA := 548d1dda
 KSU_BRANCH_NAME := main
 else
+
 ifdef KBUILD_EXTMOD
 include $(KSU_SRC)/tools/ddk_compatible.mk
 endif
@@ -104,7 +117,7 @@ ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 ccflags-y += -DKSU_VERSION_FULL=\"$(KSU_VERSION_FULL)\"
 
 ifdef CONFIG_KSU_MULTI_MANAGER_SUPPORT
-$(info -- Supported Unofficial Manager: MKSU, RKSU, KOWSU, SukiSU-Ultra, ReSukiSU )
+$(info -- Supported Managers: KernelSU Official, KOWSU, BakaSU )
 endif
 
 KERNEL_VERSION := $(VERSION).$(PATCHLEVEL)
@@ -118,6 +131,10 @@ endif
 else
 KERNEL_TYPE := GKI 2.0
 endif
+
+ifneq ($(shell test $(VERSION) -ge 4; echo $$?),0)
+KERNEL_TYPE := Non-GKI (Legacy)
+endif
 $(info -- KERNEL_VERSION: $(KERNEL_VERSION))
 $(info -- KERNEL_TYPE: $(KERNEL_TYPE))
 
@@ -127,6 +144,8 @@ else ifeq ($(CONFIG_X86_64),y)
   kernelsu-objs += hook/x86_64/patch_memory.o
 else ifeq ($(CONFIG_ARM),y)
   kernelsu-objs += hook/arm32/patch_memory.o
+else ifeq ($(CONFIG_RISCV),y)
+  kernelsu-objs += hook/riscv64/patch_memory.o
 else
   ifeq ($(CONFIG_KSU),y)
     $(info -- Unsupported arch)
@@ -160,6 +179,8 @@ ifdef CONFIG_KSU_TRACEPOINT_HOOK
     kernelsu-objs += hook/arm64/syscall_hook.o
   else ifeq ($(CONFIG_X86_64),y)
     kernelsu-objs += hook/x86_64/syscall_hook.o
+  else ifeq ($(CONFIG_RISCV),y)
+    kernelsu-objs += hook/riscv64/syscall_hook.o
   else
     ifeq ($(CONFIG_KSU), y)
       $(info -- Unsupported arch)
@@ -173,14 +194,12 @@ ifdef CONFIG_KSU_TRACEPOINT_HOOK
       $(info -- Current Kernel Type: $(KERNEL_TYPE))
       $(info -- If you really want to continue, go to Kbuild and comment out this warning.)
       $(info -- Usually, this error occurs because you forgot to enable some kernel configurations.)
-      $(info -- Read: https://resukisu.github.io/guide/manual-integrate.html)
+      $(info -- Read: https://bakasu.org/guide/manual-integrate.html)
       $(error TP hooks are incompatible with Non-GKI/GKI 1.0 kernels.)
     endif
   endif
 
   # DW99 port: SUSFS is combined with the tracepoint hook (both enabled).
-  # Keep the selinux_hide compat macros so ksu_selinux_hide_* / fake_status
-  # stay global symbols referenced by security/selinux/selinuxfs.c.
   include $(KSU_SRC)/tools/susfs_compat.mk
 
 else ifdef CONFIG_KSU_MANUAL_HOOK
@@ -207,7 +226,7 @@ endif
 
 ifndef CONFIG_KSU_TRACEPOINT_HOOK
   # For old kernel, pkg observer maybe let system freeze
-  # https://github.com/ReSukiSU/ReSukiSU/issues/82#issuecomment-4015396974
+  # https://github.com/Baka-SU/BakaSU/issues/82#issuecomment-4015396974
   #
   # 6.7- we use lsm_hooks to call ksu_handle_rename
   # 6.8+ we use pkg_observer to track_throne
@@ -221,6 +240,9 @@ ifndef CONFIG_KSU_TRACEPOINT_HOOK
 endif
 
 include $(KSU_SRC)/tools/kernel_compat.mk
+ifneq ($(CONFIG_KSU),)
+include $(KSU_SRC)/tools/code_generation/code_generation.mk
+endif
 
 # Custom Signs
 ifdef KSU_EXPECTED_SIZE

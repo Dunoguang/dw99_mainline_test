@@ -34,17 +34,6 @@
 #define SPRD_VPP_FREE_IOVA _IOW(SPRD_VPP_IOCTL_MAGIC, 8, struct vsp_iommu_map_data)
 #define SPRD_VPP_GET_IOMMU_STATUS         _IO(SPRD_VPP_IOCTL_MAGIC, 9)
 
-#ifdef CONFIG_COMPAT
-#define COMPAT_VPP_GET_IOVA _IOWR(SPRD_VPP_IOCTL_MAGIC, 7, struct compat_vsp_iommu_map_data)
-#define COMPAT_VPP_FREE_IOVA _IOW(SPRD_VPP_IOCTL_MAGIC, 8, struct compat_vsp_iommu_map_data)
-
-struct compat_vsp_iommu_map_data {
-	compat_int_t fd;
-	compat_size_t size;
-	compat_ulong_t iova_addr;
-};
-#endif
-
 struct vsp_iommu_map_data {
 	int fd;
 	size_t size;
