@@ -1426,6 +1426,13 @@ mtxq_to_txq(struct mt76_txq *mtxq)
 	return container_of(ptr, struct ieee80211_txq, drv_priv);
 }
 
+/* peer-wide state uses the wcid of the primary link */
+static inline struct mt76_wcid *
+mt76_wcid_primary(struct mt76_wcid *wcid)
+{
+	return wcid->def_wcid ? wcid->def_wcid : wcid;
+}
+
 static inline struct ieee80211_sta *
 wcid_to_sta(struct mt76_wcid *wcid)
 {
@@ -1548,6 +1555,8 @@ void mt76_sta_ps_transition(struct mt76_dev *dev, struct mt76_wcid *wcid,
 bool mt76_has_tx_pending(struct mt76_phy *phy);
 int mt76_update_channel(struct mt76_phy *phy);
 void mt76_update_survey(struct mt76_phy *phy);
+void mt76_phy_chandef_set(struct mt76_phy *phy,
+			  struct cfg80211_chan_def *chandef);
 void mt76_update_survey_active_time(struct mt76_phy *phy, ktime_t time);
 int mt76_get_survey(struct ieee80211_hw *hw, int idx,
 		    struct survey_info *survey);

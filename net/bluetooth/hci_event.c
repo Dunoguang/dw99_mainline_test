@@ -5763,10 +5763,11 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 	hci_dev_lock(hdev);
 	hci_store_wake_reason(hdev, bdaddr, bdaddr_type);
 
-	/* All controllers implicitly stop advertising in the event of a
-	 * connection, so ensure that the state bit is cleared.
+	/* Advertising stops when a connection is created. On a failed
+	 * connection it keeps running, so leave the state bit alone.
 	 */
-	hci_dev_clear_flag(hdev, HCI_LE_ADV);
+	if (!status)
+		hci_dev_clear_flag(hdev, HCI_LE_ADV);
 
 	/* Check for existing connection:
 	 *
@@ -6310,6 +6311,15 @@ static void process_adv_report(struct hci_dev *hdev, u8 type, bdaddr_t *bdaddr,
 	if (irk) {
 		bdaddr = &irk->bdaddr;
 		bdaddr_type = irk->addr_type;
+	} else {
+		/* The peer is on air with its identity address, so whatever
+		 * RPA is cached for it has been abandoned. Drop it, or
+		 * hci_connect_le() would swap it back in and dial an address
+		 * the peer no longer answers.
+		 */
+		irk = hci_find_irk_by_addr(hdev, bdaddr, bdaddr_type);
+		if (irk)
+			bacpy(&irk->rpa, BDADDR_ANY);
 	}
 
 	bdaddr_type = ev_bdaddr_type(hdev, bdaddr_type, &bdaddr_resolved);

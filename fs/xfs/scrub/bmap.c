@@ -274,7 +274,7 @@ xchk_bmap_xref_rmap_cow(
 	unsigned long long	rmap_end;
 	uint64_t		owner = XFS_RMAP_OWN_COW;
 
-	if (!info->sc->sa.rmap_cur || xchk_skip_xref(info->sc->sm))
+	if (xchk_skip_xref(info->sc->sm))
 		return;
 
 	/* Find the rmap record for this irec. */
@@ -626,6 +626,10 @@ xchk_bmap_check_rmap(
 	struct xfs_ifork		*ifp;
 	struct xfs_scrub		*sc = sbcri->sc;
 	bool				have_map;
+	int				error = 0;
+
+	if (xchk_should_terminate(sc, &error))
+		return error;
 
 	/* Is this even the right fork? */
 	if (rec->rm_owner != I_INO(sc->ip))
@@ -657,6 +661,9 @@ xchk_bmap_check_rmap(
 	 */
 	check_rec = *rec;
 	while (have_map) {
+		if (xchk_should_terminate(sc, &error))
+			return error;
+
 		if (irec.br_startoff != check_rec.rm_offset)
 			xchk_fblock_set_corrupt(sc, sbcri->whichfork,
 					check_rec.rm_offset);
@@ -1103,8 +1110,9 @@ xchk_bmap(
 	 * the rmap must match the combined mapping exactly.
 	 */
 	while (xchk_bmap_iext_iter(&info, &irec)) {
-		if (xchk_should_terminate(sc, &error) ||
-		    (sc->sm->sm_flags & XFS_SCRUB_OFLAG_CORRUPT))
+		if (xchk_should_terminate(sc, &error))
+			return error;
+		if (sc->sm->sm_flags & XFS_SCRUB_OFLAG_CORRUPT)
 			return 0;
 
 		if (irec.br_startoff >= endoff) {

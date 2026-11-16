@@ -49,11 +49,35 @@ asm (
 "	.popsection				;"
 );
 
-void bpf_jit_build_fentry_stubs(u32 *image, struct codegen_context *ctx)
+void bpf_jit_build_fentry_stubs(u32 *image, u32 *fimage, struct codegen_context *ctx)
 {
 	int ool_stub_idx, long_branch_stub_idx;
+	int ool_stub_sz;
 
 	/*
+	 * Align the mis-aligned dummy_tramp_addr field in the fimage.
+	 * The alignment NOP must appear before OOL stub, to make
+	 * ool_stub_idx & long_branch_stub_idx constant from end.
+	 *
+	 * The fimage can be non 8-byte aligned, so final alignment depends
+	 * on start of fimage and the stub's instruction count offset. The
+	 * OOL stub size is 4 instructions (with CONFIG_PPC_FTRACE_OUT_OF_LINE)
+	 * or 3 instructions (without) before dummy_tramp_addr.
+	 *
+	 * Emit a NOP here if address is not SZL aligned.
+	 *
+	 * In pass=0 when image==NULL, conservatively account for space
+	 * required to accommodate alignment NOP. In case final pass skips
+	 * emitting alignment NOP, the image buffer have 4 spare bytes and
+	 * jited_len signifies correct program size.
+	 */
+
+	ool_stub_sz = IS_ENABLED(CONFIG_PPC_FTRACE_OUT_OF_LINE) ? 16 : 12;
+	if (!image || !IS_ALIGNED((unsigned long)fimage + ctx->idx*4 + ool_stub_sz, SZL))
+		EMIT(PPC_RAW_NOP());
+
+	/*
+	 *	nop     // optional, for alignment of dummy_tramp_addr
 	 * Out-of-line stub:
 	 *	mflr	r0
 	 *	[b|bl]	tramp
@@ -70,7 +94,7 @@ void bpf_jit_build_fentry_stubs(u32 *image, struct codegen_context *ctx)
 
 	/*
 	 * Long branch stub:
-	 *	.long	<dummy_tramp_addr>
+	 *	.long	<dummy_tramp_addr>  // 8-byte aligned
 	 *	mflr	r11
 	 *	bcl	20,31,$+4
 	 *	mflr	r12
@@ -81,6 +105,7 @@ void bpf_jit_build_fentry_stubs(u32 *image, struct codegen_context *ctx)
 	 */
 	if (image)
 		*((unsigned long *)&image[ctx->idx]) = (unsigned long)dummy_tramp;
+
 	ctx->idx += SZL / 4;
 	long_branch_stub_idx = ctx->idx;
 	EMIT(PPC_RAW_MFLR(_R11));
@@ -97,17 +122,17 @@ void bpf_jit_build_fentry_stubs(u32 *image, struct codegen_context *ctx)
 	}
 }
 
-int bpf_jit_emit_exit_insn(u32 *image, struct codegen_context *ctx, int tmp_reg, long exit_addr)
+int bpf_jit_emit_exit_insn(u32 *image, u32 *fimage, struct codegen_context *ctx,
+							int tmp_reg, long exit_addr)
 {
-	if (!exit_addr || is_offset_in_branch_range(exit_addr - (ctx->idx * 4))) {
+	if (exit_addr && is_offset_in_branch_range(exit_addr - (long)(ctx->idx * 4))) {
 		PPC_JMP(exit_addr);
-	} else if (ctx->alt_exit_addr) {
-		if (WARN_ON(!is_offset_in_branch_range((long)ctx->alt_exit_addr - (ctx->idx * 4))))
-			return -1;
+	} else if (ctx->alt_exit_addr && is_offset_in_branch_range(
+			(long)(ctx->alt_exit_addr) - (long)(ctx->idx * 4))) {
 		PPC_JMP(ctx->alt_exit_addr);
 	} else {
 		ctx->alt_exit_addr = ctx->idx * 4;
-		bpf_jit_build_epilogue(image, ctx);
+		bpf_jit_build_epilogue(image, fimage, ctx);
 	}
 
 	return 0;
@@ -274,6 +299,7 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_verifier_env *env, struct bpf_pr
 	 */
 	if (cgctx.seen & SEEN_TAILCALL || !is_offset_in_branch_range((long)cgctx.idx * 4)) {
 		cgctx.idx = 0;
+		cgctx.alt_exit_addr = 0;
 		if (bpf_jit_build_body(fp, NULL, NULL, &cgctx, addrs, 0, false))
 			goto out_err;
 	}
@@ -286,7 +312,7 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_verifier_env *env, struct bpf_pr
 	 */
 	bpf_jit_build_prologue(NULL, &cgctx);
 	addrs[fp->len] = cgctx.idx * 4;
-	bpf_jit_build_epilogue(NULL, &cgctx);
+	bpf_jit_build_epilogue(NULL, NULL, &cgctx);
 
 	fixup_len = fp->aux->num_exentries * BPF_FIXUP_LEN * 4;
 	extable_len = fp->aux->num_exentries * sizeof(struct exception_table_entry);
@@ -306,10 +332,13 @@ skip_init_ctx:
 	code_base = (u32 *)(image + FUNCTION_DESCR_SIZE);
 	fcode_base = (u32 *)(fimage + FUNCTION_DESCR_SIZE);
 
-	/* Code generation passes 1-2 */
-	for (pass = 1; pass < 3; pass++) {
+	/* Code generation passes 1-2+, loop until program size converges. */
+	for (pass = 1; pass <= CODEGEN_MAX_PASSES; pass++) {
+		u32 prev_proglen = proglen;
+
 		/* Now build the prologue, body code & epilogue for real. */
 		cgctx.idx = 0;
+		cgctx.exentry_idx = 0;
 		cgctx.alt_exit_addr = 0;
 		bpf_jit_build_prologue(code_base, &cgctx);
 		if (bpf_jit_build_body(fp, code_base, fcode_base, &cgctx, addrs, pass,
@@ -318,11 +347,26 @@ skip_init_ctx:
 			bpf_jit_binary_pack_free(fhdr, hdr);
 			goto out_err;
 		}
-		bpf_jit_build_epilogue(code_base, &cgctx);
+		addrs[fp->len] = cgctx.idx * 4;
+		bpf_jit_build_epilogue(code_base, fcode_base, &cgctx);
+
+		proglen = cgctx.idx * 4;
 
 		if (bpf_jit_enable > 1)
 			pr_info("Pass %d: shrink = %d, seen = 0x%x\n", pass,
-				proglen - (cgctx.idx * 4), cgctx.seen);
+				prev_proglen - proglen, cgctx.seen);
+
+		/* Check if program size has converged, but ensure minimum passes */
+		if (pass >= CODEGEN_MIN_PASSES && proglen == prev_proglen)
+			break;
+
+		if (pass == CODEGEN_MAX_PASSES && proglen != prev_proglen) {
+			pr_err("BPF JIT: Program did not converge after %d passes\n",
+								CODEGEN_MAX_PASSES);
+			bpf_arch_text_copy(&fhdr->size, &hdr->size, sizeof(hdr->size));
+			bpf_jit_binary_pack_free(fhdr, hdr);
+			goto out_err;
+		}
 	}
 
 	if (bpf_jit_enable > 1)
@@ -357,7 +401,7 @@ skip_init_ctx:
 				(void *)fimage + FUNCTION_DESCR_SIZE);
 
 out_addrs:
-		if (!image && priv_stack_ptr) {
+		if (!fp->jited && priv_stack_ptr) {
 			fp->aux->priv_stack_ptr = NULL;
 			free_percpu(priv_stack_ptr);
 		}
@@ -399,7 +443,7 @@ int bpf_add_extable_entry(struct bpf_prog *fp, u32 *image, u32 *fimage, int pass
 	u32 *fixup;
 
 	/* Populate extable entries only in the last pass */
-	if (pass != 2)
+	if (pass < CODEGEN_MIN_PASSES)
 		return 0;
 
 	if (!fp->aux->extable ||
@@ -602,13 +646,17 @@ int arch_protect_bpf_trampoline(void *image, unsigned int size)
 }
 
 static int invoke_bpf_prog(u32 *image, u32 *ro_image, struct codegen_context *ctx,
-			   struct bpf_tramp_node *n, int regs_off, int retval_off,
-			   int run_ctx_off, bool save_ret)
+			   struct bpf_tramp_image *im, struct bpf_tramp_node *n,
+			   int regs_off, int retval_off, int run_ctx_off, bool save_ret)
 {
 	struct bpf_prog *p = n->link->prog;
 	ppc_inst_t branch_insn;
-	u32 jmp_idx;
+	u32 jmp_idx, skip_idx;
 	int ret = 0;
+
+	/* nop, patched to skip this prog when it is detached */
+	skip_idx = ctx->idx;
+	EMIT(PPC_RAW_NOP());
 
 	/* Save cookie */
 	if (IS_ENABLED(CONFIG_PPC64)) {
@@ -679,13 +727,17 @@ static int invoke_bpf_prog(u32 *image, u32 *ro_image, struct codegen_context *ct
 	EMIT(PPC_RAW_ADDI(_R5, _R1, run_ctx_off));
 	ret = bpf_jit_emit_func_call_rel(image, ro_image, ctx,
 					 (unsigned long)bpf_trampoline_exit(p));
+	if (ret)
+		return ret;
 
-	return ret;
+	if (ro_image) /* image is NULL for dummy pass */
+		bpf_tramp_image_add_skip(im, p, &ro_image[skip_idx], &ro_image[ctx->idx]);
+	return 0;
 }
 
 static int invoke_bpf_mod_ret(u32 *image, u32 *ro_image, struct codegen_context *ctx,
-			      struct bpf_tramp_nodes *tn, int regs_off, int retval_off,
-			      int run_ctx_off, u32 *branches)
+			      struct bpf_tramp_image *im, struct bpf_tramp_nodes *tn,
+			      int regs_off, int retval_off, int run_ctx_off, u32 *branches)
 {
 	int i;
 
@@ -696,8 +748,8 @@ static int invoke_bpf_mod_ret(u32 *image, u32 *ro_image, struct codegen_context 
 	EMIT(PPC_RAW_LI(_R3, 0));
 	EMIT(PPC_RAW_STL(_R3, _R1, retval_off));
 	for (i = 0; i < tn->nr_nodes; i++) {
-		if (invoke_bpf_prog(image, ro_image, ctx, tn->nodes[i], regs_off, retval_off,
-				    run_ctx_off, true))
+		if (invoke_bpf_prog(image, ro_image, ctx, im, tn->nodes[i], regs_off,
+				    retval_off, run_ctx_off, true))
 			return -EINVAL;
 
 		/*
@@ -1043,8 +1095,8 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im, void *rw_im
 			cookie_ctx_off--;
 		}
 
-		if (invoke_bpf_prog(image, ro_image, ctx, fentry->nodes[i], regs_off, retval_off,
-				    run_ctx_off, flags & BPF_TRAMP_F_RET_FENTRY_RET))
+		if (invoke_bpf_prog(image, ro_image, ctx, im, fentry->nodes[i], regs_off,
+				    retval_off, run_ctx_off, flags & BPF_TRAMP_F_RET_FENTRY_RET))
 			return -EINVAL;
 	}
 
@@ -1053,7 +1105,7 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im, void *rw_im
 		if (!branches)
 			return -ENOMEM;
 
-		if (invoke_bpf_mod_ret(image, ro_image, ctx, fmod_ret, regs_off, retval_off,
+		if (invoke_bpf_mod_ret(image, ro_image, ctx, im, fmod_ret, regs_off, retval_off,
 				       run_ctx_off, branches)) {
 			ret = -EINVAL;
 			goto cleanup;
@@ -1090,11 +1142,6 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im, void *rw_im
 		/* Restore updated tail_call_cnt */
 		if (flags & BPF_TRAMP_F_TAIL_CALL_CTX)
 			bpf_trampoline_restore_tail_call_cnt(image, ctx, bpf_frame_size, r4_off);
-
-		/* Reserve space to patch branch instruction to skip fexit progs */
-		if (ro_image) /* image is NULL for dummy pass */
-			im->ip_after_call = &((u32 *)ro_image)[ctx->idx];
-		EMIT(PPC_RAW_NOP());
 	}
 
 	/* Update branches saved in invoke_bpf_mod_ret with address of do_fexit */
@@ -1123,16 +1170,14 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im, void *rw_im
 			cookie_ctx_off--;
 		}
 
-		if (invoke_bpf_prog(image, ro_image, ctx, fexit->nodes[i], regs_off, retval_off,
-				    run_ctx_off, false)) {
+		if (invoke_bpf_prog(image, ro_image, ctx, im, fexit->nodes[i], regs_off,
+				    retval_off, run_ctx_off, false)) {
 			ret = -EINVAL;
 			goto cleanup;
 		}
 	}
 
 	if (flags & BPF_TRAMP_F_CALL_ORIG) {
-		if (ro_image) /* image is NULL for dummy pass */
-			im->ip_epilogue = &((u32 *)ro_image)[ctx->idx];
 		PPC_LI_ADDR(_R3, im);
 		ret = bpf_jit_emit_func_call_rel(image, ro_image, ctx,
 						 (unsigned long)__bpf_tramp_exit);
@@ -1192,7 +1237,7 @@ cleanup:
 int arch_bpf_trampoline_size(const struct btf_func_model *m, u32 flags,
 			     struct bpf_tramp_nodes *tnodes, void *func_addr)
 {
-	struct bpf_tramp_image im;
+	struct bpf_tramp_image im = {};
 	int ret;
 
 	ret = __arch_prepare_bpf_trampoline(&im, NULL, NULL, NULL, m, flags, tnodes, func_addr);
@@ -1320,7 +1365,7 @@ int bpf_arch_text_poke(void *ip, enum bpf_text_poke_type old_t,
 
 	/*
 	 * If we are not poking at bpf prog entry, then we are simply patching in/out
-	 * an unconditional branch instruction at im->ip_after_call
+	 * an unconditional branch instruction in a trampoline image
 	 */
 	if (offset) {
 		if (old_t == BPF_MOD_CALL || new_t == BPF_MOD_CALL) {

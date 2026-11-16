@@ -21,6 +21,7 @@
 #include <linux/filter.h>
 #include <linux/init.h>
 #include <linux/bpf.h>
+#include <linux/cfi.h>
 #include <linux/mm.h>
 #include <linux/kernel.h>
 #include <asm/cacheflush.h>
@@ -356,6 +357,19 @@ static void emit6_pcrel_rilc(struct bpf_jit *jit, u32 op, u8 mask, s64 pcrel)
 	}							\
 })
 
+static inline void emit_u32_data(const u32 data, struct bpf_jit *jit)
+{
+	if (jit->prg_buf)
+		*(u32 *)(jit->prg_buf + jit->prg) = data;
+	jit->prg += 4;
+}
+
+static inline void emit_kcfi(u32 hash, struct bpf_jit *jit)
+{
+	if (IS_ENABLED(CONFIG_CFI))
+		emit_u32_data(hash, jit);
+}
+
 /*
  * Return whether this is the first pass. The first pass is special, since we
  * don't know any sizes yet, and thus must be conservative.
@@ -597,6 +611,8 @@ static void bpf_jit_prologue(struct bpf_jit *jit, struct bpf_prog *fp)
 {
 	BUILD_BUG_ON(sizeof(struct prog_frame) != STACK_FRAME_OVERHEAD);
 
+	emit_kcfi(bpf_is_subprog(fp) ? cfi_bpf_subprog_hash : cfi_bpf_hash, jit);
+
 	/* No-op for hotpatching */
 	/* brcl 0,prologue_plt */
 	EMIT6_PCREL_RILC(0xc0040000, 0, jit->prologue_plt);
@@ -616,7 +632,7 @@ static void bpf_jit_prologue(struct bpf_jit *jit, struct bpf_prog *fp)
 		bpf_skip(jit, 6);
 	}
 	/* Tail calls have to skip above initialization */
-	jit->tail_call_start = jit->prg;
+	jit->tail_call_start = jit->prg - cfi_get_offset();
 	if (fp->aux->exception_cb) {
 		/*
 		 * Switch stack, the new address is in the 2nd parameter.
@@ -2431,11 +2447,13 @@ skip_init_ctx:
 		jit_data->ctx = jit;
 		jit_data->pass = pass;
 	}
-	fp->bpf_func = (void *) jit.prg_buf;
+	fp->bpf_func = (void *)jit.prg_buf + cfi_get_offset();
 	fp->jited = 1;
-	fp->jited_len = jit.size;
+	fp->jited_len = jit.size - cfi_get_offset();
 
 	if (!fp->is_func || extra_pass) {
+		for (int i = 0; i < fp->len; i++)
+			jit.addrs[i] -= cfi_get_offset();
 		bpf_prog_fill_jited_linfo(fp, jit.addrs + 1);
 free_addrs:
 		kvfree(jit.addrs);
@@ -2548,6 +2566,8 @@ struct bpf_tramp_jit {
 	int r14_off;		/* Offset of saved %r14, has to be at the
 				 * bottom */
 	int do_fexit;		/* do_fexit: label */
+	int skip[BPF_MAX_TRAMP_LINKS];	/* skip: labels after each prog */
+	int nr_progs;
 };
 
 static void load_imm64(struct bpf_jit *jit, int dst_reg, u64 val)
@@ -2566,6 +2586,7 @@ static void emit_store_stack_imm64(struct bpf_jit *jit, int tmp_reg, int stack_o
 }
 
 static int invoke_bpf_prog(struct bpf_tramp_jit *tjit,
+			   struct bpf_tramp_image *im,
 			   const struct btf_func_model *m,
 			   struct bpf_tramp_node *node, bool save_ret)
 {
@@ -2573,7 +2594,19 @@ static int invoke_bpf_prog(struct bpf_tramp_jit *tjit,
 	int cookie_off = tjit->run_ctx_off +
 			 offsetof(struct bpf_tramp_run_ctx, bpf_cookie);
 	struct bpf_prog *p = node->link->prog;
+	void *skip = jit->prg_buf + jit->prg;
+	int idx = tjit->nr_progs++;
 	int patch;
+
+	if (idx >= ARRAY_SIZE(tjit->skip))
+		return -E2BIG;
+
+	/*
+	 * nop, patched to skip this prog when it is detached
+	 */
+
+	/* brcl 0,skip */
+	EMIT6_PCREL_RILC(0xc0040000, 0, tjit->skip[idx]);
 
 	/*
 	 * run_ctx.cookie = node->cookie;
@@ -2634,10 +2667,15 @@ static int invoke_bpf_prog(struct bpf_tramp_jit *tjit,
 	/* brasl %r14,__bpf_prog_exit */
 	EMIT6_PCREL_RILB_PTR(0xc0050000, REG_14, bpf_trampoline_exit(p));
 
+	/* skip: */
+	tjit->skip[idx] = jit->prg;
+	bpf_tramp_image_add_skip(im, p, skip, jit->prg_buf + jit->prg);
+
 	return 0;
 }
 
 static int invoke_bpf(struct bpf_tramp_jit *tjit,
+		      struct bpf_tramp_image *im,
 		      const struct btf_func_model *m,
 		      struct bpf_tramp_nodes *tn, bool save_ret,
 		      u64 func_meta, int cookie_off)
@@ -2652,7 +2690,7 @@ static int invoke_bpf(struct bpf_tramp_jit *tjit,
 			emit_store_stack_imm64(jit, REG_0, tjit->func_meta_off, meta);
 			cur_cookie--;
 		}
-		if (invoke_bpf_prog(tjit, m, tn->nodes[i], save_ret))
+		if (invoke_bpf_prog(tjit, im, m, tn->nodes[i], save_ret))
 			return -EINVAL;
 	}
 
@@ -2694,6 +2732,11 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im,
 	u64 func_meta;
 	int i, j;
 
+	/* The skip labels are taken from the previous pass. */
+	tjit->nr_progs = 0;
+	if (im)
+		im->nr_skips = 0;
+
 	/* Support as many stack arguments as "mvc" instruction can handle. */
 	nr_reg_args = min_t(int, m->nr_args, MAX_NR_REG_ARGS);
 	nr_stack_args = m->nr_args - nr_reg_args;
@@ -2701,8 +2744,10 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im,
 		return -ENOTSUPP;
 
 	/* Return to %r14 in the struct_ops case. */
-	if (flags & BPF_TRAMP_F_INDIRECT)
+	if (flags & BPF_TRAMP_F_INDIRECT) {
 		flags |= BPF_TRAMP_F_SKIP_FRAME;
+		emit_kcfi(cfi_get_func_hash(func_addr), jit);
+	}
 
 	/*
 	 * Compute how many arguments we need to pass to BPF programs.
@@ -2855,7 +2900,7 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im,
 		emit_store_stack_imm64(jit, REG_0, tjit->retval_off, 0);
 	}
 
-	if (invoke_bpf(tjit, m, fentry, flags & BPF_TRAMP_F_RET_FENTRY_RET,
+	if (invoke_bpf(tjit, im, m, fentry, flags & BPF_TRAMP_F_RET_FENTRY_RET,
 		       func_meta, cookie_off))
 		return -EINVAL;
 
@@ -2869,7 +2914,7 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im,
 		       0xf000 | tjit->retval_off);
 
 		for (i = 0; i < fmod_ret->nr_nodes; i++) {
-			if (invoke_bpf_prog(tjit, m, fmod_ret->nodes[i], true))
+			if (invoke_bpf_prog(tjit, im, m, fmod_ret->nodes[i], true))
 				return -EINVAL;
 
 			/*
@@ -2923,15 +2968,6 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im,
 		/* mvc tccnt_off(%r15),tail_call_cnt(4,%r15) */
 		_EMIT6(0xd203f000 | tjit->tccnt_off,
 		       0xf000 | offsetof(struct prog_frame, tail_call_cnt));
-
-		im->ip_after_call = jit->prg_buf + jit->prg;
-
-		/*
-		 * The following nop will be patched by bpf_tramp_image_put().
-		 */
-
-		/* brcl 0,im->ip_epilogue */
-		EMIT6_PCREL_RILC(0xc0040000, 0, (u64)im->ip_epilogue);
 	}
 
 	/* Set the "is_return" flag for fsession. */
@@ -2942,12 +2978,10 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im,
 
 	/* do_fexit: */
 	tjit->do_fexit = jit->prg;
-	if (invoke_bpf(tjit, m, fexit, false, func_meta, cookie_off))
+	if (invoke_bpf(tjit, im, m, fexit, false, func_meta, cookie_off))
 		return -EINVAL;
 
 	if (flags & BPF_TRAMP_F_CALL_ORIG) {
-		im->ip_epilogue = jit->prg_buf + jit->prg;
-
 		/*
 		 * __bpf_tramp_exit(im);
 		 */
@@ -2996,7 +3030,7 @@ static int __arch_prepare_bpf_trampoline(struct bpf_tramp_image *im,
 int arch_bpf_trampoline_size(const struct btf_func_model *m, u32 flags,
 			     struct bpf_tramp_nodes *tnodes, void *orig_call)
 {
-	struct bpf_tramp_image im;
+	struct bpf_tramp_image im = {};
 	struct bpf_tramp_jit tjit;
 	int ret;
 

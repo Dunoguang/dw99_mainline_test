@@ -255,9 +255,12 @@ static void finish_netfs_read(struct ceph_osd_request *req)
 	}
 
 	if (osd_data->type == CEPH_OSD_DATA_TYPE_PAGES) {
-		ceph_put_page_vector(osd_data->pages,
-				     calc_pages_for(osd_data->alignment,
-					osd_data->length), false);
+		int num_pages = calc_pages_for(osd_data->alignment,
+					       osd_data->length);
+
+		for (int i = 0; i < num_pages; i++)
+			put_page(osd_data->pages[i]);
+		kvfree(osd_data->pages);
 	}
 	if (err > 0) {
 		ceph_subvolume_metrics_record_io(fsc->mdsc, ceph_inode(inode),
@@ -319,6 +322,12 @@ static bool ceph_netfs_issue_op_inline(struct netfs_io_subrequest *subreq)
 		return false;
 	}
 
+	if (subreq->start >= iinfo->inline_len) {
+		ceph_mdsc_put_request(req);
+		err = -ENODATA;
+		goto out;
+	}
+
 	len = min_t(size_t, iinfo->inline_len - subreq->start, subreq->len);
 	err = copy_to_iter(iinfo->inline_data + subreq->start, len, &subreq->io_iter);
 	if (err == 0) {
@@ -361,7 +370,7 @@ static void ceph_netfs_issue_read(struct netfs_io_subrequest *subreq)
 	struct ceph_client *cl = fsc->client;
 	struct ceph_osd_request *req = NULL;
 	struct ceph_vino vino = ceph_vino(inode);
-	int err;
+	int err = 0;
 	u64 len;
 	bool sparse = IS_ENCRYPTED(inode) || ceph_test_mount_opt(fsc, SPARSEREAD);
 	u64 off = subreq->start;
@@ -1426,6 +1435,16 @@ void ceph_shift_unused_folios_left(struct folio_batch *fbatch)
 	fbatch->nr = n;
 }
 
+static void ceph_undo_wrbuffer_claim(struct inode *inode, struct folio *folio)
+{
+	struct ceph_snap_context *snapc = folio_detach_private(folio);
+
+	if (!snapc)
+		return;
+	ceph_put_wrbuffer_cap_refs(ceph_inode(inode), 1, snapc);
+	ceph_put_snap_context(snapc);
+}
+
 static
 int ceph_submit_write(struct address_space *mapping,
 			struct writeback_control *wbc,
@@ -1489,6 +1508,7 @@ new_request:
 			if (!page)
 				continue;
 
+			ceph_undo_wrbuffer_claim(inode, page_folio(page));
 			redirty_page_for_writepage(wbc, page);
 			unlock_page(page);
 		}
@@ -1875,7 +1895,12 @@ static int ceph_netfs_check_write_begin(struct file *file, loff_t pos, unsigned 
 		r = wait_event_killable(ci->i_cap_wq,
 					context_is_writeable_or_written(inode, snapc));
 		ceph_put_snap_context(snapc);
-		return r == 0 ? -EAGAIN : r;
+		/*
+		 * *foliop is cleared, so a return of 0 makes
+		 * netfs_write_begin() grab the folio again and call us again
+		 * to recheck it. Any error (fatal signal) fails the write.
+		 */
+		return r;
 	}
 	return 0;
 }
@@ -2464,7 +2489,7 @@ static int __ceph_pool_perm_get(struct ceph_inode_info *ci,
 	}
 
 	rd_req = ceph_osdc_alloc_request(&fsc->client->osdc, NULL,
-					 1, false, GFP_NOFS);
+					 1, false, GFP_KERNEL);
 	if (!rd_req) {
 		err = -ENOMEM;
 		goto out_unlock;
@@ -2477,12 +2502,12 @@ static int __ceph_pool_perm_get(struct ceph_inode_info *ci,
 		rd_req->r_base_oloc.pool_ns = ceph_get_string(pool_ns);
 	ceph_oid_printf(&rd_req->r_base_oid, "%llx.00000000", ci->i_vino.ino);
 
-	err = ceph_osdc_alloc_messages(rd_req, GFP_NOFS);
+	err = ceph_osdc_alloc_messages(rd_req, GFP_KERNEL);
 	if (err)
 		goto out_unlock;
 
 	wr_req = ceph_osdc_alloc_request(&fsc->client->osdc, NULL,
-					 1, false, GFP_NOFS);
+					 1, false, GFP_KERNEL);
 	if (!wr_req) {
 		err = -ENOMEM;
 		goto out_unlock;
@@ -2493,7 +2518,7 @@ static int __ceph_pool_perm_get(struct ceph_inode_info *ci,
 	ceph_oloc_copy(&wr_req->r_base_oloc, &rd_req->r_base_oloc);
 	ceph_oid_copy(&wr_req->r_base_oid, &rd_req->r_base_oid);
 
-	err = ceph_osdc_alloc_messages(wr_req, GFP_NOFS);
+	err = ceph_osdc_alloc_messages(wr_req, GFP_KERNEL);
 	if (err)
 		goto out_unlock;
 
@@ -2532,7 +2557,7 @@ static int __ceph_pool_perm_get(struct ceph_inode_info *ci,
 	}
 
 	pool_ns_len = pool_ns ? pool_ns->len : 0;
-	perm = kmalloc_flex(*perm, pool_ns, pool_ns_len + 1, GFP_NOFS);
+	perm = kmalloc_flex(*perm, pool_ns, pool_ns_len + 1);
 	if (!perm) {
 		err = -ENOMEM;
 		goto out_unlock;

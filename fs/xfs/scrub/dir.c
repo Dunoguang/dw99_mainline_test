@@ -155,6 +155,8 @@ xchk_dir_parent_pointer(
 			&sd->pptr_args);
 	if (error == -ENOATTR)
 		xchk_fblock_xref_set_corrupt(sc, XFS_DATA_FORK, 0);
+	else
+		xchk_fblock_xref_process_error(sc, XFS_DATA_FORK, 0, &error);
 
 	return 0;
 }
@@ -492,7 +494,7 @@ xchk_directory_data_bestfree(
 		goto out;
 	xchk_buffer_recheck(sc, bp);
 
-	if (xfs_has_crc(sc->mp)) {
+	if (!is_block && xfs_has_crc(sc->mp)) {
 		struct xfs_dir3_data_hdr    *hdr3 = bp->b_addr;
 
 		if (hdr3->pad)

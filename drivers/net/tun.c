@@ -513,14 +513,18 @@ static u16 tun_select_queue(struct net_device *dev, struct sk_buff *skb,
 	return ret;
 }
 
-static inline bool tun_not_capable(struct tun_struct *tun)
+static inline bool tun_permitted(struct tun_struct *tun)
 {
 	const struct cred *cred = current_cred();
 	struct net *net = dev_net(tun->dev);
 
-	return ((uid_valid(tun->owner) && !uid_eq(cred->euid, tun->owner)) ||
-		(gid_valid(tun->group) && !in_egroup_p(tun->group))) &&
-		!ns_capable(net->user_ns, CAP_NET_ADMIN);
+	/* If both uid and gid are set, *both* must match */
+	if ((uid_valid(tun->owner) || gid_valid(tun->group)) &&
+	    (!uid_valid(tun->owner) || uid_eq(cred->euid, tun->owner)) &&
+	    (!gid_valid(tun->group) || in_egroup_p(tun->group)))
+		return true;
+
+	return ns_capable(net->user_ns, CAP_NET_ADMIN);
 }
 
 static void tun_set_real_num_queues(struct tun_struct *tun)
@@ -1897,12 +1901,7 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 		}
 	}
 
-	if (tun_vnet_hdr_tnl_to_skb(tun->flags, features, skb, &hdr)) {
-		atomic_long_inc(&tun->rx_frame_errors);
-		err = -EINVAL;
-		goto free_skb;
-	}
-
+	skb->dev = tun->dev;
 	switch (tun->flags & TUN_TYPE_MASK) {
 	case IFF_TUN:
 		if (tun->flags & IFF_NO_PI) {
@@ -1927,9 +1926,8 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 			}
 		}
 
-		skb_reset_mac_header(skb);
+		skb_reset_network_header(skb);
 		skb->protocol = pi.proto;
-		skb->dev = tun->dev;
 		break;
 	case IFF_TAP:
 		if (!pskb_may_pull(skb, ETH_HLEN)) {
@@ -1937,9 +1935,18 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 			drop_reason = SKB_DROP_REASON_HDR_TRUNC;
 			goto drop;
 		}
-		skb->protocol = eth_type_trans(skb, tun->dev);
+		skb_set_network_header(skb, ETH_HLEN);
 		break;
 	}
+
+	if (tun_vnet_hdr_tnl_to_skb(tun->flags, features, skb, &hdr)) {
+		atomic_long_inc(&tun->rx_frame_errors);
+		err = -EINVAL;
+		goto free_skb;
+	}
+
+	if ((tun->flags & TUN_TYPE_MASK) == IFF_TAP)
+		skb->protocol = eth_type_trans(skb, tun->dev);
 
 	/* copy skb_ubuf_info for callback when skb has no error */
 	if (zerocopy) {
@@ -2600,6 +2607,8 @@ build:
 
 	features = tun_vnet_hdr_guest_features(READ_ONCE(tun->vnet_hdr_sz));
 	tnl_hdr = (struct virtio_net_hdr_v1_hash_tunnel *)gso;
+	skb->dev = tun->dev;
+	skb_set_network_header(skb, ETH_HLEN);
 	if (tun_vnet_hdr_tnl_to_skb(tun->flags, features, skb, tnl_hdr)) {
 		atomic_long_inc(&tun->rx_frame_errors);
 		kfree_skb(skb);
@@ -2872,7 +2881,7 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 		    !!(tun->flags & IFF_MULTI_QUEUE))
 			return -EINVAL;
 
-		if (tun_not_capable(tun))
+		if (!tun_permitted(tun))
 			return -EPERM;
 		err = security_tun_dev_open(tun->security);
 		if (err < 0)

@@ -31,7 +31,7 @@
  *
  * NOTE: must be freed by kvfree (not kfree)
  */
-static struct table_header *unpack_table(char *blob, size_t bsize)
+static struct table_header *unpack_table(const char *blob, size_t bsize)
 {
 	struct table_header *table = ERR_PTR(-EPROTO);
 	struct table_header th;
@@ -151,7 +151,7 @@ out:
  *
  * Returns: %0 else error code on failure to verify
  */
-static int verify_dfa(struct aa_dfa *dfa)
+static int verify_dfa(const struct aa_dfa *dfa)
 {
 	size_t i, state_count, trans_count;
 	int error = -EPROTO;
@@ -312,11 +312,11 @@ static struct table_header *remap_data16_to_data32(struct table_header *old)
  *
  * Returns: an unpacked dfa ready for matching or ERR_PTR on failure
  */
-struct aa_dfa *aa_dfa_unpack(void *blob, size_t size, int flags)
+struct aa_dfa *aa_dfa_unpack(const void *blob, size_t size, int flags)
 {
 	int hsize;
 	int error = -ENOMEM;
-	char *data = blob;
+	const char *data = blob;
 	struct table_header *table = NULL;
 	struct aa_dfa *dfa = kzalloc_obj(struct aa_dfa);
 	if (!dfa)
@@ -397,7 +397,6 @@ struct aa_dfa *aa_dfa_unpack(void *blob, size_t size, int flags)
 		/* check for duplicate table entry */
 		if (dfa->tables[table->td_id])
 			goto fail;
-		dfa->tables[table->td_id] = table;
 		data += table_size(table->td_lolen, table->td_flags);
 		size -= table_size(table->td_lolen, table->td_flags);
 
@@ -414,9 +413,9 @@ struct aa_dfa *aa_dfa_unpack(void *blob, size_t size, int flags)
 				if (!table)
 					goto fail;
 			}
-			dfa->tables[table->td_id] = table;
 			break;
 		}
+		dfa->tables[table->td_id] = table;
 		table = NULL;
 	}
 	error = verify_table_headers(dfa->tables, flags);
@@ -467,7 +466,7 @@ do {							\
  *
  * Returns: final state reached after input is consumed
  */
-aa_state_t aa_dfa_match_len(struct aa_dfa *dfa, aa_state_t start,
+aa_state_t aa_dfa_match_len(const struct aa_dfa *dfa, aa_state_t start,
 			    const char *str, int len)
 {
 	u32 *def = DEFAULT_TABLE(dfa);
@@ -512,7 +511,8 @@ aa_state_t aa_dfa_match_len(struct aa_dfa *dfa, aa_state_t start,
  *
  * Returns: final state reached after input is consumed
  */
-aa_state_t aa_dfa_match(struct aa_dfa *dfa, aa_state_t start, const char *str)
+aa_state_t aa_dfa_match(const struct aa_dfa *dfa, aa_state_t start,
+			const char *str)
 {
 	u32 *def = DEFAULT_TABLE(dfa);
 	u32 *base = BASE_TABLE(dfa);
@@ -555,7 +555,8 @@ aa_state_t aa_dfa_match(struct aa_dfa *dfa, aa_state_t start, const char *str)
  *
  * Returns: state reach after input @c
  */
-aa_state_t aa_dfa_next(struct aa_dfa *dfa, aa_state_t state, const char c)
+aa_state_t aa_dfa_next(const struct aa_dfa *dfa, aa_state_t state,
+		       const char c)
 {
 	u32 *def = DEFAULT_TABLE(dfa);
 	u32 *base = BASE_TABLE(dfa);
@@ -573,7 +574,8 @@ aa_state_t aa_dfa_next(struct aa_dfa *dfa, aa_state_t state, const char c)
 	return state;
 }
 
-aa_state_t aa_dfa_outofband_transition(struct aa_dfa *dfa, aa_state_t state)
+aa_state_t aa_dfa_outofband_transition(const struct aa_dfa *dfa,
+				       aa_state_t state)
 {
 	u32 *def = DEFAULT_TABLE(dfa);
 	u32 *base = BASE_TABLE(dfa);
@@ -603,8 +605,8 @@ aa_state_t aa_dfa_outofband_transition(struct aa_dfa *dfa, aa_state_t state)
  *
  * Returns: final state reached after input is consumed
  */
-aa_state_t aa_dfa_match_until(struct aa_dfa *dfa, aa_state_t start,
-				const char *str, const char **retpos)
+aa_state_t aa_dfa_match_until(const struct aa_dfa *dfa, aa_state_t start,
+			      const char *str, const char **retpos)
 {
 	u32 *def = DEFAULT_TABLE(dfa);
 	u32 *base = BASE_TABLE(dfa);
@@ -664,8 +666,8 @@ aa_state_t aa_dfa_match_until(struct aa_dfa *dfa, aa_state_t start,
  *
  * Returns: final state reached after input is consumed
  */
-aa_state_t aa_dfa_matchn_until(struct aa_dfa *dfa, aa_state_t start,
-				 const char *str, int n, const char **retpos)
+aa_state_t aa_dfa_matchn_until(const struct aa_dfa *dfa, aa_state_t start,
+			       const char *str, int n, const char **retpos)
 {
 	u32 *def = DEFAULT_TABLE(dfa);
 	u32 *base = BASE_TABLE(dfa);
@@ -740,9 +742,9 @@ static bool is_loop(struct match_workbuf *wb, aa_state_t state,
 	return false;
 }
 
-static aa_state_t leftmatch_fb(struct aa_dfa *dfa, aa_state_t start,
-				 const char *str, struct match_workbuf *wb,
-				 unsigned int *count)
+static aa_state_t leftmatch_fb(const struct aa_dfa *dfa, aa_state_t start,
+			       const char *str, struct match_workbuf *wb,
+			       unsigned int *count)
 {
 	u32 *def = DEFAULT_TABLE(dfa);
 	u32 *base = BASE_TABLE(dfa);
@@ -821,7 +823,7 @@ out:
  *
  * Returns: final state reached after input is consumed
  */
-aa_state_t aa_dfa_leftmatch(struct aa_dfa *dfa, aa_state_t start,
+aa_state_t aa_dfa_leftmatch(const struct aa_dfa *dfa, aa_state_t start,
 			    const char *str, unsigned int *count)
 {
 	DEFINE_MATCH_WB(wb);

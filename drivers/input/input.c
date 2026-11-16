@@ -401,7 +401,7 @@ void input_handle_event(struct input_dev *dev,
 void input_event(struct input_dev *dev,
 		 unsigned int type, unsigned int code, int value)
 {
-	if (is_event_supported(type, dev->evbit, EV_MAX)) {
+	if (type == EV_SYN || is_event_supported(type, dev->evbit, EV_MAX)) {
 		guard(spinlock_irqsave)(&dev->event_lock);
 		input_handle_event(dev, type, code, value);
 	}
@@ -425,7 +425,7 @@ void input_inject_event(struct input_handle *handle,
 	struct input_dev *dev = handle->dev;
 	struct input_handle *grab;
 
-	if (is_event_supported(type, dev->evbit, EV_MAX)) {
+	if (type == EV_SYN || is_event_supported(type, dev->evbit, EV_MAX)) {
 		guard(spinlock_irqsave)(&dev->event_lock);
 		guard(rcu)();
 
@@ -2354,7 +2354,7 @@ static int input_device_tune_vals(struct input_dev *dev)
 	if (dev->max_vals >= max_vals)
 		return 0;
 
-	vals = kcalloc(max_vals, sizeof(*vals), GFP_KERNEL);
+	vals = kzalloc_objs(*vals, max_vals);
 	if (!vals)
 		return -ENOMEM;
 

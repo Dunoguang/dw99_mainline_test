@@ -216,7 +216,7 @@ static int q6apm_dai_prepare(struct snd_soc_component *component,
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct q6apm_dai_rtd *prtd = runtime->private_data;
-	struct audioreach_module_config cfg;
+	struct audioreach_module_config cfg = {};
 	struct device *dev = component->dev;
 	struct q6apm_dai_data *pdata;
 	int ret;
@@ -498,11 +498,15 @@ static snd_pcm_uframes_t q6apm_dai_pointer(struct snd_soc_component *component,
 		ptr = bytes_to_frames(runtime, index);
 		return ptr;
 	}
-	ptr = q6apm_get_hw_pointer(prtd->graph, substream->stream) * runtime->period_size;
-	if (ptr)
-		return ptr - 1;
+	/*
+	 * The hw pointer counts the period buffers the DSP has returned in
+	 * this lap, 1..periods. A full lap is the start of the ring again:
+	 * report 0 rather than one frame less, so that the position of a
+	 * drained buffer reaches appl_ptr and ALSA sees the underrun.
+	 */
+	ptr = q6apm_get_hw_pointer(prtd->graph, substream->stream) % runtime->periods;
 
-	return 0;
+	return ptr * runtime->period_size;
 }
 
 static int q6apm_dai_hw_params(struct snd_soc_component *component,
@@ -814,7 +818,7 @@ static int q6apm_dai_compr_set_params(struct snd_soc_component *component,
 	struct snd_compr_runtime *runtime = stream->runtime;
 	struct q6apm_dai_rtd *prtd = runtime->private_data;
 	struct q6apm_dai_data *pdata;
-	struct audioreach_module_config cfg;
+	struct audioreach_module_config cfg = {};
 	struct snd_codec *codec = &params->codec;
 	int dir = stream->direction;
 	int ret;

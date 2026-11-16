@@ -146,7 +146,7 @@ static int mes_userq_map(struct amdgpu_usermode_queue *queue)
 	queue_input.wptr_mc_addr = queue->wptr_obj.gpu_addr;
 
 	if (mes->use_rs64mem) {
-		 if (!uq_mgr->proc_ctx_allocated) {
+		if (!uq_mgr->proc_ctx_allocated) {
 			r = amdgpu_mes_alloc_proc_ctx_index(mes, &uq_mgr->proc_ctx_array_index);
 			if (r) {
 				DRM_ERROR("Failed to allocate userq process index err:%d\n", r);
@@ -361,8 +361,7 @@ static int mes_userq_mqd_create(struct amdgpu_usermode_queue *queue,
 
 		compute_mqd = memdup_user(u64_to_user_ptr(mqd_user->mqd), mqd_user->mqd_size);
 		if (IS_ERR(compute_mqd)) {
-			DRM_ERROR("Failed to read user MQD\n");
-			r = -ENOMEM;
+			r = PTR_ERR(compute_mqd);
 			goto free_mqd;
 		}
 
@@ -406,8 +405,7 @@ static int mes_userq_mqd_create(struct amdgpu_usermode_queue *queue,
 
 		mqd_gfx_v11 = memdup_user(u64_to_user_ptr(mqd_user->mqd), mqd_user->mqd_size);
 		if (IS_ERR(mqd_gfx_v11)) {
-			DRM_ERROR("Failed to read user MQD\n");
-			r = -ENOMEM;
+			r = PTR_ERR(mqd_gfx_v11);
 			goto free_mqd;
 		}
 
@@ -451,8 +449,7 @@ static int mes_userq_mqd_create(struct amdgpu_usermode_queue *queue,
 
 		mqd_sdma_v11 = memdup_user(u64_to_user_ptr(mqd_user->mqd), mqd_user->mqd_size);
 		if (IS_ERR(mqd_sdma_v11)) {
-			DRM_ERROR("Failed to read sdma user MQD\n");
-			r = -ENOMEM;
+			r = PTR_ERR(mqd_sdma_v11);
 			goto free_mqd;
 		}
 

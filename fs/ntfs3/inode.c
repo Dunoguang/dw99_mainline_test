@@ -981,6 +981,8 @@ static int ntfs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	if (err) {
 		return err;
 	}
+	if (!clen)
+		return -EINVAL;
 
 	if (lcn == EOF_LCN) {
 		/* request out of file. */
@@ -1014,11 +1016,6 @@ static int ntfs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		iomap->offset = 0;
 		iomap->length = clen; /* resident size in bytes. */
 		return 0;
-	}
-
-	if (!clen) {
-		/* broken file? */
-		return -EINVAL;
 	}
 
 	iomap->bdev = inode->i_sb->s_bdev;
@@ -1866,10 +1863,10 @@ int ntfs_create_inode(struct mnt_idmap *idmap, struct inode *dir,
 		goto out6;
 
 	/*
-	 * Call 'd_instantiate' after inode->i_op is set
+	 * Call 'd_instantiate_new' after inode->i_op is set
 	 * but before finish_open.
 	 */
-	d_instantiate(dentry, inode);
+	d_instantiate_new(dentry, inode);
 
 	/* Set original time. inode times (i_ctime) may be changed in ntfs_init_acl. */
 	inode_set_atime_to_ts(inode, ni->i_crtime);
@@ -1916,9 +1913,6 @@ out2:
 out1:
 	if (!fnd)
 		ni_unlock(dir_ni);
-
-	if (!err)
-		unlock_new_inode(inode);
 
 	return err;
 }

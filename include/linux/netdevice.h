@@ -887,6 +887,7 @@ enum net_device_path_type {
 	DEV_PATH_DSA,
 	DEV_PATH_MTK_WDMA,
 	DEV_PATH_TUN,
+	DEV_PATH_IEEE80211,
 };
 
 struct net_device_path {
@@ -953,6 +954,8 @@ struct net_device_path_ctx {
 		u16		id;
 		__be16		proto;
 	} vlan[NET_DEVICE_PATH_VLAN_MAX];
+
+	bool			ieee80211;
 };
 
 enum tc_setup_type {
@@ -2838,6 +2841,13 @@ static inline void *netdev_priv(const struct net_device *dev)
  */
 static inline struct net_device *netdev_from_priv(const void *priv)
 {
+	/*
+	 * When GCC can see that @priv came from netdev_priv(), it can
+	 * compute an object size of 0 for the net_device and its members,
+	 * which makes FORTIFY_SOURCE fail valid accesses through the result:
+	 * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=127875
+	 */
+	OPTIMIZER_HIDE_VAR(priv);
 	return container_of(priv, struct net_device, priv);
 }
 

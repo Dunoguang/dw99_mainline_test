@@ -10,6 +10,6 @@ config TOUCHSCREEN_ADAPTIVE
 
 if TOUCHSCREEN_ADAPTIVE
 
-source "drivers/input/touchscreen/adaptive-ts/vendors/Kconfig
+source "drivers/input/touchscreen/adaptive-ts/vendors/Kconfig"
 
 endif

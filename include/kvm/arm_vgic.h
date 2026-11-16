@@ -65,6 +65,8 @@
 		switch (t) {						\
 		case KVM_DEV_TYPE_ARM_VGIC_V5:				\
 			__ret = is_v5_type(GICV5_HWIRQ_TYPE_PPI, (i));	\
+			__ret &= FIELD_GET(GICV5_HWIRQ_ID, (i)) <	\
+				 VGIC_V5_NR_PRIVATE_IRQS;		\
 			break;						\
 		default:						\
 			__ret  = (i) >= VGIC_NR_SGIS;			\
@@ -176,8 +178,6 @@ struct vgic_global {
 	/* GICv3 compat mode on a GICv5 host */
 	bool			has_gcie_v3_compat;
 
-	u32			ich_vtr_el2;
-
 	/* GICv5 PPI capabilities */
 	struct {
 		DECLARE_BITMAP(impl_ppi_mask, VGIC_V5_NR_PRIVATE_IRQS);
@@ -256,6 +256,7 @@ struct vgic_irq {
 	bool active:1;
 	bool hw:1;			/* Tied to HW IRQ */
 	bool on_lr:1;			/* Present in a CPU LR */
+	bool mapped:1;			/* LPIs: mapped by an ITE */
 	refcount_t refcount;		/* Used for LPIs */
 	u32 hwintid;			/* HW INTID number */
 	unsigned int host_irq;		/* linux irq corresponding to hwintid */

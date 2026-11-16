@@ -458,12 +458,14 @@ static void loop_update_dio_alignment(struct loop_device *lo)
 	 * Use the dio alignment of the file system if provided.  The incomoing
 	 * request's bio_vec is forwarded to the backing file unchanged, so its
 	 * required memory alignment becomes the device's dma_alignment when
-	 * used for direct-io.
+	 * used for direct-io.  The file system reports zeroed alignments if the
+	 * file can't be used for direct-io at all, so fall back to the block
+	 * device limits in that case.
 	 */
 	if (!vfs_getattr(&file->f_path, &st, STATX_DIOALIGN, 0) &&
-	    (st.result_mask & STATX_DIOALIGN)) {
+	    (st.result_mask & STATX_DIOALIGN) && st.dio_mem_align) {
 		lo->lo_min_dio_size = st.dio_offset_align;
-		lo->lo_dio_mem_align = st.dio_mem_align - 1;
+		lo->lo_dio_mem_align = min(st.dio_mem_align - 1, PAGE_SIZE - 1);
 		return;
 	}
 
@@ -1706,8 +1708,10 @@ static int lo_compat_ioctl(struct block_device *bdev, blk_mode_t mode,
 
 	switch(cmd) {
 	case LOOP_SET_STATUS:
-		err = loop_set_status_compat(lo,
-			     (const struct compat_loop_info __user *)arg);
+		err = -EPERM;
+		if ((mode & BLK_OPEN_WRITE) || capable(CAP_SYS_ADMIN))
+			err = loop_set_status_compat(lo,
+				(const struct compat_loop_info __user *)arg);
 		break;
 	case LOOP_GET_STATUS:
 		err = loop_get_status_compat(lo,

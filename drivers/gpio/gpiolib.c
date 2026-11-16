@@ -1029,6 +1029,13 @@ int gpiochip_add_hog(struct gpio_chip *gc, struct fwnode_handle *fwnode)
 			ret = of_gpiochip_get_lflags(gc, &gpiospec, &lflags);
 			if (ret)
 				return ret;
+
+			/*
+			 * If no line-name property is present, fall back to the OF
+			 * node name as in the previous implementation.
+			 */
+			if (!name)
+				name = to_of_node(fwnode)->name;
 		} else {
 			/*
 			 * GPIO_ACTIVE_LOW is currently the only lookup flag
@@ -1178,7 +1185,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	int base = 0;
 	int ret;
 
-	gdev = kzalloc(sizeof(*gdev), GFP_KERNEL);
+	gdev = kzalloc_obj(*gdev);
 	if (!gdev)
 		return -ENOMEM;
 	gc->gpiodev = gdev;
@@ -1218,7 +1225,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 		goto err_put_device;
 	gdev->ngpio = gc->ngpio;
 
-	gdev->descs = kcalloc(gc->ngpio, sizeof(*gdev->descs), GFP_KERNEL);
+	gdev->descs = kzalloc_objs(*gdev->descs, gc->ngpio);
 	if (!gdev->descs) {
 		ret = -ENOMEM;
 		goto err_put_device;
@@ -2620,10 +2627,13 @@ int gpiod_request_commit(struct gpio_desc *desc, const char *label)
 
 	ret = desc_set_label(desc, label ? : "?");
 	if (ret)
-		goto out_clear_bit;
+		goto out_free_gpio;
 
 	return 0;
 
+out_free_gpio:
+	if (guard.gc->free)
+		guard.gc->free(guard.gc, offset);
 out_clear_bit:
 	clear_bit(GPIOD_FLAG_REQUESTED, &desc->flags);
 	return ret;
@@ -2709,6 +2719,7 @@ void gpiod_free(struct gpio_desc *desc)
 char *gpiochip_dup_line_label(struct gpio_chip *gc, unsigned int offset)
 {
 	struct gpio_desc *desc;
+	const char *name;
 	char *label;
 
 	desc = gpiochip_get_desc(gc, offset);
@@ -2720,7 +2731,11 @@ char *gpiochip_dup_line_label(struct gpio_chip *gc, unsigned int offset)
 
 	guard(srcu)(&desc->gdev->desc_srcu);
 
-	label = kstrdup(gpiod_get_label(desc), GFP_KERNEL);
+	name = gpiod_get_label(desc);
+	if (!name)
+		return NULL;
+
+	label = kstrdup(name, GFP_KERNEL);
 	if (!label)
 		return ERR_PTR(-ENOMEM);
 
@@ -3947,16 +3962,17 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
 		} while ((i < array_size) &&
 			 gpio_device_chip_cmp(desc_array[i]->gdev, guard.gc));
 		/* push collected bits to outputs */
-		if (count != 0) {
+		ret = 0;
+		if (count != 0)
 			ret = gpiochip_set_multiple(guard.gc, mask, bits);
-			if (ret)
-				return ret;
-		}
 
 		if (mask != fastpath_mask)
 			bitmap_free(mask);
 		if (bits != fastpath_bits)
 			bitmap_free(bits);
+
+		if (ret)
+			return ret;
 	}
 	return 0;
 }

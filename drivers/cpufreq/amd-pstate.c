@@ -524,8 +524,10 @@ static int shmem_init_perf(struct amd_cpudata *cpudata)
 		return 0;
 	}
 
-	ret = cppc_set_auto_sel(cpudata->cpu,
-			(cppc_state == AMD_PSTATE_PASSIVE) ? 0 : 1);
+	if ((cppc_state != AMD_PSTATE_PASSIVE) == auto_sel)
+		return 0;
+
+	ret = cppc_set_auto_sel(cpudata->cpu, !auto_sel);
 
 	if (ret)
 		pr_warn("failed to set auto_sel, ret: %d\n", ret);
@@ -1624,7 +1626,7 @@ static struct freq_attr **get_freq_attrs(void)
 	/* amd_pstate_{max_freq, lowest_nonlinear_freq, highest_perf} should always be visible */
 	BUG_ON(!count);
 
-	attrs = kcalloc(count + 1, sizeof(struct freq_attr *), GFP_KERNEL);
+	attrs = kzalloc_objs(struct freq_attr *, count + 1);
 	if (!attrs)
 		return ERR_PTR(-ENOMEM);
 

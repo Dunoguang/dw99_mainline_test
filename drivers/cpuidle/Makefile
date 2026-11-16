@@ -44,3 +44,7 @@ obj-$(CONFIG_POWERNV_CPUIDLE)		+= cpuidle-powernv.o
 obj-$(CONFIG_RISCV_SBI_CPUIDLE)		+= cpuidle-riscv-sbi.o
 obj-$(CONFIG_ARM_SPRD_DUMMY_CPUIDLE)	+= cpuidle-sprd-dummy.o
 obj-$(CONFIG_ARM_SPRD_CPUIDLE)		+= cpuidle-sprd.o
+
+###############################################################################
+# S390 drivers
+obj-$(CONFIG_S390_CPUIDLE)		+= cpuidle-s390.o

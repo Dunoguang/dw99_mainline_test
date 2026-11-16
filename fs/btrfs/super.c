@@ -1836,8 +1836,12 @@ static int btrfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	f_fsid.val[0] ^= btrfs_root_id(BTRFS_I(d_inode(dentry))->root) >> 32;
 	f_fsid.val[1] ^= btrfs_root_id(BTRFS_I(d_inode(dentry))->root);
 
-	/* Hash dev_t to avoid f_fsid collision with cloned filesystems. */
-	if (fs_info->fs_devices->total_devices == 1) {
+	/*
+	 * Hash dev_t to avoid f_fsid collisions with cloned filesystems.
+	 * Only do this when a clone is present so the original filesystem
+	 * (mounted first) maintains backward-compatible f_fsid behavior.
+	 */
+	if (fs_info->fs_devices->temp_fsid) {
 		__kernel_fsid_t dev_fsid =
 			u64_to_fsid(huge_encode_dev(fs_info->fs_devices->latest_dev->bdev->bd_dev));
 
@@ -2300,6 +2304,9 @@ static long btrfs_control_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case BTRFS_IOC_GET_SUPPORTED_FEATURES:
 		ret = btrfs_ioctl_get_supported_features((void __user*)arg);
+		break;
+	default:
+		ret = -ENOTTY;
 		break;
 	}
 

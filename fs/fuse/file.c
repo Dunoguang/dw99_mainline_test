@@ -272,7 +272,7 @@ static int fuse_open(struct inode *inode, struct file *file)
 		filemap_invalidate_lock(inode->i_mapping);
 		err = fuse_dax_break_layouts(inode, 0, -1);
 		if (err)
-			goto out_inode_unlock;
+			goto out_unlock;
 	}
 
 	if (is_wb_truncate || dax_truncate)
@@ -296,9 +296,9 @@ static int fuse_open(struct inode *inode, struct file *file)
 		else if (!(ff->open_flags & FOPEN_KEEP_CACHE))
 			invalidate_inode_pages2(inode->i_mapping);
 	}
+out_unlock:
 	if (dax_truncate)
 		filemap_invalidate_unlock(inode->i_mapping);
-out_inode_unlock:
 	if (is_wb_truncate || dax_truncate)
 		inode_unlock(inode);
 
@@ -605,6 +605,7 @@ void fuse_read_args_fill(struct fuse_io_args *ia, struct file *file, loff_t pos,
 	args->out_argvar = true;
 	args->out_numargs = 1;
 	args->out_args[0].size = count;
+	args->zero_copy = ff->open_flags & FOPEN_IO_URING_ZERO_COPY;
 }
 
 static void fuse_release_user_pages(struct fuse_args_pages *ap, ssize_t nres,
@@ -863,18 +864,29 @@ static int fuse_do_readfolio(struct file *file, struct folio *folio,
 
 	attr_ver = fuse_get_attr_version(fm->fc);
 
-	/* Don't overflow end offset */
-	if (pos + (desc.length - 1) == LLONG_MAX)
-		desc.length--;
+	/*
+	 * Don't overflow end offset.
+	 *
+	 * Ask the server for len - 1 bytes. desc.length still holds the full
+	 * length. When the reply comes back, it will be one byte shorter than
+	 * desc.length and fuse_copy_folios() will zero that last byte.
+	 *
+	 * For this reason, desc.length must not be decremented too. The caller
+	 * reports the full length to iomap_finish_folio_read(), which marks
+	 * every block it covers uptodate. Shortening the descriptor would
+	 * suppress zeroing and leave the last byte holding stale data.
+	 */
+	if (pos + (len - 1) == LLONG_MAX)
+		len--;
 
-	fuse_read_args_fill(&ia, file, pos, desc.length, FUSE_READ);
+	fuse_read_args_fill(&ia, file, pos, len, FUSE_READ);
 	res = fuse_simple_request(fm, &ia.ap.args);
 	if (res < 0)
 		return res;
 	/*
 	 * Short read means EOF.  If file size is larger, truncate it
 	 */
-	if (res < desc.length)
+	if (res < len)
 		fuse_short_read(inode, attr_ver, res, &ia.ap);
 
 	return 0;
@@ -1067,11 +1079,20 @@ static void fuse_send_readpages(struct fuse_io_args *ia, struct file *file,
 	ap->args.page_zeroing = true;
 	ap->args.page_replace = true;
 
-	/* Don't overflow end offset */
-	if (pos + (count - 1) == LLONG_MAX) {
+	/*
+	 * Don't overflow end offset.
+	 *
+	 * Ask the server for count - 1 bytes. The reply is then one byte
+	 * shorter than what the descriptor lengths add up to, so
+	 * fuse_copy_folios() zeroes the last byte when it walks the folios.
+	 *
+	 * ap->descs[] must not be decremented here. It is what
+	 * fuse_readpages_end() reports back to iomap_finish_folio_read(), and
+	 * iomap has already accounted the full descriptor length, so shortening
+	 * it would leave ifs->read_bytes_pending nonzero and the folio locked.
+	 */
+	if (pos + (count - 1) == LLONG_MAX)
 		count--;
-		ap->descs[ap->num_folios - 1].length--;
-	}
 	WARN_ON((loff_t) (pos + count) < 0);
 
 	fuse_read_args_fill(ia, file, pos, count, FUSE_READ);
@@ -1153,6 +1174,7 @@ static void fuse_write_args_fill(struct fuse_io_args *ia, struct fuse_file *ff,
 	args->out_numargs = 1;
 	args->out_args[0].size = sizeof(ia->write.out);
 	args->out_args[0].value = &ia->write.out;
+	args->zero_copy = ff->open_flags & FOPEN_IO_URING_ZERO_COPY;
 }
 
 static unsigned int fuse_write_flags(struct kiocb *iocb)
@@ -1346,8 +1368,12 @@ static ssize_t fuse_perform_write(struct kiocb *iocb, struct iov_iter *ii)
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	loff_t pos = iocb->ki_pos;
+	loff_t old_size = i_size_read(inode);
 	int err = 0;
 	ssize_t res = 0;
+
+	if (pos > old_size)
+		truncate_pagecache_range(inode, old_size, pos - 1);
 
 	if (inode->i_size < pos + iov_iter_count(ii))
 		set_bit(FUSE_I_SIZE_UNSTABLE, &fi->state);
@@ -1591,8 +1617,7 @@ static int fuse_get_user_pages(struct fuse_args_pages *ap, struct iov_iter *ii,
 	 * manually extract pages using iov_iter_extract_pages() and then
 	 * copy that to a folios array.
 	 */
-	struct page **pages = kcalloc(max_pages, sizeof(struct page *),
-				      GFP_KERNEL);
+	struct page **pages = kzalloc_objs(struct page *, max_pages);
 	if (!pages) {
 		ret = -ENOMEM;
 		goto out;
@@ -1787,13 +1812,14 @@ static ssize_t fuse_direct_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
 	struct address_space *mapping = inode->i_mapping;
-	loff_t pos = iocb->ki_pos;
 	ssize_t res;
 	bool exclusive;
 
 	fuse_dio_lock(iocb, from, &exclusive);
 	res = generic_write_checks(iocb, from);
 	if (res > 0) {
+		loff_t pos = iocb->ki_pos;
+
 		task_io_account_write(res);
 		if (!is_sync_kiocb(iocb)) {
 			res = fuse_direct_IO(iocb, from);
@@ -1808,7 +1834,7 @@ static ssize_t fuse_direct_write_iter(struct kiocb *iocb, struct iov_iter *from)
 			/*
 			 * As in generic_file_direct_write(), invalidate after
 			 * write, to invalidate read-ahead cache that may have
-			 * with the write.
+			 * competed with the write.
 			 */
 			invalidate_inode_pages2_range(mapping,
 				pos >> PAGE_SHIFT,
@@ -2320,6 +2346,9 @@ static int fuse_launder_folio(struct folio *folio)
 		.ops = &fuse_writeback_ops,
 		.wb_ctx	= &data,
 	};
+
+	if (fuse_is_bad(wpc.inode))
+		return -EIO;
 
 	if (folio_clear_dirty_for_io(folio)) {
 		err = iomap_writeback_folio(&wpc, folio);
@@ -2894,6 +2923,11 @@ static long fuse_file_fallocate(struct file *file, int mode, loff_t offset,
 
 	/* we could have extended the file */
 	if (!(mode & FALLOC_FL_KEEP_SIZE)) {
+		loff_t oldsize = i_size_read(inode);
+
+		if (offset + length > oldsize)
+			truncate_pagecache_range(inode, oldsize,
+						 offset + length - 1);
 		if (fuse_write_update_attr(inode, offset + length, length))
 			file_update_time(file);
 	}
@@ -3008,7 +3042,7 @@ fallback:
 	}
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		if (fc->no_copy_file_range_64) {
+		if (args.opcode == FUSE_COPY_FILE_RANGE) {
 			fc->no_copy_file_range = 1;
 			err = -EOPNOTSUPP;
 		} else {
@@ -3019,7 +3053,7 @@ fallback:
 	if (err)
 		goto out;
 
-	bytes_copied = fc->no_copy_file_range_64 ?
+	bytes_copied = args.opcode == FUSE_COPY_FILE_RANGE ?
 		outarg.size : outarg_64.bytes_copied;
 
 	if (bytes_copied > len) {
@@ -3027,9 +3061,11 @@ fallback:
 		goto out;
 	}
 
-	truncate_inode_pages_range(inode_out->i_mapping,
-				   ALIGN_DOWN(pos_out, PAGE_SIZE),
-				   ALIGN(pos_out + bytes_copied, PAGE_SIZE) - 1);
+	if (bytes_copied)
+		truncate_inode_pages_range(inode_out->i_mapping,
+					   ALIGN_DOWN(pos_out, PAGE_SIZE),
+					   ALIGN(pos_out + bytes_copied,
+						 PAGE_SIZE) - 1);
 
 	file_update_time(file_out);
 	fuse_write_update_attr(inode_out, pos_out + bytes_copied, bytes_copied);

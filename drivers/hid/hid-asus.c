@@ -406,7 +406,7 @@ static int asus_kbd_fn_lock_set(struct asus_drvdata *drvdata, bool enabled)
 	struct asus_work_action *action;
 	unsigned long flags;
 
-	action = kzalloc(sizeof(struct asus_work_action), GFP_ATOMIC);
+	action = kzalloc_obj(struct asus_work_action, GFP_ATOMIC);
 	if (!action)
 		return -ENOMEM;
 
@@ -433,7 +433,7 @@ static int asus_kbd_wmi_fan_send(struct asus_drvdata *drvdata, u8 *report_data,
 		return -EINVAL;
 	}
 
-	action = kzalloc(sizeof(struct asus_work_action), GFP_NOWAIT);
+	action = kzalloc_obj(struct asus_work_action, GFP_NOWAIT);
 	if (!action)
 		return -ENOMEM;
 
@@ -746,7 +746,7 @@ static void asus_kbd_backlight_set(struct asus_hid_listener *listener, int brigh
 
 	drvdata->kbd_backlight_brightness = brightness;
 
-	action = kzalloc(sizeof(struct asus_work_action), GFP_NOWAIT);
+	action = kzalloc_obj(struct asus_work_action, GFP_NOWAIT);
 	if (!action)
 		return;
 
@@ -1493,12 +1493,14 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return ret;
 	}
 
-	for (int r = 0; r < ARRAY_SIZE(asus_report_id_init); r++) {
-		if (asus_has_report_id(hdev, asus_report_id_init[r])) {
-			ret = asus_kbd_init(hdev, asus_report_id_init[r]);
-			if (ret < 0)
-				hid_warn(hdev, "Failed to initialize 0x%x: %d.\n",
-					 asus_report_id_init[r], ret);
+	if (!drvdata->tp) {
+		for (int r = 0; r < ARRAY_SIZE(asus_report_id_init); r++) {
+			if (asus_has_report_id(hdev, asus_report_id_init[r])) {
+				ret = asus_kbd_init(hdev, asus_report_id_init[r]);
+				if (ret < 0)
+					hid_warn(hdev, "Failed to initialize 0x%x: %d.\n",
+						 asus_report_id_init[r], ret);
+			}
 		}
 	}
 

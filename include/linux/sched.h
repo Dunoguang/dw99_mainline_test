@@ -1315,6 +1315,7 @@ struct task_struct {
 	u64				curr_chain_key;
 	int				lockdep_depth;
 	unsigned int			lockdep_recursion;
+	unsigned int			lockdep_seq;
 	struct held_lock		held_locks[MAX_LOCK_DEPTH];
 #endif
 
@@ -1449,6 +1450,7 @@ struct task_struct {
 
 #ifdef CONFIG_SCHED_CACHE
 	struct callback_head		cache_work;
+	struct sched_cache_group __rcu	*sched_cache_grp;
 	int				preferred_llc;
 	/* 1: task was enqueued to its preferred LLC, 0 otherwise */
 	int				pref_llc_queued;
@@ -1571,6 +1573,14 @@ struct task_struct {
 
 	/* Collect coverage from softirq context: */
 	unsigned int			kcov_softirq;
+
+	/* Temporary storage for preempting remote coverage collection: */
+	unsigned int			kcov_saved_mode;
+	unsigned int			kcov_saved_size;
+	void				*kcov_saved_area;
+	struct kcov			*kcov_saved_kcov;
+	int				kcov_saved_sequence;
+
 #endif
 
 #ifdef CONFIG_MEMCG_V1
@@ -1795,7 +1805,7 @@ static inline bool is_lazy_mmu_mode_active(void)
 }
 #endif
 
-extern struct pid *cad_pid;
+extern struct pid __rcu *cad_pid;
 
 /*
  * Per process flags
@@ -1824,7 +1834,7 @@ extern struct pid *cad_pid;
 						 * I am cleaning dirty pages from some other bdi. */
 #define PF_KTHREAD		0x00200000	/* I am a kernel thread */
 #define PF_RANDOMIZE		0x00400000	/* Randomize virtual address space */
-#define PF__HOLE__00800000	0x00800000
+#define PF_NO_NOTIFY_SIGNAL	0x00800000	/* see no_notify_signal_save() */
 #define PF__HOLE__01000000	0x01000000
 #define PF__HOLE__02000000	0x02000000
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_mask */
@@ -2413,7 +2423,7 @@ struct sched_cache_time {
 	unsigned long epoch;
 };
 
-struct sched_cache_stat {
+struct sched_cache_group {
 	struct sched_cache_time __percpu *pcpu_sched;
 	raw_spinlock_t lock;
 	unsigned long epoch;
@@ -2421,11 +2431,26 @@ struct sched_cache_stat {
 	unsigned long next_scan;
 	unsigned long footprint;
 	int cpu;
+	refcount_t refcnt;
+	struct rcu_head rcu;
 } ____cacheline_aligned_in_smp;
+
+struct sched_cache_group *sched_cache_group_get(struct sched_cache_group *grp);
+struct sched_cache_group *task_cache_group_get(struct task_struct *p);
+
+void sched_cache_fork(struct task_struct *p);
+void sched_cache_fork_cleanup(struct task_struct *p);
+void sched_cache_exec_mmap(struct task_struct *p, struct mm_struct *mm);
+void sched_cache_exit_mm(struct task_struct *p);
 
 #else
 
-struct sched_cache_stat { };
+struct sched_cache_group { };
+
+static inline void sched_cache_fork(struct task_struct *p) { }
+static inline void sched_cache_fork_cleanup(struct task_struct *p) { }
+static inline void sched_cache_exec_mmap(struct task_struct *p, struct mm_struct *mm) { }
+static inline void sched_cache_exit_mm(struct task_struct *p) { }
 
 #endif
 

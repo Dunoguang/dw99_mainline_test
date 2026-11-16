@@ -200,6 +200,7 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
 	edid_caps->edid_hdmi = connector->display_info.is_hdmi;
 
 	if (edid_caps->edid_hdmi) {
+		edid_caps->qs_bit = connector->display_info.rgb_quant_range_selectable;
 		populate_hdmi_info_from_connector(link->dc->config.enable_frl, &connector->display_info.hdmi, edid_caps);
 		drm_dbg_driver(connector->dev, "%s: HDMI_FRL [%s] max_frl_rate %d\n", __func__, connector->name, edid_caps->max_frl_rate);
 		if (edid_caps->frl_dsc_support)
@@ -282,7 +283,7 @@ fill_dc_mst_payload_table_from_drm(struct dc_link *link,
 				break;
 			}
 		}
-		ASSERT(i != copy_of_link_table.stream_count);
+		/* Payload absent from HW table when never allocated: nothing to remove. */
 	}
 
 	/* Fill payload info*/
@@ -1202,9 +1203,10 @@ void populate_hdmi_info_from_connector(bool enable_frl, struct drm_hdmi_info *hd
 		edid_caps->max_frl_rate = get_max_frl_rate(hdmi->max_lanes, hdmi->max_frl_rate_per_lane);
 		edid_caps->frl_dsc_support = hdmi->dsc_cap.v_1p2;
 		if (edid_caps->frl_dsc_support) {
-			if (hdmi->dsc_cap.bpc_supported == 10)
+			/* HF-VSDB DSC max bpc is cumulative: >=12 implies 10 and 8. */
+			if (hdmi->dsc_cap.bpc_supported >= 10)
 				edid_caps->frl_dsc_10bpc = true;
-			else if (hdmi->dsc_cap.bpc_supported == 12)
+			if (hdmi->dsc_cap.bpc_supported >= 12)
 				edid_caps->frl_dsc_12bpc = true;
 			edid_caps->frl_dsc_all_bpp = hdmi->dsc_cap.all_bpp;
 			edid_caps->frl_dsc_native_420 = hdmi->dsc_cap.native_420;
@@ -1215,6 +1217,26 @@ void populate_hdmi_info_from_connector(bool enable_frl, struct drm_hdmi_info *hd
 	}
 }
 EXPORT_IF_KUNIT(populate_hdmi_info_from_connector);
+
+static void dm_helpers_wait_for_edid_ready(struct dc_link *link,
+					   struct i2c_adapter *ddc)
+{
+	const unsigned int retry_count = 50;
+	const unsigned int retry_interval_ms = 20;
+	unsigned int retry;
+
+	if (!ddc || link->dpcd_caps.dongle_type !=
+			DISPLAY_DONGLE_DP_DVI_DONGLE)
+		return;
+
+	for (retry = 0; retry < retry_count; retry++) {
+		if (drm_probe_ddc(ddc))
+			return;
+
+		if (retry + 1 < retry_count)
+			msleep(retry_interval_ms);
+	}
+}
 
 enum dc_edid_status dm_helpers_read_local_edid(
 		struct dc_context *ctx,
@@ -1239,6 +1261,8 @@ enum dc_edid_status dm_helpers_read_local_edid(
 
 	if (link->dc->hwss.prepare_ddc)
 		link->dc->hwss.prepare_ddc(link);
+
+	dm_helpers_wait_for_edid_ready(link, ddc);
 
 	/* some dongles read edid incorrectly the first time,
 	 * do check sum and retry to make sure read correct edid.
@@ -1437,12 +1461,13 @@ void dm_helpers_free_gpu_mem(
 
 bool dm_helpers_dmub_outbox_interrupt_control(struct dc_context *ctx, bool enable)
 {
+	struct amdgpu_device *adev = ctx->driver_context;
 	enum dc_irq_source irq_source;
 	bool ret;
 
 	irq_source = DC_IRQ_SOURCE_DMCUB_OUTBOX;
 
-	ret = dc_interrupt_set(ctx->dc, irq_source, enable);
+	ret = amdgpu_dm_irq_set(adev, irq_source, enable);
 
 	DRM_DEBUG_DRIVER("Dmub trace irq %sabling: r=%d\n",
 			 enable ? "en" : "dis", ret);
