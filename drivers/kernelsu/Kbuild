@@ -53,15 +53,8 @@ ccflags-y += -I$(srctree)/$(src) -I$(srctree)/$(src)/include
 ccflags-y += -I$(src) -I$(src)/include
 
 ifdef CONFIG_KSU_SUSFS
-# The kernel side of SuSFS (security/selinux/{hooks,selinuxfs}.c) calls the
-# selinux_hide helpers, so they must be exported instead of file-static.
-ccflags-y += -DKSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE
-endif
-
-ifdef CONFIG_KSU_SUSFS
-# The kernel side of SuSFS (security/selinux/{hooks,selinuxfs}.c) calls the
-# selinux_hide helpers, so they must be exported instead of file-static.
-ccflags-y += -DKSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE
+# susfs_compat.mk sets KSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE when
+# security/selinux/hooks.c wires the manual selinux_hide hooks; nothing to add here.
 endif
 
 obj-$(CONFIG_KSU) += kernelsu.o
