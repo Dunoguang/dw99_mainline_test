@@ -1055,9 +1055,6 @@ static int sprd_ptm_probe(struct platform_device *pdev)
 	sdev = devm_kzalloc(&pdev->dev, sizeof(*sdev), GFP_KERNEL);
 	if (!sdev)
 		return -ENOMEM;
-	sdev->sprd_ptm_list = devm_kzalloc(&pdev->dev,
-				sdev->pub_chn * sizeof(char *),
-				GFP_KERNEL);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	sdev->base = devm_ioremap_resource(&pdev->dev, res);
@@ -1097,6 +1094,16 @@ static int sprd_ptm_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Error: Can't get chns number!\n");
 		return -EINVAL;
 	}
+	if (!sdev->pub_chn ||
+	    of_property_count_strings(pdev->dev.of_node, "sprd,chn-name") != sdev->pub_chn) {
+		dev_err(&pdev->dev, "DDR channel count does not match channel names\n");
+		return -EINVAL;
+	}
+	sdev->sprd_ptm_list = devm_kcalloc(&pdev->dev, sdev->pub_chn,
+					    sizeof(*sdev->sprd_ptm_list), GFP_KERNEL);
+	if (!sdev->sprd_ptm_list)
+		return -ENOMEM;
+
 	/* get name of each ddr channel */
 	for (i = 0; i < sdev->pub_chn; i++) {
 		if (of_property_read_string_index(pdev->dev.of_node,
