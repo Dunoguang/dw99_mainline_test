@@ -3,6 +3,7 @@
 #include "linux/security.h"
 #include "linux/version.h"
 #include "selinux_defs.h"
+#include "security.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
 #include "compat/kernel_compat.h"
@@ -310,6 +311,11 @@ bool susfs_is_current_zygote_domain(void)
 
 bool susfs_is_current_ksu_domain(void)
 {
+    /* Mount setup runs before SELinux policy/cred security is initialized. */
+    if (unlikely(!selinux_initialized()))
+        return false;
+    if (unlikely(!ksu_cred))
+        return false;
     return is_ksu_domain();
 }
 
