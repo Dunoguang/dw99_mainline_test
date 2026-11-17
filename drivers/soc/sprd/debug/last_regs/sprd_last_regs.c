@@ -1,11 +1,7 @@
-#include <linux/dma-mapping.h>
-#include <linux/dma-map-ops.h>
 #include <linux/debugfs.h>
-#include <linux/swiotlb.h>
 #include <linux/slab.h>
 #include "regs_debug.h"
 #include "../sprd_debugfs.h"
-#include "regs_debug.h"
 
 struct sprd_debug_regs_access *sprd_debug_last_regs_access;
 EXPORT_SYMBOL(sprd_debug_last_regs_access);
@@ -43,28 +39,11 @@ const struct file_operations last_regs_info_proc_fops = {
 
 __init int sprd_debug_last_regs_init(void)
 {
-	dma_addr_t addr;
 	int size = sizeof(struct sprd_debug_regs_access);
 	unsigned int ncores =  num_possible_cpus();
-	u64 dma_mask = DMA_BIT_MASK(sizeof(long)<<3);
 	struct sprd_debug_regs_access *tmp;
-	struct device_dma_parameters ddp = {
-		.segment_boundary_mask = DMA_BIT_MASK(sizeof(long)<<3),
-	};
-	struct device sprd_debug_device;
 
-	memset(&sprd_debug_device, 0, sizeof(struct device));
-
-	sprd_debug_device.coherent_dma_mask = DMA_BIT_MASK(sizeof(long)<<3);
-	sprd_debug_device.dma_mask = &dma_mask;
-	sprd_debug_device.dma_parms = &ddp;
-
-	arch_setup_dma_ops(&sprd_debug_device, false);
-
-	tmp = (struct sprd_debug_regs_access *)dma_alloc_coherent(&sprd_debug_device,
-								  size*ncores,
-								  &addr,
-								  GFP_KERNEL);
+	tmp = kzalloc(size * ncores, GFP_KERNEL);
 	sprd_debug_last_regs_access = tmp;
 
 	pr_info("*** %s, size:%u, sprd_debug_last_regs_access:%p ***\n",
