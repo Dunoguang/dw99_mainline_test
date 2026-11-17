@@ -930,7 +930,7 @@ static void sprd_deep_intc_init(void)
 static int sprd_deep_init_glb_regmap(void)
 {
 	int i;
-	char *ap_intc_name = "sprd,sys-ap-intc0";
+	char ap_intc_name[32];
 
 	sprd_deep.np = of_find_node_by_name(NULL, "deep-sleep");
 	if (!sprd_deep.np) {
@@ -946,14 +946,14 @@ static int sprd_deep_init_glb_regmap(void)
 			"sprd,sys-aon-apb");
 	sprd_deep.pmu_apb = syscon_regmap_lookup_by_phandle(sprd_deep.np,
 			"sprd,sys-pmu-apb");
-	if ((!sprd_deep.ap_apb) || (!sprd_deep.ap_ahb) ||
-			(!sprd_deep.aon_apb) || (!sprd_deep.pmu_apb)) {
+	if (IS_ERR_OR_NULL(sprd_deep.ap_apb) || IS_ERR_OR_NULL(sprd_deep.ap_ahb) ||
+	    IS_ERR_OR_NULL(sprd_deep.aon_apb) || IS_ERR_OR_NULL(sprd_deep.pmu_apb)) {
 		pr_info("%s, Failed to init glb reg\n", __func__);
 		return -ENODEV;
 	}
 
 	for (i = 0; i < INTC_NUM; i++) {
-		sprintf(ap_intc_name, "sprd,sys-ap-intc%d", i);
+		snprintf(ap_intc_name, sizeof(ap_intc_name), "sprd,sys-ap-intc%d", i);
 
 		if (i >= AP_INTC_NUM)
 			sprd_deep.intc[i] =
@@ -963,7 +963,7 @@ static int sprd_deep_init_glb_regmap(void)
 			sprd_deep.intc[i] =
 				syscon_regmap_lookup_by_phandle(sprd_deep.np,
 				ap_intc_name);
-		if (!(sprd_deep.intc[i])) {
+		if (IS_ERR_OR_NULL(sprd_deep.intc[i])) {
 			pr_info("%s, failed to find intc[%d]\n",
 				__func__, i);
 			return -ENODEV;
