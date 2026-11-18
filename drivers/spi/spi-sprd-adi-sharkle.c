@@ -558,7 +558,8 @@ static int sprd_adi_probe(struct platform_device *pdev)
 	adi_ctlr->setup = sprd_adi_setup;
 	adi_ctlr->flags = SPI_CONTROLLER_HALF_DUPLEX;
 	adi_ctlr->bits_per_word_mask = 0;
-	adi_ctlr->auto_runtime_pm = true;
+	/* The ADI platform device does not enable runtime PM. */
+	adi_ctlr->auto_runtime_pm = false;
 	/* default is spi_bitbang_transfer */
 	/* adi_ctlr->transfer = spi_bitbang_transfer; */
 
@@ -567,7 +568,7 @@ static int sprd_adi_probe(struct platform_device *pdev)
 
 	spin_lock_init(&sadi->spinlock);
 	if (!of_device_is_compatible(pdev->dev.of_node, "sprd,r4p0-adi")) {
-		has_hwlock = of_property_read_bool(pdev->dev.of_node, "hwlocks");
+		has_hwlock = of_property_present(pdev->dev.of_node, "hwlocks");
 		hwlock_id = has_hwlock ?
 			of_hwspin_lock_get_id(pdev->dev.of_node, 0) : HWLOCK_ADI;
 		if (hwlock_id < 0) {
