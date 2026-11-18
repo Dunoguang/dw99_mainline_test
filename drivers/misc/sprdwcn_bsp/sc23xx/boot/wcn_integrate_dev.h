@@ -268,4 +268,5 @@ static inline bool wcn_dev_is_gnss(struct wcn_device *dev)
 }
 
 void wcn_cpu_bootup(struct wcn_device *wcn_dev);
+void wcn_set_ready(bool ready);
 #endif

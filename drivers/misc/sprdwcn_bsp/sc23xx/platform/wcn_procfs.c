@@ -898,24 +898,15 @@ int mdbg_memory_alloc(void)
 		return -ENOMEM;
 
 	mdbg_proc->loopcheck.buf =  kzalloc(MDBG_LOOPCHECK_SIZE, GFP_KERNEL);
-	if (!mdbg_proc->loopcheck.buf) {
-		kfree(mdbg_proc->assert.buf);
+	if (!mdbg_proc->loopcheck.buf)
 		return -ENOMEM;
-	}
 	mdbg_proc->at_cmd.buf =  kzalloc(MDBG_AT_CMD_SIZE, GFP_KERNEL);
-	if (!mdbg_proc->at_cmd.buf) {
-		kfree(mdbg_proc->assert.buf);
-		kfree(mdbg_proc->loopcheck.buf);
+	if (!mdbg_proc->at_cmd.buf)
 		return -ENOMEM;
-	}
 
 	mdbg_proc->snap_shoot.buf =  kzalloc(MDBG_SNAP_SHOOT_SIZE, GFP_KERNEL);
-	if (!mdbg_proc->snap_shoot.buf) {
-		kfree(mdbg_proc->assert.buf);
-		kfree(mdbg_proc->loopcheck.buf);
-		kfree(mdbg_proc->at_cmd.buf);
+	if (!mdbg_proc->snap_shoot.buf)
 		return -ENOMEM;
-	}
 
 	return 0;
 }
@@ -1034,9 +1025,24 @@ int proc_fs_init(void)
 	mdbg_proc = kzalloc(sizeof(struct mdbg_proc_t), GFP_KERNEL);
 	if (!mdbg_proc)
 		return -ENOMEM;
+	if (mdbg_memory_alloc() < 0) {
+		mdbg_memory_free();
+		kfree(mdbg_proc);
+		mdbg_proc = NULL;
+		return -ENOMEM;
+	}
+
+	init_completion(&mdbg_proc->assert.completed);
+	init_completion(&mdbg_proc->loopcheck.completed);
+	init_completion(&mdbg_proc->at_cmd.completed);
+	init_waitqueue_head(&mdbg_proc->assert.rxwait);
+	init_waitqueue_head(&mdbg_proc->loopcheck.rxwait);
+	mutex_init(&mdbg_proc->mutex);
 
 	mdbg_proc->dir_name = "mdbg";
 	mdbg_proc->procdir = proc_mkdir(mdbg_proc->dir_name, NULL);
+	if (!mdbg_proc->procdir)
+		goto err_proc;
 
 	mdbg_proc->assert.name = "assert";
 	mdbg_proc->assert.entry = proc_create_data(mdbg_proc->assert.name,
@@ -1067,19 +1073,21 @@ int proc_fs_init(void)
 						&mdbg_snap_shoot_seq_fops,
 						&(mdbg_proc->snap_shoot));
 
+	if (!mdbg_proc->assert.entry || !mdbg_proc->loopcheck.entry ||
+	    !mdbg_proc->at_cmd.entry || !mdbg_proc->snap_shoot.entry)
+		goto err_proc;
+
 	mdbg_fs_channel_init();
 
-	init_completion(&mdbg_proc->assert.completed);
-	init_completion(&mdbg_proc->loopcheck.completed);
-	init_completion(&mdbg_proc->at_cmd.completed);
-	init_waitqueue_head(&mdbg_proc->assert.rxwait);
-	init_waitqueue_head(&mdbg_proc->loopcheck.rxwait);
-	mutex_init(&mdbg_proc->mutex);
-
-	if (mdbg_memory_alloc() < 0)
-		return -ENOMEM;
-
 	return 0;
+
+err_proc:
+	proc_remove(mdbg_proc->procdir);
+	mutex_destroy(&mdbg_proc->mutex);
+	mdbg_memory_free();
+	kfree(mdbg_proc);
+	mdbg_proc = NULL;
+	return -ENOMEM;
 }
 
 void proc_fs_exit(void)
@@ -1099,7 +1107,9 @@ void proc_fs_exit(void)
 
 int get_loopcheck_status(void)
 {
-	return mdbg_proc->fail_count;
+	struct mdbg_proc_t *proc = READ_ONCE(mdbg_proc);
+
+	return proc ? READ_ONCE(proc->fail_count) : -EPROBE_DEFER;
 }
 
 void wakeup_loopcheck_int(void)

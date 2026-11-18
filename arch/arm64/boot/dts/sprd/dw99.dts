@@ -961,6 +961,7 @@
 				reg = <0x00 0x40380000 0x00 0x10000>;
 				#address-cells = <0x01>;
 				#size-cells = <0x00>;
+				hwlocks = <0x02 0x00>;
 				sprd,hw-channels = <0x1e 0x8c20>;
 
 				pmic@0 {
@@ -5314,8 +5315,7 @@
 	};
 
 	chosen {
-		stdout-path = "/soc/ap-apb/serial@70100000";
-		bootargs = "keep_bootcon loglevel=7 init=/init root=/dev/ram0 rw androidboot.hardware=sl8541e_1h10 androidboot.selinux=permissive androidboot.super_partition=super androidboot.dynamic_partitions=true firmware_class.path=/vendor/firmware";
+		bootargs = "keep_bootcon console=ttynull loglevel=7 init=/init root=/dev/ram0 rw androidboot.hardware=sl8541e_1h10 androidboot.selinux=permissive androidboot.super_partition=super androidboot.dynamic_partitions=true firmware_class.path=/vendor/firmware";
 	};
 
 	interrupt-controller {

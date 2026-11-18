@@ -20,7 +20,8 @@
 #include "../platform/gnss/gnss_common.h"
 extern void gnss_file_path_set(char *buf);
 
-static struct mutex marlin_lock;
+static DEFINE_MUTEX(marlin_lock);
+static bool marlin_ready;
 static struct wifi_calibration wifi_data;
 
 /* efuse data */
@@ -41,7 +42,13 @@ struct sprdwcn_gnss_ops *gnss_ops;
 
 void wcn_boot_init(void)
 {
-	mutex_init(&marlin_lock);
+}
+
+void wcn_set_ready(bool ready)
+{
+	mutex_lock(&marlin_lock);
+	marlin_ready = ready;
+	mutex_unlock(&marlin_lock);
 }
 
 void wcn_device_poweroff(void)
@@ -973,6 +980,10 @@ int start_integrate_wcn(u32 subsys)
 
 	WCN_INFO("subsys:%d\n", subsys);
 	mutex_lock(&marlin_lock);
+	if (!marlin_ready) {
+		mutex_unlock(&marlin_lock);
+		return -EPROBE_DEFER;
+	}
 	if (unlikely(sprdwcn_bus_get_carddump_status() != 0)) {
 		WCN_ERR("in dump status subsys=%d!\n", subsys);
 		mutex_unlock(&marlin_lock);
@@ -1137,6 +1148,10 @@ int stop_integrate_wcn(u32 subsys)
 	u32 ret;
 
 	mutex_lock(&marlin_lock);
+	if (!marlin_ready) {
+		mutex_unlock(&marlin_lock);
+		return -EPROBE_DEFER;
+	}
 	if (unlikely(sprdwcn_bus_get_carddump_status() != 0)) {
 		WCN_ERR("err:in dump status subsys=%d!\n", subsys);
 		mutex_unlock(&marlin_lock);

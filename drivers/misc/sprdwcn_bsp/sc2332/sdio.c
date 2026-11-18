@@ -868,7 +868,7 @@ struct sprdwl_intf *sprdwl_intf_create()
 	struct sprdwl_intf *intf;
 
 	intf = kzalloc(sizeof(*intf), GFP_ATOMIC);
-	if (IS_ERR(intf)) {
+	if (!intf) {
 		pr_err("allocate fail\n");
 		return NULL;
 	}
@@ -896,7 +896,7 @@ int sprdwl_intf_init(struct sprdwl_intf *intf,
 	ret = start_marlin(MARLIN_WIFI);
 	if (ret) {
 		pr_err("%s power on chipset failed\n", __func__);
-		return -ENODEV;
+		return ret == -EPROBE_DEFER ? ret : -ENODEV;
 	}
 
 	intf->pdev = pdev;
@@ -1020,6 +1020,8 @@ err_tx_list1:
 	sprdwl_msg_deinit(&intf->tx_list0);
 err_tx_list0:
 	wakeup_source_unregister(intf->keep_wake);
+	p_sprdwl_intf = NULL;
+	stop_marlin(MARLIN_WIFI);
 	return ret;
 }
 

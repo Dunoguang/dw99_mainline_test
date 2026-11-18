@@ -821,6 +821,7 @@ static void sprdwl_set_mac_addr(struct sprdwl_vif *vif, u8 *pending_addr,
 	case NL80211_IFTYPE_P2P_CLIENT:
 	case NL80211_IFTYPE_P2P_GO:
 		addr[4] ^= 0x80;
+		fallthrough;
 	case NL80211_IFTYPE_P2P_DEVICE:
 		addr[0] ^= 0x02;
 		break;
@@ -1148,7 +1149,8 @@ static int sprdwl_probe(struct platform_device *pdev)
 err_core_init:
 	sprdwl_intf_deinit(intf);
 err_intf_init:
-	sprdwl_core_free((struct sprdwl_priv *)intf->priv);
+	platform_set_drvdata(pdev, NULL);
+	sprdwl_core_free(priv);
 err_core_create:
 	sprdwl_intf_free(intf);
 	pr_err("err, driver is not ok\n");

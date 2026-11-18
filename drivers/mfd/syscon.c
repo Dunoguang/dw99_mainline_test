@@ -16,20 +16,91 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/panic.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/mfd/syscon.h>
 #include <linux/slab.h>
 
+#define SYSCON_HWLOCK_TIMEOUT_MS 5000
+
 static DEFINE_MUTEX(syscon_list_lock);
 static LIST_HEAD(syscon_list);
+static LIST_HEAD(syscon_hwlocks);
+
+struct syscon_hwlock {
+	struct list_head list;
+	struct hwspinlock *lock;
+	unsigned int id;
+	unsigned int users;
+};
 
 struct syscon {
 	struct device_node *np;
 	struct regmap *regmap;
 	struct reset_control *reset;
 	struct list_head list;
+	struct syscon_hwlock *hwlock;
+	unsigned long hwlock_flags;
 };
+
+/* Protected by syscon_list_lock, as are syscon registrations. */
+static struct syscon_hwlock *syscon_hwlock_get(unsigned int id)
+{
+	struct syscon_hwlock *entry;
+
+	list_for_each_entry(entry, &syscon_hwlocks, list) {
+		if (entry->id == id) {
+			entry->users++;
+			return entry;
+		}
+	}
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry)
+		return ERR_PTR(-ENOMEM);
+	entry->lock = hwspin_lock_request_specific(id);
+	if (!entry->lock) {
+		kfree(entry);
+		return ERR_PTR(-ENXIO);
+	}
+	entry->id = id;
+	entry->users = 1;
+	list_add_tail(&entry->list, &syscon_hwlocks);
+	return entry;
+}
+
+static void syscon_hwlock_put(struct syscon_hwlock *entry)
+{
+	if (--entry->users)
+		return;
+	list_del(&entry->list);
+	hwspin_lock_free(entry->lock);
+	kfree(entry);
+}
+
+static void syscon_hwlock_lock(void *arg)
+{
+	struct syscon *syscon = arg;
+	unsigned long flags = 0;
+	int ret;
+
+	ret = hwspin_lock_timeout_irqsave(syscon->hwlock->lock,
+					   SYSCON_HWLOCK_TIMEOUT_MS,
+					   &flags);
+	if (unlikely(ret))
+		panic("syscon: failed to acquire hwspinlock %u: %d\n",
+		      syscon->hwlock->id, ret);
+	syscon->hwlock_flags = flags;
+}
+
+static void syscon_hwlock_unlock(void *arg)
+{
+	struct syscon *syscon = arg;
+	unsigned long flags = syscon->hwlock_flags;
+
+	hwspin_unlock_irqrestore(syscon->hwlock->lock, &flags);
+}
 
 static const struct regmap_config syscon_regmap_config = {
 	.reg_bits = 32,
@@ -81,9 +152,23 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_res)
 
 	ret = of_hwspin_lock_get_id(np, 0);
 	if (ret > 0 || (IS_ENABLED(CONFIG_HWSPINLOCK) && ret == 0)) {
-		syscon_config.use_hwlock = true;
-		syscon_config.hwlock_id = ret;
-		syscon_config.hwlock_mode = HWLOCK_IRQSTATE;
+		/* SC9832E syscons share one hardware lock across multiple maps. */
+		if (of_machine_is_compatible("sprd,sc9832e")) {
+			struct syscon_hwlock *hwlock = syscon_hwlock_get(ret);
+
+			if (IS_ERR(hwlock)) {
+				ret = PTR_ERR(hwlock);
+				goto err_regmap;
+			}
+			syscon->hwlock = hwlock;
+			syscon_config.lock = syscon_hwlock_lock;
+			syscon_config.unlock = syscon_hwlock_unlock;
+			syscon_config.lock_arg = syscon;
+		} else {
+			syscon_config.use_hwlock = true;
+			syscon_config.hwlock_id = ret;
+			syscon_config.hwlock_mode = HWLOCK_IRQSTATE;
+		}
 	} else if (ret < 0) {
 		switch (ret) {
 		case -ENOENT:
@@ -161,6 +246,8 @@ err_attach_clk:
 err_clk:
 	regmap_exit(regmap);
 err_regmap:
+	if (syscon->hwlock)
+		syscon_hwlock_put(syscon->hwlock);
 	iounmap(base);
 	return ERR_PTR(ret);
 }

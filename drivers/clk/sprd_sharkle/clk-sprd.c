@@ -42,7 +42,7 @@ static void __init sprd_clock_exit(void)
 	struct device_node *np;
 	struct regmap *aon_apb_gpr, *pmu_apb_gpr;
 	struct clk	 *clk;
-	int i, num;
+	int i, num, ret;
 	u32 offset, msk, value;
 
 	np = of_find_node_by_name(NULL, "clk-default");
@@ -70,8 +70,17 @@ static void __init sprd_clock_exit(void)
 		return;
 	for (i = 0; i < num; i++) {
 		clk = of_clk_get(np, i);
-		clk_prepare_enable(clk);
-		clk_disable_unprepare(clk);
+		if (IS_ERR(clk)) {
+			pr_err("%s: failed to get clock %d: %ld\n",
+			       __func__, i, PTR_ERR(clk));
+			continue;
+		}
+		ret = clk_prepare_enable(clk);
+		if (ret)
+			pr_err("%s: failed to enable clock %d: %d\n", __func__, i, ret);
+		else
+			clk_disable_unprepare(clk);
+		clk_put(clk);
 	}
 	clk_debug("eb0=0x%x,eb1=0x%x", sprd_reg_read(aon_apb_gpr, 0x0),
 		sprd_reg_read(aon_apb_gpr, 0x4));
@@ -102,7 +111,7 @@ static struct of_device_id sprd_clock_dt_ids[] __initdata = {
 	{ .compatible = "sprd,clk-default", .data = &sprd_clock_func },
 };
 
-int __init sprd_clock_post_init(void)
+static int __init sprd_clock_post_init(void)
 {
 	int i;
 	struct device_node *np;
@@ -123,4 +132,5 @@ int __init sprd_clock_post_init(void)
 
 	return 0;
 }
-arch_initcall_sync(sprd_clock_post_init);
+/* Run after the hwspinlock provider has been populated from OF. */
+subsys_initcall(sprd_clock_post_init);

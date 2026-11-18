@@ -518,8 +518,10 @@ static int sprd_adi_probe(struct platform_device *pdev)
 	struct sprd_adi *sadi;
 	unsigned int value, chip_num;
 	struct resource *res;
+	void __iomem *mapped_base;
 	unsigned long sprd_adi_phys, sprd_adi_base;
-	int ret = 0;
+	int ret = 0, hwlock_id;
+	bool has_hwlock;
 
 	if (!pdev->dev.of_node) {
 		pr_err("Can't find the adi bus node!\n");
@@ -533,11 +535,10 @@ static int sprd_adi_probe(struct platform_device *pdev)
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	sprd_adi_base = (unsigned long)devm_ioremap_resource(&pdev->dev, res);
-	if (!sprd_adi_base) {
-		pr_err("ADI ioremap failed!\n");
-		return -ENOMEM;
-	}
+	mapped_base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(mapped_base))
+		return PTR_ERR(mapped_base);
+	sprd_adi_base = (unsigned long)mapped_base;
 	sprd_adi_phys = res->start;
 
 	/* alloc spi_master */
@@ -566,10 +567,19 @@ static int sprd_adi_probe(struct platform_device *pdev)
 
 	spin_lock_init(&sadi->spinlock);
 	if (!of_device_is_compatible(pdev->dev.of_node, "sprd,r4p0-adi")) {
-		sadi->hw_lock = hwspin_lock_request_specific(HWLOCK_ADI);
+		has_hwlock = of_property_read_bool(pdev->dev.of_node, "hwlocks");
+		hwlock_id = has_hwlock ?
+			of_hwspin_lock_get_id(pdev->dev.of_node, 0) : HWLOCK_ADI;
+		if (hwlock_id < 0) {
+			ret = dev_err_probe(&pdev->dev, hwlock_id,
+					    "cannot resolve ADI hardware lock\n");
+			goto master_alloc_fail;
+		}
+		sadi->hw_lock = hwspin_lock_request_specific(hwlock_id);
 		if (!sadi->hw_lock) {
-			pr_err("ADI can not get the hardware spinlock.\n");
-			ret = -ENXIO;
+			ret = has_hwlock ? -ENXIO : -EPROBE_DEFER;
+			dev_err_probe(&pdev->dev, ret,
+				      "ADI hardware lock %d unavailable\n", hwlock_id);
 			goto master_alloc_fail;
 		}
 	}
@@ -651,7 +661,9 @@ static int sprd_adi_probe(struct platform_device *pdev)
 put_master:
 	spi_controller_put(adi_ctlr);
 master_alloc_fail:
-	kfree(adi_ctlr);
+	if (sadi->hw_lock)
+		hwspin_lock_free(sadi->hw_lock);
+	spi_controller_put(adi_ctlr);
 	pr_err("ADI bus probe failed ret=%d!\n", ret);
 	return ret;
 }
@@ -662,9 +674,10 @@ static void sprd_adi_remove(struct platform_device *pdev)
 	struct sprd_adi *sadi = spi_controller_get_devdata(adi_ctlr);
 
 	spi_bitbang_stop(&sadi->bitbang);
-	hwspin_lock_free(sadi->hw_lock);
+	if (sadi->hw_lock)
+		hwspin_lock_free(sadi->hw_lock);
+	spi_controller_put(sadi->bitbang.ctlr);
 	spi_controller_put(adi_ctlr);
-	kfree(adi_ctlr);
 }
 
 static const struct of_device_id sprd_adi_of_match[] = {

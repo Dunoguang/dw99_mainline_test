@@ -269,6 +269,8 @@ int mdbg_ring_init(void)
 	ring_dev->ring = mdbg_ring_alloc(MDBG_RX_RING_SIZE);
 	if (!(ring_dev->ring)) {
 		WCN_ERR("Ring malloc error.");
+		kfree(ring_dev);
+		ring_dev = NULL;
 		return -MDBG_ERR_MALLOC_FAIL;
 	}
 

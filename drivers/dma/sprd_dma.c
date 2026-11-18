@@ -1708,8 +1708,8 @@ static int sprd_dma_probe(struct platform_device *pdev)
 	dma_gpr = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
 				"sprd,syscon-dma-glb");
 	if (IS_ERR(dma_gpr)) {
-		pr_err(DMA_TAG "Get the dma gloabl syscon failed!\n");
-		return -ENODEV;
+		return dev_err_probe(&pdev->dev, PTR_ERR(dma_gpr),
+				     "failed to get DMA global syscon\n");
 	}
 
 	clk = of_clk_get_by_name(pdev->dev.of_node, "enable");

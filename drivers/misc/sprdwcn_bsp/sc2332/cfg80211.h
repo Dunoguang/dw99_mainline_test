@@ -29,8 +29,12 @@
 /* cipher suite */
 #define WLAN_CIPHER_SUITE_PMK           0x000FACFF
 /* AKM suite */
+#ifndef WLAN_AKM_SUITE_FT_8021X
 #define WLAN_AKM_SUITE_FT_8021X		0x000FAC03
+#endif
+#ifndef WLAN_AKM_SUITE_FT_PSK
 #define WLAN_AKM_SUITE_FT_PSK		0x000FAC04
+#endif
 #define WLAN_AKM_SUITE_WAPI_CERT	0x00147201
 #define WLAN_AKM_SUITE_WAPI_PSK		0x00147202
 

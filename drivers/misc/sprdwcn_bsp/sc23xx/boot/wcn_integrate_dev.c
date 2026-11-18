@@ -46,6 +46,7 @@
 
 struct wcn_device_manage s_wcn_device;
 
+static DEFINE_MUTEX(wcn_probe_lock);
 static void wcn_global_source_init(void)
 {
 	wcn_boot_init();
@@ -238,6 +239,7 @@ static int wcn_parse_dt(struct platform_device *pdev,
 	u32 cr_num;
 	int index, ret;
 	u32 i;
+	struct regulator *vddwcn;
 	struct resource res;
 	const struct of_device_id *of_id =
 		of_match_node(wcn_match_table, np);
@@ -267,7 +269,7 @@ static int wcn_parse_dt(struct platform_device *pdev,
 						"sprd,syscon-ap-apb");
 	if (IS_ERR(wcn_dev->rmap[REGMAP_AON_APB])) {
 		WCN_ERR("failed to find sprd,syscon-ap-apb\n");
-		return -EINVAL;
+		return PTR_ERR(wcn_dev->rmap[REGMAP_AON_APB]);
 	}
 
 	wcn_parse_platform_chip_id(wcn_dev);
@@ -277,7 +279,7 @@ static int wcn_parse_dt(struct platform_device *pdev,
 						"sprd,syscon-ap-pmu");
 	if (IS_ERR(wcn_dev->rmap[REGMAP_PMU_APB])) {
 		WCN_ERR("failed to find sprd,syscon-ap-pmu\n");
-		return -EINVAL;
+		return PTR_ERR(wcn_dev->rmap[REGMAP_PMU_APB]);
 	}
 
 	/* get pub apb reg handle:SHARKLE has it, but PIKE2 hasn't  */
@@ -287,7 +289,7 @@ static int wcn_parse_dt(struct platform_device *pdev,
 						"sprd,syscon-ap-pub-apb");
 		if (IS_ERR(wcn_dev->rmap[REGMAP_PUB_APB])) {
 			WCN_ERR("failed to find sprd,syscon-ap-pub-apb\n");
-			return -EINVAL;
+			return PTR_ERR(wcn_dev->rmap[REGMAP_PUB_APB]);
 		}
 	}
 
@@ -297,7 +299,7 @@ static int wcn_parse_dt(struct platform_device *pdev,
 					np, "sprd,syscon-anlg-wrap-wcn");
 	if (IS_ERR(wcn_dev->rmap[REGMAP_ANLG_WRAP_WCN])) {
 		WCN_ERR("failed to find sprd,anlg-wrap-wcn\n");
-		return -EINVAL;
+		return PTR_ERR(wcn_dev->rmap[REGMAP_ANLG_WRAP_WCN]);
 	}
 
 	if (wcn_platform_chip_type() == WCN_PLATFORM_TYPE_SHARKLE) {
@@ -307,7 +309,7 @@ static int wcn_parse_dt(struct platform_device *pdev,
 					np, "sprd,syscon-anlg-phy-g6");
 		if (IS_ERR(wcn_dev->rmap[REGMAP_ANLG_PHY_G6])) {
 			WCN_ERR("failed to find sprd,anlg-phy-g6\n");
-			return -EINVAL;
+			return PTR_ERR(wcn_dev->rmap[REGMAP_ANLG_PHY_G6]);
 		}
 	}
 
@@ -318,7 +320,7 @@ static int wcn_parse_dt(struct platform_device *pdev,
 		syscon_regmap_lookup_by_phandle(np, "sprd,syscon-wcn-reg");
 		if (IS_ERR(wcn_dev->rmap[REGMAP_WCN_REG])) {
 			WCN_ERR("failed to find sprd,wcn-reg\n");
-			return -EINVAL;
+			return PTR_ERR(wcn_dev->rmap[REGMAP_WCN_REG]);
 		}
 
 		WCN_INFO("success to find sprd,wcn-reg for SharkL3 %p\n",
@@ -329,8 +331,11 @@ static int wcn_parse_dt(struct platform_device *pdev,
 		/* get  anlg wrap wcn reg handle */
 		wcn_dev->rmap[REGMAP_ANLG_PHY_G5] =
 		syscon_regmap_lookup_by_phandle(np, "sprd,syscon-anlg-phy-g5");
-		if (IS_ERR(wcn_dev->rmap[REGMAP_ANLG_PHY_G5]))
+		if (IS_ERR(wcn_dev->rmap[REGMAP_ANLG_PHY_G5])) {
 			WCN_ERR("failed to find sprd,anlg-phy-g5\n");
+			if (PTR_ERR(wcn_dev->rmap[REGMAP_ANLG_PHY_G5]) == -EPROBE_DEFER)
+				return -EPROBE_DEFER;
+		}
 	}
 
 	ret = of_property_read_u32(np, "sprd,ctrl-probe-num",
@@ -500,26 +505,6 @@ static int wcn_parse_dt(struct platform_device *pdev,
 		WCN_INFO("ctrl_shutdown_type[%d] = 0x%08x\n",
 			i, wcn_dev->ctrl_shutdown_type[i]);
 
-	/* get vddwcn */
-	if (s_wcn_device.vddwcn == NULL) {
-		s_wcn_device.vddwcn = devm_regulator_get(&pdev->dev,
-						     "vddwcn");
-		if (IS_ERR(s_wcn_device.vddwcn)) {
-			WCN_ERR("Get regulator of vddwcn error!\n");
-			return -EINVAL;
-		}
-	}
-
-	/* get vddwifipa: only MARLIN has it */
-	if (strcmp(wcn_dev->name, WCN_MARLIN_DEV_NAME) == 0) {
-		wcn_dev->vddwifipa = devm_regulator_get(&pdev->dev,
-							"vddwifipa");
-		if (IS_ERR(wcn_dev->vddwifipa)) {
-			WCN_ERR("Get regulator of vddwifipa error!\n");
-			return -EINVAL;
-		}
-	}
-
 	/* get cp base */
 	index = 0;
 	ret = of_address_to_resource(np, index, &res);
@@ -549,6 +534,20 @@ static int wcn_parse_dt(struct platform_device *pdev,
 		return -EINVAL;
 
 	wcn_dev->start = pcproc_data->start;
+	/* Obtain the shared regulator last, so no parse failure can retain it. */
+	if (strcmp(wcn_dev->name, WCN_MARLIN_DEV_NAME) == 0) {
+		wcn_dev->vddwifipa = devm_regulator_get(&pdev->dev, "vddwifipa");
+		if (IS_ERR(wcn_dev->vddwifipa))
+			return PTR_ERR(wcn_dev->vddwifipa);
+	}
+
+	if (!s_wcn_device.vddwcn) {
+		vddwcn = regulator_get(&pdev->dev, "vddwcn");
+		if (IS_ERR(vddwcn))
+			return PTR_ERR(vddwcn);
+		s_wcn_device.vddwcn = vddwcn;
+	}
+
 	wcn_dev->stop = pcproc_data->stop;
 
 	return 0;
@@ -713,17 +712,23 @@ static int wcn_probe(struct platform_device *pdev)
 {
 	struct wcn_device *wcn_dev;
 	static int first = 1;
+	bool had_vddwcn;
+	int ret;
 
 	WCN_INFO("start!\n");
 
+	mutex_lock(&wcn_probe_lock);
+	had_vddwcn = !!s_wcn_device.vddwcn;
 	wcn_dev = kzalloc(sizeof(struct wcn_device), GFP_KERNEL);
-	if (!wcn_dev)
-		return -ENOMEM;
+	if (!wcn_dev) {
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
 
-	if (wcn_parse_dt(pdev, wcn_dev) < 0) {
+	ret = wcn_parse_dt(pdev, wcn_dev);
+	if (ret < 0) {
 		WCN_ERR("wcn_parse_dt Failed!\n");
-		kfree(wcn_dev);
-		return -EINVAL;
+		goto err_free;
 	}
 
 	/* init the regs which can be init in the driver probe */
@@ -754,10 +759,16 @@ static int wcn_probe(struct platform_device *pdev)
 		wcn_global_source_init();
 
 		/* register ops */
-		wcn_bus_init();
+		ret = wcn_bus_init();
+		if (ret)
+			goto err_platform;
 
-		proc_fs_init();
-		log_dev_init();
+		ret = proc_fs_init();
+		if (ret)
+			goto err_bus;
+		ret = log_dev_init();
+		if (ret)
+			goto err_proc;
 		mdbg_atcmd_owner_init();
 		wcn_marlin_write_efuse();
 	} else if (strcmp(wcn_dev->name, WCN_GNSS_DEV_NAME) == 0)
@@ -781,18 +792,51 @@ static int wcn_probe(struct platform_device *pdev)
 
 	WCN_INFO("finish!\n");
 
+	if (strcmp(wcn_dev->name, WCN_MARLIN_DEV_NAME) == 0)
+		wcn_set_ready(true);
+	mutex_unlock(&wcn_probe_lock);
 	return 0;
+
+err_proc:
+	proc_fs_exit();
+err_bus:
+	wcn_bus_deinit();
+err_platform:
+	s_wcn_device.btwf_device = NULL;
+	wcn_platform_fs_exit(wcn_dev);
+	platform_set_drvdata(pdev, NULL);
+err_free:
+	if (!had_vddwcn && s_wcn_device.vddwcn) {
+		regulator_put(s_wcn_device.vddwcn);
+		s_wcn_device.vddwcn = NULL;
+		s_wcn_device.vddcon_voltage_setted = false;
+	}
+	kfree(wcn_dev);
+out_unlock:
+	mutex_unlock(&wcn_probe_lock);
+	return ret;
 }
 
 static void wcn_remove(struct platform_device *pdev)
 {
 	struct wcn_device *wcn_dev = platform_get_drvdata(pdev);
 
-	if (wcn_dev)
-		WCN_INFO("dev name %s\n", wcn_dev->name);
-
+	mutex_lock(&wcn_probe_lock);
+	if (wcn_dev == s_wcn_device.btwf_device)
+		wcn_set_ready(false);
+	cancel_delayed_work_sync(&wcn_dev->power_wq);
+	if (wcn_dev == s_wcn_device.btwf_device) {
+		mdbg_atcmd_owner_deinit();
+		log_dev_exit();
+		proc_fs_exit();
+		wcn_bus_deinit();
+		s_wcn_device.btwf_device = NULL;
+	} else if (wcn_dev == s_wcn_device.gnss_device) {
+		s_wcn_device.gnss_device = NULL;
+	}
 	wcn_platform_fs_exit(wcn_dev);
 	kfree(wcn_dev);
+	mutex_unlock(&wcn_probe_lock);
 }
 
 static void wcn_shutdown(struct platform_device *pdev)
@@ -841,6 +885,10 @@ late_initcall(wcn_init);
 static void __exit wcn_exit(void)
 {
 	platform_driver_unregister(&wcn_driver);
+	if (s_wcn_device.vddwcn) {
+		regulator_put(s_wcn_device.vddwcn);
+		s_wcn_device.vddwcn = NULL;
+	}
 }
 module_exit(wcn_exit);
 
