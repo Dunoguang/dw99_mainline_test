@@ -22,6 +22,7 @@
 #include <linux/irq.h>
 #include <linux/irqflags.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -30,6 +31,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
+#include <linux/spi/spi-sprd-adi.h>
 #include <linux/spi/spi_bitbang.h>
 #include <linux/sprd_hwspinlock.h>
 #include <linux/sizes.h>
@@ -101,6 +103,24 @@
 
 #define HW_CHN_CNT			50
 
+/* Separate, aggregate microsecond budgets for the atomic restart path. */
+#define ADI_RESTART_LOCK_WAIT_US	1000
+#define ADI_RESTART_POLL_WAIT_US	3000
+#define ADI_RESTART_RELOCK_WAIT_US	500
+
+#define ADI_WDG_LOAD_LOW		0x00
+#define ADI_WDG_LOAD_HIGH		0x04
+#define ADI_WDG_CTRL			0x08
+#define ADI_WDG_INT_RAW			0x10
+#define ADI_WDG_LOCK			0x20
+#define ADI_WDG_INT_EN			BIT(0)
+#define ADI_WDG_CNT_EN			BIT(1)
+#define ADI_WDG_NEW_VER			BIT(2)
+#define ADI_WDG_RST_EN			BIT(3)
+#define ADI_WDG_LOAD_BUSY		BIT(4)
+#define ADI_WDG_UNLOCK_KEY		0xe551
+#define ADI_WDG_RELOCK_KEY		0x1aae
+
 /* structure definition */
 typedef enum ARM_WRITE_FIFO_STS {
 	FIFO_EMPTY = 0,
@@ -127,6 +147,11 @@ struct sprd_adi {
 	unsigned long		base;
 	unsigned long		slave_vbase;
 	resource_size_t		slave_pbase;
+	resource_size_t		restart_map_size;
+	struct list_head	restart_node;
+	u32			restart_reg_offset;
+	u32			restart_addr_mask;
+	u32			restart_addr_shift;
 	u32			irq;
 	const void		*tx;
 	void			*rx;
@@ -137,11 +162,9 @@ struct sprd_adi {
 	unsigned long	(*trans_addr)(struct sprd_adi *, unsigned long);
 };
 
-/* ADI write type */
-enum ADI_WRITE_MODE {
-	SET_MODE = 0,
-	FAST_SET_MODE,
-};
+/* Held throughout a restart to prevent the selected controller being removed. */
+static LIST_HEAD(sprd_adi_restart_controllers);
+static DEFINE_SPINLOCK(sprd_adi_restart_controllers_lock);
 
 static u32 readback_addr_mak;
 static u32 readback_offset;
@@ -446,6 +469,306 @@ int sprd_adi_bufs(struct spi_device *adi_dev, struct spi_transfer *t)
 	return ret;
 }
 
+/*
+ * The regular ADI transfer path uses a jiffies-based hardware-lock timeout
+ * and an unbounded FIFO-full wait.  Restart can run with local IRQs disabled,
+ * so it must use only these bounded helpers and hold the same ADI lock for
+ * the entire PMIC sequence.  The shared budget also bounds nested read/load
+ * polls, rather than multiplying one timeout by another.
+ */
+static int sprd_adi_restart_delay(unsigned int *budget)
+{
+	if (!*budget)
+		return -ETIMEDOUT;
+	--*budget;
+	udelay(1);
+	return 0;
+}
+
+static bool sprd_adi_restart_valid_reg(u32 reg)
+{
+	return !(reg & 3) && reg <= ADI_SLAVE_ADDR_SIZE - sizeof(u32);
+}
+
+static int sprd_adi_restart_validate(struct sprd_adi *sadi,
+				     const struct sprd_adi_restart_config *cfg)
+{
+	resource_size_t last;
+
+	if (!sadi->base || !sadi->slave_vbase || !sadi->slave_pbase ||
+	    sadi->restart_map_size < ADI_SLAVE_OFFSET + ADI_SLAVE_ADDR_SIZE)
+		return -ENODEV;
+
+	/* A read command is an unsigned long physical address in this driver. */
+	last = sadi->slave_pbase + ADI_SLAVE_ADDR_SIZE - sizeof(u32);
+	if (last < sadi->slave_pbase || last > 0xffffffffULL ||
+	    (resource_size_t)(unsigned long)last != last ||
+	    sadi->slave_vbase + ADI_SLAVE_ADDR_SIZE - sizeof(u32) < sadi->slave_vbase)
+		return -EINVAL;
+
+	if (cfg->wdg_base > ADI_SLAVE_ADDR_SIZE - sizeof(u32) - ADI_WDG_LOCK ||
+	    !sprd_adi_restart_valid_reg(cfg->wdg_base) ||
+	    !sprd_adi_restart_valid_reg(cfg->module_en_reg) ||
+	    !sprd_adi_restart_valid_reg(cfg->rtc_clk_en_reg) ||
+	    !sprd_adi_restart_valid_reg(cfg->reset_status_reg) ||
+	    (cfg->write_latches &&
+	     (!sprd_adi_restart_valid_reg(cfg->latch_hi_reg) ||
+	      !sprd_adi_restart_valid_reg(cfg->latch_lo_reg))))
+		return -EINVAL;
+
+	if (!cfg->module_en_mask || !cfg->rtc_clk_en_mask || !cfg->mode_mask ||
+	    ((cfg->module_en_mask | cfg->rtc_clk_en_mask | cfg->mode_mask |
+	      cfg->mode_value) & ~0xffffU) ||
+	    (cfg->write_latches &&
+	     ((cfg->latch_hi_value | cfg->latch_lo_value) & ~0xffffU)))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int sprd_adi_restart_lock(struct sprd_adi *sadi, unsigned long *flags)
+{
+	unsigned int i;
+	int ret;
+
+	if (IS_ERR(sadi->hw_lock))
+		return -ENODEV;
+
+	for (i = 0; i < ADI_RESTART_LOCK_WAIT_US; i++) {
+		if (sadi->hw_lock) {
+			ret = hwspin_trylock_irqsave(sadi->hw_lock, flags);
+			if (ret != -EBUSY)
+				return ret;
+		} else if (spin_trylock_irqsave(&sadi->spinlock, *flags)) {
+			return 0;
+		}
+		udelay(1);
+	}
+	return -ETIMEDOUT;
+}
+
+static void sprd_adi_restart_unlock(struct sprd_adi *sadi, unsigned long *flags)
+{
+	if (sadi->hw_lock)
+		hwspin_unlock_irqrestore(sadi->hw_lock, flags);
+	else
+		spin_unlock_irqrestore(&sadi->spinlock, *flags);
+}
+
+static int sprd_adi_restart_fifo_wait(struct sprd_adi *sadi, u32 bit,
+				      bool set, unsigned int *budget)
+{
+	u32 reg_offset = sadi->restart_reg_offset;
+	u32 val;
+	int ret;
+
+	for (;;) {
+		val = readl_relaxed((void __iomem *)
+				    (sadi->base + REG_ADI_ARM_FIFO_STS));
+		if (!!(val & bit) == set)
+			return 0;
+		ret = sprd_adi_restart_delay(budget);
+		if (ret)
+			return ret;
+	}
+}
+
+static int sprd_adi_restart_read(struct sprd_adi *sadi, u32 reg, u32 *value,
+				 unsigned int *budget)
+{
+	unsigned long paddr = (unsigned long)(sadi->slave_pbase + reg);
+	u32 reg_offset = sadi->restart_reg_offset;
+	u32 val, rd_addr;
+	int ret;
+
+	/* Complete every earlier posted write before issuing a read command. */
+	ret = sprd_adi_restart_fifo_wait(sadi, BIT_FIFO_EMPTY, true, budget);
+	if (ret)
+		return ret;
+	writel_relaxed((u32)paddr, (void __iomem *)(sadi->base + REG_ADI_RD_CMD));
+	for (;;) {
+		val = readl_relaxed((void __iomem *)(sadi->base + REG_ADI_RD_DATA));
+		if (!(val & BIT_RD_CMD_BUSY))
+			break;
+		ret = sprd_adi_restart_delay(budget);
+		if (ret)
+			return ret;
+	}
+
+	rd_addr = (val >> SHIFT_RD_ADDR) & sadi->restart_addr_mask;
+	if (rd_addr != ((paddr & sadi->restart_addr_mask) >>
+			sadi->restart_addr_shift))
+		return -EIO;
+	*value = val & MASK_RD_VALU;
+	return 0;
+}
+
+static int sprd_adi_restart_write(struct sprd_adi *sadi, u32 reg, u32 value,
+				  unsigned int *budget)
+{
+	int ret;
+
+	ret = sprd_adi_restart_fifo_wait(sadi, BIT_FIFO_EMPTY, true, budget);
+	if (ret)
+		return ret;
+	ret = sprd_adi_restart_fifo_wait(sadi, BIT_FIFO_FULL, false, budget);
+	if (ret)
+		return ret;
+	writel_relaxed(value, (void __iomem *)(sadi->slave_vbase + reg));
+	return sprd_adi_restart_fifo_wait(sadi, BIT_FIFO_EMPTY, true, budget);
+}
+
+static int sprd_adi_restart_update(struct sprd_adi *sadi, u32 reg, u32 mask,
+				   u32 value, unsigned int *budget)
+{
+	u32 old;
+	int ret;
+
+	ret = sprd_adi_restart_read(sadi, reg, &old, budget);
+	if (ret)
+		return ret;
+	return sprd_adi_restart_write(sadi, reg, (old & ~mask) | (value & mask),
+				      budget);
+}
+
+static int sprd_adi_restart_wait_load(struct sprd_adi *sadi, u32 base,
+				      unsigned int *budget)
+{
+	u32 val;
+	int ret;
+
+	for (;;) {
+		ret = sprd_adi_restart_read(sadi, base + ADI_WDG_INT_RAW, &val,
+					    budget);
+		if (ret)
+			return ret;
+		if (!(val & ADI_WDG_LOAD_BUSY))
+			return 0;
+		ret = sprd_adi_restart_delay(budget);
+		if (ret)
+			return ret;
+	}
+}
+
+static int sprd_adi_restart_sequence(struct sprd_adi *sadi,
+				     const struct sprd_adi_restart_config *cfg)
+{
+	unsigned int budget = ADI_RESTART_POLL_WAIT_US;
+	unsigned int relock_budget = ADI_RESTART_RELOCK_WAIT_US;
+	unsigned long flags;
+	bool may_be_unlocked = false;
+	int ret;
+
+	ret = sprd_adi_restart_validate(sadi, cfg);
+	if (ret)
+		return ret;
+	ret = sprd_adi_restart_lock(sadi, &flags);
+	if (ret)
+		return ret;
+
+	/* U-Boot clears RTC latch bits first, then sets them, before mode. */
+	if (cfg->write_latches) {
+		ret = sprd_adi_restart_write(sadi, cfg->latch_hi_reg,
+					     cfg->latch_hi_value, &budget);
+		if (ret)
+			goto out;
+		ret = sprd_adi_restart_write(sadi, cfg->latch_lo_reg,
+					     cfg->latch_lo_value, &budget);
+		if (ret)
+			goto out;
+		udelay(300);
+	}
+
+	ret = sprd_adi_restart_update(sadi, cfg->reset_status_reg, cfg->mode_mask,
+				      cfg->mode_value, &budget);
+	if (ret)
+		goto out;
+	ret = sprd_adi_restart_update(sadi, cfg->module_en_reg, cfg->module_en_mask,
+				      cfg->module_en_mask, &budget);
+	if (ret)
+		goto out;
+	ret = sprd_adi_restart_update(sadi, cfg->rtc_clk_en_reg, cfg->rtc_clk_en_mask,
+				      cfg->rtc_clk_en_mask, &budget);
+	if (ret)
+		goto out;
+
+	/* A timed-out posted write may still have reached the PMIC. */
+	may_be_unlocked = true;
+	ret = sprd_adi_restart_write(sadi, cfg->wdg_base + ADI_WDG_LOCK,
+				     ADI_WDG_UNLOCK_KEY, &budget);
+	if (ret)
+		goto out;
+	/* U-Boot's reset mode disables the interrupt; this PMIC uses NEW_VER. */
+	ret = sprd_adi_restart_update(sadi, cfg->wdg_base + ADI_WDG_CTRL,
+				      ADI_WDG_INT_EN | ADI_WDG_NEW_VER,
+				      ADI_WDG_NEW_VER, &budget);
+	if (ret)
+		goto out;
+	ret = sprd_adi_restart_wait_load(sadi, cfg->wdg_base, &budget);
+	if (ret)
+		goto out;
+	ret = sprd_adi_restart_write(sadi, cfg->wdg_base + ADI_WDG_LOAD_HIGH,
+				     cfg->count >> 16, &budget);
+	if (ret)
+		goto out;
+	ret = sprd_adi_restart_write(sadi, cfg->wdg_base + ADI_WDG_LOAD_LOW,
+				     cfg->count & 0xffff, &budget);
+	if (ret)
+		goto out;
+	ret = sprd_adi_restart_wait_load(sadi, cfg->wdg_base, &budget);
+	if (ret)
+		goto out;
+	ret = sprd_adi_restart_update(sadi, cfg->wdg_base + ADI_WDG_CTRL,
+				      ADI_WDG_CNT_EN | ADI_WDG_RST_EN,
+				      ADI_WDG_CNT_EN | ADI_WDG_RST_EN, &budget);
+	if (ret)
+		goto out;
+	ret = sprd_adi_restart_write(sadi, cfg->wdg_base + ADI_WDG_LOCK,
+				     ADI_WDG_RELOCK_KEY, &budget);
+	if (!ret)
+		may_be_unlocked = false;
+out:
+	/* Best effort only: a stalled bus can prevent PMIC relocking. */
+	if (may_be_unlocked)
+		sprd_adi_restart_write(sadi, cfg->wdg_base + ADI_WDG_LOCK,
+				       ADI_WDG_RELOCK_KEY, &relock_budget);
+	sprd_adi_restart_unlock(sadi, &flags);
+	return ret;
+}
+
+int sprd_adi_restart_atomic(struct spi_device *adi_dev,
+			    const struct sprd_adi_restart_config *config)
+{
+	struct sprd_adi_restart_config cfg;
+	struct sprd_adi *sadi;
+	unsigned long flags;
+	unsigned int i;
+	int ret = -ENODEV;
+
+	if (!adi_dev || !config)
+		return -ENODEV;
+	cfg = *config;
+
+	/* Also serialize with controller remove, without an unbounded lock. */
+	for (i = 0; i < ADI_RESTART_LOCK_WAIT_US; i++) {
+		if (spin_trylock_irqsave(&sprd_adi_restart_controllers_lock, flags))
+			goto locked;
+		udelay(1);
+	}
+	return -ETIMEDOUT;
+
+locked:
+	list_for_each_entry(sadi, &sprd_adi_restart_controllers, restart_node) {
+		if (sadi->bitbang.ctlr == adi_dev->controller) {
+			ret = sprd_adi_restart_sequence(sadi, &cfg);
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&sprd_adi_restart_controllers_lock, flags);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sprd_adi_restart_atomic);
+
 static int sprd_adi_setup_transfer(struct spi_device *adi_dev,
 				   struct spi_transfer *t)
 {
@@ -519,8 +842,10 @@ static int sprd_adi_probe(struct platform_device *pdev)
 	unsigned int value, chip_num;
 	struct resource *res;
 	void __iomem *mapped_base;
-	unsigned long sprd_adi_phys, sprd_adi_base;
+	resource_size_t sprd_adi_phys;
+	unsigned long sprd_adi_base;
 	int ret = 0, hwlock_id;
+	unsigned long flags;
 	bool has_hwlock;
 
 	if (!pdev->dev.of_node) {
@@ -588,6 +913,8 @@ static int sprd_adi_probe(struct platform_device *pdev)
 	sadi->base = sprd_adi_base;
 	sadi->slave_vbase = sprd_adi_base + ADI_SLAVE_OFFSET;
 	sadi->slave_pbase = sprd_adi_phys + ADI_SLAVE_OFFSET;
+	sadi->restart_map_size = resource_size(res);
+	INIT_LIST_HEAD(&sadi->restart_node);
 	sadi->adi_sts.write_fifo_sts = FIFO_EMPTY;
 	sadi->adi_sts.adi_trans_request = NO_REQUEST_ONLINE;
 	sadi->adi_sts.adi_chn_sel = 0;
@@ -648,13 +975,27 @@ static int sprd_adi_probe(struct platform_device *pdev)
 		readback_offset = 2;
 	}
 
+	/* Keep the restart path's register layout tied to this controller. */
+	sadi->restart_reg_offset = reg_offset;
+	sadi->restart_addr_mask = readback_addr_mak;
+	sadi->restart_addr_shift = readback_offset;
+
 	/* set ADI clock auto gate */
 	value &= ~BITS_CLK_ALL_ON;
 	writel_relaxed(value, (void __iomem *)(sadi->base + REG_ADI_GSSI_CFG0));
 
+	/* Child devices may probe as soon as the controller is registered. */
+	spin_lock_irqsave(&sprd_adi_restart_controllers_lock, flags);
+	list_add_tail(&sadi->restart_node, &sprd_adi_restart_controllers);
+	spin_unlock_irqrestore(&sprd_adi_restart_controllers_lock, flags);
+
 	ret = spi_bitbang_start(&sadi->bitbang);
-	if (ret)
+	if (ret) {
+		spin_lock_irqsave(&sprd_adi_restart_controllers_lock, flags);
+		list_del_init(&sadi->restart_node);
+		spin_unlock_irqrestore(&sprd_adi_restart_controllers_lock, flags);
 		goto put_master;
+	}
 
 	pr_info("ADI master probe ok!\n");
 	return ret;
@@ -673,7 +1014,11 @@ static void sprd_adi_remove(struct platform_device *pdev)
 {
 	struct spi_controller *adi_ctlr = dev_get_drvdata(&pdev->dev);
 	struct sprd_adi *sadi = spi_controller_get_devdata(adi_ctlr);
+	unsigned long flags;
 
+	spin_lock_irqsave(&sprd_adi_restart_controllers_lock, flags);
+	list_del_init(&sadi->restart_node);
+	spin_unlock_irqrestore(&sprd_adi_restart_controllers_lock, flags);
 	spi_bitbang_stop(&sadi->bitbang);
 	if (sadi->hw_lock)
 		hwspin_lock_free(sadi->hw_lock);

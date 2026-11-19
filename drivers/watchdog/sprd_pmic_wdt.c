@@ -23,6 +23,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/notifier.h>
 extern struct atomic_notifier_head panic_notifier_list;
 #include <linux/of_address.h>
@@ -76,9 +77,10 @@ extern struct atomic_notifier_head panic_notifier_list;
 #define HWRST_STATUS_SECURITY		(0x0002)
 
 static struct spi_device *reboot_device;
+static DEFINE_MUTEX(reboot_device_lock);
 static unsigned long sprd_wdt_base;
 unsigned int reboot_mode_flag;
-spinlock_t reboot_flag_lock;
+DEFINE_SPINLOCK(reboot_flag_lock);
 int sysdump_status; /* used by sysdump.c */
 
 #define WDG_LOAD_LOW		(sprd_wdt_base + 0x00)
@@ -102,7 +104,7 @@ static int sprd_panic_to_recovery;
 static int sprd_panic_notifier_call(struct notifier_block *nb,
 				    unsigned long action, void *data)
 {
-	sprd_panic_to_recovery = 1;
+	WRITE_ONCE(sprd_panic_to_recovery, 1);
 	pr_emerg("sprd: kernel panic detected - will reboot into RECOVERY\n");
 	return NOTIFY_DONE;
 }
@@ -116,7 +118,7 @@ void sprd_set_reboot_mode(const char *cmd)
 	pr_info("sprd_set_reboot_mode:cmd=%s\n", cmd);
 
 	spin_lock(&reboot_flag_lock);
-	if (sprd_panic_to_recovery) {
+	if (READ_ONCE(sprd_panic_to_recovery)) {
 		/* kernel panic: force reboot into recovery */
 		reboot_mode_flag = HWRST_STATUS_RECOVERY;
 	} else if (cmd && !(strncmp(cmd, "recovery", 8)))
@@ -157,6 +159,11 @@ void set_sysdump_enable(int on)
 {
 	unsigned int val = 0;
 
+	mutex_lock(&reboot_device_lock);
+	if (!reboot_device) {
+		mutex_unlock(&reboot_device_lock);
+		return;
+	}
 	val = sprd_adi_read(reboot_device, ANA_RST_STATUS);
 	pr_emerg("set_sysdump_enable: get rst mode  value is = %x\n", val);
 
@@ -169,69 +176,142 @@ void set_sysdump_enable(int on)
 		val &= ~(HWRST_STATUS_SYSDUMP);
 		sprd_adi_raw_write(reboot_device, ANA_RST_STATUS, val);
 	}
+	mutex_unlock(&reboot_device_lock);
 }
 
-static inline void sprd_load_time_vale(unsigned int value)
+/* The FDL/U-Boot reset load is a raw watchdog count, not milliseconds. */
+#define SPRD_RESTART_WDG_COUNT 0x50
+
+static u32 sprd_restart_mode(const char *cmd, bool panic)
 {
-	sprd_adi_raw_write(reboot_device, WDG_LOAD_HIGH,
-			   (uint16_t) (((value) >> 16) & 0xffff));
-	sprd_adi_raw_write(reboot_device, WDG_LOAD_LOW,
-			   (uint16_t) ((value) & 0xffff));
+	if (panic)
+		return HWRST_STATUS_RECOVERY;
+	if (!cmd)
+		return HWRST_STATUS_NORMAL;
+	if (!strncmp(cmd, "recovery", 8))
+		return HWRST_STATUS_RECOVERY;
+	if (!strncmp(cmd, "alarm", 5))
+		return HWRST_STATUS_ALARM;
+	if (!strncmp(cmd, "fastsleep", 9))
+		return HWRST_STATUS_SLEEP;
+	if (!strncmp(cmd, "bootloader", 10))
+		return HWRST_STATUS_FASTBOOT;
+	if (!strncmp(cmd, "panic", 5))
+		return HWRST_STATUS_RECOVERY;
+	if (!strncmp(cmd, "special", 7))
+		return HWRST_STATUS_SPECIAL;
+	if (!strncmp(cmd, "cftreboot", 9))
+		return HWRST_STATUS_CFTREBOOT;
+	if (!strncmp(cmd, "autodloader", 11))
+		return HWRST_STATUS_AUTODLOADER;
+	if (!strncmp(cmd, "iqmode", 6))
+		return HWRST_STATUS_IQMODE;
+	if (!strncmp(cmd, "sprdisk", 7))
+		return HWRST_STATUS_SPRDISK;
+	if (!strncmp(cmd, "tospanic", 8))
+		return HWRST_STATUS_SECURITY;
+	return HWRST_STATUS_NORMAL;
 }
 
-static void sprd_turnon_watchdog(unsigned int ms)
-{
-	uint32_t cnt = (ms * 1000) / WDG_CLK;
+static bool sprd_restart_first;
 
-	/*enable interface clk */
+static int sprd_restart_handle(const char *cmd)
+{
+	bool panic = READ_ONCE(sprd_panic_to_recovery);
+	struct sprd_adi_restart_config config = {
+		.wdg_base = sprd_wdt_base,
+		.module_en_reg = ANA_AGEN,
+		.rtc_clk_en_reg = ANA_RTC_CLK_EN,
+		.reset_status_reg = ANA_RST_STATUS,
+		.module_en_mask = AGEN_WDG_EN,
+		.rtc_clk_en_mask = AGEN_RTC_WDG_EN,
+		.mode_value = sprd_restart_mode(cmd, panic),
+		/* Bootloader decodes the low byte; preserve the sysdump bit. */
+		.mode_mask = 0xff,
+		.count = SPRD_RESTART_WDG_COUNT,
+	};
+	int ret;
+
+	if (!READ_ONCE(reboot_device))
+		return -ENODEV;
+
+	/* The BSL latches select normal boot; do not override other modes. */
+	if (cmd && !panic &&
+	    !strncmp(cmd, "dumpenable", 10)) {
+		config.mode_mask = 0x2ff;
+		config.mode_value = HWRST_STATUS_NORMAL | HWRST_STATUS_SYSDUMP;
+	} else if (cmd && !panic &&
+		   !strncmp(cmd, "dumpdisable", 11)) {
+		config.mode_mask = 0x2ff;
+		config.mode_value = HWRST_STATUS_NORMAL;
+	}
+
+	config.write_latches = true;
+	config.latch_lo_reg = 0xf08;
+	config.latch_hi_reg = 0xf0c;
+	if ((config.mode_value & 0xff) == HWRST_STATUS_NORMAL) {
+		config.latch_lo_value = 0x55;
+		config.latch_hi_value = 0xffaa;
+	} else {
+		/* Clear any old normal-boot latch before setting another mode. */
+		config.latch_lo_value = 0xa596;
+		config.latch_hi_value = 0x5a69;
+	}
+
+	ret = sprd_adi_restart_atomic(reboot_device, &config);
+	if (ret)
+		return ret;
+
+	/* 0x50 ticks at 32768 Hz is about 2.5 ms; allow time for reset. */
+	mdelay(100);
+	return -ETIMEDOUT;
+}
+
+/* Preserve the pre-existing programming sequence for non-opt-in PMICs. */
+static void sprd_restart_legacy(enum reboot_mode mode, const char *cmd)
+{
+	u32 cnt;
+
+	sprd_set_reboot_mode(cmd);
+	sprd_adi_raw_write(reboot_device, ANA_RST_STATUS, reboot_mode_flag);
+	cnt = ((mode == REBOOT_WDT ? 400 : 50) * 1000) / WDG_CLK;
 	sprd_adi_set(reboot_device, ANA_AGEN, AGEN_WDG_EN);
-
-	/*enable work clk */
 	sprd_adi_set(reboot_device, ANA_RTC_CLK_EN, AGEN_RTC_WDG_EN);
 	sprd_adi_raw_write(reboot_device, WDG_LOCK, WDG_UNLOCK_KEY);
 	sprd_adi_set(reboot_device, WDG_CTRL, WDG_NEW_VER_EN);
-	sprd_load_time_vale(cnt);
-
-	sprd_adi_set(reboot_device, WDG_CTRL,
-		     (WDG_CNT_EN_BIT | WDG_RST_EN_BIT));
-	sprd_adi_raw_write(reboot_device, WDG_LOCK,
-			   (uint16_t) (~WDG_UNLOCK_KEY));
-}
-
-static void arch_reset(char mode, const char *cmd)
-{
-	sprd_adi_raw_write(reboot_device, ANA_RST_STATUS, reboot_mode_flag);
-	if (mode == REBOOT_WDT)
-		sprd_turnon_watchdog(400);
-	else
-		sprd_turnon_watchdog(50);
+	sprd_adi_raw_write(reboot_device, WDG_LOAD_HIGH, (cnt >> 16) & 0xffff);
+	sprd_adi_raw_write(reboot_device, WDG_LOAD_LOW, cnt & 0xffff);
+	sprd_adi_set(reboot_device, WDG_CTRL, WDG_CNT_EN_BIT | WDG_RST_EN_BIT);
+	sprd_adi_raw_write(reboot_device, WDG_LOCK, (u16)~WDG_UNLOCK_KEY);
 #ifdef CONFIG_SPRD_DMC_DRV
 	sprd_ddr_force_light_sleep();
 #endif
+	mdelay(1000);
 }
 
-static void sprd_restart_handle(enum reboot_mode reboot_mode, const char *cmd)
+#ifdef CONFIG_X86
+static void sprd_restart_x86(enum reboot_mode mode, const char *cmd)
 {
-	arch_reset(reboot_mode, cmd);
-
-	mdelay(1000);
-
-	pr_info("reboot failed!\n");
-
-	while (1)
-		;
+	if (sprd_restart_first)
+		sprd_restart_handle(cmd);
+	else
+		sprd_restart_legacy(mode, cmd);
 }
 
 static void sprd_restart_prepare(const char *cmd)
 {
 	sprd_set_reboot_mode(cmd);
 }
+#endif
 
 static int sprd_restart_notify(struct notifier_block *nb, unsigned long mode,
 			       void *cmd)
 {
-	sprd_restart_prepare(cmd);
-	sprd_restart_handle(mode, cmd);
+	if (sprd_restart_first)
+		sprd_restart_handle(cmd);
+	else
+		sprd_restart_legacy(mode, cmd);
+	/* Continue to the next restart handler if the PMIC did not reset us. */
 	return NOTIFY_DONE;
 }
 
@@ -254,34 +334,60 @@ static int sprd_reboot_probe(struct platform_device *pdev)
 	struct device_node *node = pdev->dev.of_node;
 	struct regmap *sprd_reboot;
 
+	mutex_lock(&reboot_device_lock);
+	if (reboot_device) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
 	sprd_reboot = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!sprd_reboot) {
 		dev_err(&pdev->dev, "sprd reboot probe failed!\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+	if (!sprd_reboot->dev) {
+		ret = -ENODEV;
+		goto out_unlock;
 	}
 
 	reboot_device = to_spi_device(sprd_reboot->dev);
 	if (!reboot_device) {
 		dev_err(&pdev->dev, "sprd reboot device probe failed!\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	ret = of_property_read_u32(node, "reg", &value);
 	if (ret) {
 		dev_err(&pdev->dev, "sprd reboot probe failed!\n");
-		return -EINVAL;
+		reboot_device = NULL;
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	sprd_wdt_base = (unsigned long)value;
+	reboot_mode_flag = 0;
+	sprd_restart_first = of_device_is_compatible(node, "sprd,sc2721-wdt") &&
+		of_property_read_bool(node, "sprd,pmic-restart-first");
+	sprd_restart_nb.priority = sprd_restart_first ? 130 : 0;
+	ret = atomic_notifier_chain_register(&panic_notifier_list, &sprd_panic_nb);
+	if (ret) {
+		reboot_device = NULL;
+		goto out_unlock;
+	}
+	ret = register_restart_handler(&sprd_restart_nb);
+	if (ret) {
+		atomic_notifier_chain_unregister(&panic_notifier_list, &sprd_panic_nb);
+		reboot_device = NULL;
+		goto out_unlock;
+	}
 #ifdef CONFIG_X86
 	x86_pm_restart_prepare = sprd_restart_prepare;
-	x86_pm_restart = sprd_restart_handle;
+	x86_pm_restart = sprd_restart_x86;
 #endif
-	register_restart_handler(&sprd_restart_nb);
 	dev_info(&pdev->dev, "PMIC Watchdog probe OK!\n");
-	spin_lock_init(&reboot_flag_lock);
-	reboot_mode_flag = 0;
-	atomic_notifier_chain_register(&panic_notifier_list, &sprd_panic_nb);
+	mutex_unlock(&reboot_device_lock);
 
 #if defined(CONFIG_SPRD_DEBUG) && defined(CONFIG_SPRD_SYSDUMP)
 	pr_emerg("userdebug enable sysdump in default !!!\n");
@@ -289,11 +395,33 @@ static int sprd_reboot_probe(struct platform_device *pdev)
 	set_sysdump_enable(1);
 	sysdump_status = 1;
 #endif
+	return 0;
+out_unlock:
+	mutex_unlock(&reboot_device_lock);
 	return ret;
+}
+
+static void sprd_reboot_remove(struct platform_device *pdev)
+{
+	mutex_lock(&reboot_device_lock);
+	unregister_restart_handler(&sprd_restart_nb);
+	atomic_notifier_chain_unregister(&panic_notifier_list, &sprd_panic_nb);
+#ifdef CONFIG_X86
+	if (x86_pm_restart_prepare == sprd_restart_prepare)
+		x86_pm_restart_prepare = NULL;
+	if (x86_pm_restart == sprd_restart_x86)
+		x86_pm_restart = NULL;
+#endif
+	WRITE_ONCE(reboot_device, NULL);
+	sprd_wdt_base = 0;
+	sprd_restart_first = false;
+	WRITE_ONCE(sprd_panic_to_recovery, 0);
+	mutex_unlock(&reboot_device_lock);
 }
 
 static struct platform_driver sprd_reboot_driver = {
 	.probe = sprd_reboot_probe,
+	.remove = sprd_reboot_remove,
 	.driver = {
 		.name = "sprd-pmic-wdt",
 		.of_match_table = sprd_reboot_of_match,
@@ -305,6 +433,6 @@ static int __init sprd_reboot_init(void)
 	return platform_driver_register(&sprd_reboot_driver);
 }
 
-device_initcall(sprd_reboot_init);
+subsys_initcall_sync(sprd_reboot_init);
 MODULE_DESCRIPTION("SPREADTRUM PMIC Watchdog Driver");
 MODULE_LICENSE("GPL v2");

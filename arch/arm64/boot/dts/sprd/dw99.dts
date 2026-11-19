@@ -988,6 +988,7 @@
 					watchdog@40 {
 						compatible = "sprd,sc2721-wdt";
 						reg = <0x40>;
+						sprd,pmic-restart-first;
 						linux,phandle = <0x47>;
 						phandle = <0x47>;
 					};

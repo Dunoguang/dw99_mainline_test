@@ -17,6 +17,46 @@
 #include <linux/spi/spi.h>
 #include <linux/printk.h>
 
+/*
+ * All register addresses are byte offsets in the ADI slave window, not AP
+ * physical/virtual addresses.  The supplied device must stay alive throughout
+ * the call.  The caller must not modify this structure while it is copied.
+ *
+ * mode_mask selects bits changed in reset_status_reg; unmasked bits are
+ * preserved.  For SC2721 use 0xff for an ordinary reboot to preserve the
+ * sysdump bit (bit 9); include bit 9 only for an explicit sysdump change.
+ * The optional RTC latch writes are full 16-bit values: hi first, then lo,
+ * followed by a 300 us delay, before writing the reboot mode.
+ */
+struct sprd_adi_restart_config {
+	u32 wdg_base;
+	u32 module_en_reg;
+	u32 rtc_clk_en_reg;
+	u32 reset_status_reg;
+	u32 module_en_mask;
+	u32 rtc_clk_en_mask;
+	u32 mode_value;
+	u32 mode_mask;
+	u32 count;
+	bool write_latches;
+	u32 latch_hi_reg;
+	u32 latch_hi_value;
+	u32 latch_lo_reg;
+	u32 latch_lo_value;
+};
+
+#if IS_REACHABLE(CONFIG_SPI_SPRD_ADI_SHARKLE)
+int sprd_adi_restart_atomic(struct spi_device *adi_dev,
+			    const struct sprd_adi_restart_config *config);
+#else
+static inline int
+sprd_adi_restart_atomic(struct spi_device *adi_dev,
+			const struct sprd_adi_restart_config *config)
+{
+	return -ENODEV;
+}
+#endif
+
 #define TRANS_BUF_SIZE			(10)
 
 /* ADI write type */
