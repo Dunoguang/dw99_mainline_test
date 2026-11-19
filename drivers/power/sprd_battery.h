@@ -226,6 +226,7 @@ struct sprd_chg_timer_operations {
 	void (*timer_enable)(unsigned int, unsigned int);
 	void (*timer_disable)(void);
 	int (*timer_request)(irq_handler_t, void *);
+	void (*timer_free)(void *);
 };
 
 struct sprd_fchg_operations {
@@ -291,6 +292,8 @@ struct sprdbat_drivier_data {
 	uint32_t irq_vbat_detect;
 	struct wake_lock charger_wake_lock;
 	struct workqueue_struct *monitor_wqueue;
+	bool timer_requested;
+	void (*timer_free)(void *);
 	struct delayed_work cv_irq_work;
 	struct delayed_work battery_work;
 	struct delayed_work battery_sleep_work;

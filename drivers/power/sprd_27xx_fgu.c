@@ -10,6 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <linux/cleanup.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
@@ -19,6 +20,7 @@
 #include <linux/hrtimer.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/rwsem.h>
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/gpio.h>
@@ -73,6 +75,10 @@ static struct sprdfgu_tracking sprdfgu_get_track_data(void);
 static struct regmap *reg_map;
 
 static struct sprdfgu_drivier_data sprdfgu_data;
+static DECLARE_RWSEM(sprdfgu_access_sem);
+static bool sprdfgu_initialized;
+static bool sprdfgu_irq_requested;
+static bool sprdfgu_probe_done;
 static struct sprdfgu_cal fgu_cal = { 2872, 678, 0, 0, SPRDBAT_FGUADC_CAL_NO };
 
 /* for debug */
@@ -1239,6 +1245,8 @@ static int sprdfgu_int_init(void)
 	if (ret) {
 		SPRD_FGU_DEBUG("request sprdfgu irq %d failed\n",
 		       sprdfgu_data.fgu_pdata->fgu_irq);
+	} else {
+		sprdfgu_irq_requested = true;
 	}
 	/*
 	 * TODO: switch polling to interrupt again need open this code.
@@ -1558,6 +1566,10 @@ static ssize_t sprdfgu_store_attribute(struct device *dev,
 	unsigned long set_value;
 	const ptrdiff_t off = attr - sprdfgu_attribute;
 
+	guard(rwsem_read)(&sprdfgu_access_sem);
+	if (!smp_load_acquire(&sprdfgu_initialized))
+		return -EAGAIN;
+
 	if (kstrtoul(buf, 0, &set_value))
 		return -EINVAL;
 	pr_info("sprdfgu_store_attribute %lu\n", set_value);
@@ -1599,6 +1611,8 @@ static ssize_t sprdfgu_store_attribute(struct device *dev,
 
 	case SAVED_CNOM:
 		SPRD_FGU_DEBUG("saved cnom...\n");
+		if (!sprdfgu_data.fgu_wqueue)
+			return -ENOMEM;
 		sprdfgu_data.cur_cnom = set_value;
 		sprdfgu_data.qmax.state = QMAX_DONE;
 		queue_delayed_work(sprdfgu_data.fgu_wqueue,
@@ -1641,6 +1655,10 @@ static ssize_t sprdfgu_show_attribute(struct device *dev,
 {
 	int i = 0;
 	const ptrdiff_t off = attr - sprdfgu_attribute;
+
+	guard(rwsem_read)(&sprdfgu_access_sem);
+	if (!smp_load_acquire(&sprdfgu_initialized))
+		return -EAGAIN;
 
 	switch (off) {
 	case FGU_VOL_ADC:
@@ -1702,6 +1720,8 @@ static ssize_t sprdfgu_show_attribute(struct device *dev,
 				sprdfgu_data.cur_cnom);
 		break;
 	case SAVED_CNOM:
+		if (!sprdfgu_data.fgu_wqueue)
+			return -ENOMEM;
 		i += scnprintf(buf + i, PAGE_SIZE - i, "load done\n");
 		SPRD_FGU_DEBUG("saved cnom.read..\n");
 		sprdfgu_data.qmax.state = QMAX_INIT;
@@ -1755,13 +1775,57 @@ static int sprdfgu_power_get_property(struct power_supply *psy,
 				      enum power_supply_property psp,
 				      union power_supply_propval *val)
 {
-	return -EINVAL;
+	if (psp != POWER_SUPPLY_PROP_STATUS)
+		return -EINVAL;
+
+	/* This FGU exposes measurements through its existing custom attributes. */
+	val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
+	return 0;
+}
+
+static const enum power_supply_property sprdfgu_power_props[] = {
+	POWER_SUPPLY_PROP_STATUS,
+};
+
+static const struct power_supply_desc sprdfgu_power_desc = {
+	.name = "sprdfgu",
+	.type = POWER_SUPPLY_TYPE_UNKNOWN,
+	.properties = sprdfgu_power_props,
+	.num_properties = ARRAY_SIZE(sprdfgu_power_props),
+	.get_property = sprdfgu_power_get_property,
+};
+
+bool sprdfgu_probe_ready(void)
+{
+	return smp_load_acquire(&sprdfgu_probe_done);
+}
+
+void sprdfgu_deinit(void)
+{
+	/* Drain sysfs readers before detaching their battery platform data. */
+	down_write(&sprdfgu_access_sem);
+	smp_store_release(&sprdfgu_initialized, false);
+	up_write(&sprdfgu_access_sem);
+	if (sprdfgu_irq_requested) {
+		devm_free_irq(sprdfgu_data.dev, sprdfgu_data.fgu_pdata->fgu_irq, NULL);
+		sprdfgu_irq_requested = false;
+		cancel_delayed_work_sync(&sprdfgu_data.fgu_irq_work);
+	}
+	cancel_delayed_work_sync(&sprdfgu_debug_work);
+	if (sprdfgu_data.fgu_wqueue)
+		cancel_delayed_work_sync(&sprdfgu_data.fgu_qmax_work);
+	sprdfgu_data.pdata = NULL;
 }
 
 int sprdfgu_init(struct sprd_battery_platform_data *pdata)
 {
 	int ret = 0;
 	int temp;
+
+	if (!sprdfgu_probe_ready())
+		return -EPROBE_DEFER;
+	if (smp_load_acquire(&sprdfgu_initialized))
+		return -EBUSY;
 
 	sprdfgu_data.pdata = pdata;
 	if (sprdfgu_data.pdata->only_vol_mode) {
@@ -1784,12 +1848,14 @@ int sprdfgu_init(struct sprd_battery_platform_data *pdata)
 
 	if ((!sprdfgu_data.fgu_pdata->ocv_type) &&
 		sprdfgu_data.pdata->gpio_vchg_detect) {
+		request_vchg_gpio = 0;
 		ret = gpio_request(sprdfgu_data.pdata->gpio_vchg_detect,
 			"chg_vchg_detect");
 		if (ret) {
 			SPRD_FGU_DEBUG("Already request vchg gpio:%d\n",
 				sprdfgu_data.pdata->gpio_vchg_detect);
 			request_vchg_gpio = 1;
+			ret = 0;
 		}
 		gpio_direction_input(sprdfgu_data.pdata->gpio_vchg_detect);
 	}
@@ -1799,7 +1865,11 @@ int sprdfgu_init(struct sprd_battery_platform_data *pdata)
 
 	sprdfgu_cal_init();
 	sprdfgu_hw_init();
-	sprdfgu_int_init();
+	ret = sprdfgu_int_init();
+	if (ret) {
+		sprdfgu_deinit();
+		return ret;
+	}
 
 /* For debug, usually do not use it */
 #if 0
@@ -1815,7 +1885,7 @@ int sprdfgu_init(struct sprd_battery_platform_data *pdata)
 	if (sprdfgu_data.is_track)
 		sprdfgu_data.is_track = sprdfgu_data.pdata->cnom_track_support;
 
-	if (sprdbat_is_support_batdet()) {
+	if (sprdfgu_data.is_track && sprdbat_is_support_batdet()) {
 		sprdfgu_data.qmax.state = QMAX_INIT;
 		queue_delayed_work(sprdfgu_data.fgu_wqueue,
 			   &sprdfgu_data.fgu_qmax_work, 5 * HZ);
@@ -1823,6 +1893,7 @@ int sprdfgu_init(struct sprd_battery_platform_data *pdata)
 		sprdfgu_data.qmax.state = QMAX_ERR;
 	}
 
+	smp_store_release(&sprdfgu_initialized, true);
 	SPRD_FGU_DEBUG("sprdfgu_init end\n");
 	return ret;
 }
@@ -1889,21 +1960,23 @@ static int sprdfgu_2723_probe(struct platform_device *pdev)
 	u32 value = 0;
 	struct device_node *np = pdev->dev.of_node;
 	const struct of_device_id *of_id;
-	struct power_supply *ret_ptr = NULL;
-	struct power_supply_desc *sprdfgu_desc = NULL;
+	struct power_supply *psy;
 
 	reg_map = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!reg_map)
-		dev_err(&pdev->dev, "%s :NULL regmap for fgu 2723\n",
-			__func__);
+		return dev_err_probe(&pdev->dev, -EPROBE_DEFER,
+				     "parent PMIC regmap not ready\n");
 	sprdfgu_data.fgu_pdata = devm_kzalloc(&pdev->dev,
 		sizeof(struct sprdfgu_platform_data),
 		GFP_KERNEL);
+	if (!sprdfgu_data.fgu_pdata)
+		return -ENOMEM;
 	of_id = of_match_node(sprdfgu_2723_of_match,
 		pdev->dev.of_node);
 	if (!of_id) {
 		pr_err("get 27xx fgu of device id failed!\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto err_clear_pdata;
 	}
 	sprdfgu_data.fgu_pdata->fgu_type = (enum fgu_type)of_id->data;
 	SPRD_FGU_DEBUG("fgu_type =%d\n",
@@ -1915,32 +1988,27 @@ static int sprdfgu_2723_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "%s :no ocv-type\n",
 			__func__);
 	irq = platform_get_irq(pdev, 0);
-	if (unlikely(irq <= 0))
-		dev_err(&pdev->dev, "no irq resource specified\n");
+	if (irq < 0) {
+		ret = irq;
+		goto err_clear_pdata;
+	}
 	sprdfgu_data.fgu_pdata->fgu_irq = irq;
 	ret = of_property_read_u32(np, "reg", &value);
-	if (ret)
-		dev_err(&pdev->dev, "%s :no reg of property for pmic fgu\n",
-			__func__);
+	if (ret) {
+		dev_err(&pdev->dev, "no reg property for PMIC FGU: %d\n", ret);
+		goto err_clear_pdata;
+	}
 	sprdfgu_data.fgu_pdata->base_addr = (unsigned long)value;
 
-	sprdfgu_desc = devm_kzalloc(&pdev->dev,
-			sizeof(struct power_supply_desc), GFP_KERNEL);
-	if (sprdfgu_desc == NULL)
-		return -ENOMEM;
-	sprdfgu_desc->name = "sprdfgu";
-	sprdfgu_desc->get_property = sprdfgu_power_get_property;
-	ret_ptr = power_supply_register(&pdev->dev, sprdfgu_desc, NULL);
-	if (IS_ERR(ret_ptr))
-		pr_err("register power supply error!\n");
-	else
-		sprdfgu_data.sprdfgu = ret_ptr;
+	psy = devm_power_supply_register(&pdev->dev, &sprdfgu_power_desc, NULL);
+	if (IS_ERR(psy)) {
+		ret = dev_err_probe(&pdev->dev, PTR_ERR(psy),
+				    "failed to register FGU power supply\n");
+		goto err_clear_pdata;
+	}
+	sprdfgu_data.sprdfgu = psy;
 	sprdfgu_data.dev = &pdev->dev;
 	platform_set_drvdata(pdev, &sprdfgu_data);
-	ret = sysfs_create_group(&sprdfgu_data.sprdfgu->dev.kobj,
-			&sprd_fgu_group);
-	if (ret)
-		pr_err("failed to create sprd_fgu sysfs device attributes\n");
 	INIT_DELAYED_WORK(&sprdfgu_debug_work, sprdfgu_debug_works);
 	mutex_init(&sprdfgu_data.lock);
 	mutex_init(&sprdfgu_data.track_lock);
@@ -1968,16 +2036,43 @@ static int sprdfgu_2723_probe(struct platform_device *pdev)
 	if (!sprdfgu_data.track.cur_buff)
 		sprdfgu_data.is_track = 0;
 
+	ret = sysfs_create_group(&psy->dev.kobj, &sprd_fgu_group);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to create FGU sysfs group: %d\n", ret);
+		goto err_destroy_resources;
+	}
+
+	smp_store_release(&sprdfgu_probe_done, true);
 	SPRD_FGU_DEBUG("sprdfgu_2723_probe ok\n");
+	return 0;
+
+err_destroy_resources:
+	if (sprdfgu_data.fgu_wqueue) {
+		destroy_workqueue(sprdfgu_data.fgu_wqueue);
+		sprdfgu_data.fgu_wqueue = NULL;
+	}
+	wake_lock_destroy(&sprdfgu_data.low_power_lock);
+	sprdfgu_data.sprdfgu = NULL;
+	sprdfgu_data.dev = NULL;
+	platform_set_drvdata(pdev, NULL);
+err_clear_pdata:
+	sprdfgu_data.fgu_pdata = NULL;
+	reg_map = NULL;
 	return ret;
 }
 
 static void sprdfgu_2723_remove(struct platform_device *pdev)
 {
+	smp_store_release(&sprdfgu_probe_done, false);
+	smp_store_release(&sprdfgu_initialized, false);
 	sysfs_remove_group(&sprdfgu_data.sprdfgu->dev.kobj,
 		&sprd_fgu_group);
-	if (sprdfgu_data.fgu_wqueue)
+	sprdfgu_deinit();
+	if (sprdfgu_data.fgu_wqueue) {
 		destroy_workqueue(sprdfgu_data.fgu_wqueue);
+		sprdfgu_data.fgu_wqueue = NULL;
+	}
+	wake_lock_destroy(&sprdfgu_data.low_power_lock);
 
 }
 

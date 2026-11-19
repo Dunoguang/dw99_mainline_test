@@ -301,7 +301,7 @@ static __used irqreturn_t sprdchg_vchg_ovi_irq(int irq, void *dev_id)
 {
 	int value;
 	struct sprd2721_device *sprd_2721 = dev_id;
-	struct sprd2721_platform_data *pdata = sprd_2721->dev->platform_data;
+	struct sprd2721_platform_data *pdata = sprd_2721->pdata;
 
 	value = gpio_get_value(pdata->gpio_vchg_ovi);
 	if (value) {
@@ -311,7 +311,7 @@ static __used irqreturn_t sprdchg_vchg_ovi_irq(int irq, void *dev_id)
 		irq_set_irq_type(pdata->irq_vchg_ovi,
 				 IRQ_TYPE_LEVEL_HIGH);
 	}
-	power_supply_changed(&sprd_2721->charger);
+	power_supply_changed(sprd_2721->charger);
 	return IRQ_HANDLED;
 }
 
@@ -319,10 +319,10 @@ static irqreturn_t sprdchg_chg_cv_irq(int irq, void *dev_id)
 {
 	int value;
 	struct sprd2721_device *sprd_2721 = dev_id;
-	struct sprd2721_platform_data *pdata = sprd_2721->dev->platform_data;
+	struct sprd2721_platform_data *pdata = sprd_2721->pdata;
 
 	value = gpio_get_value(pdata->gpio_chg_cv_state);
-	power_supply_changed(&sprd_2721->charger);
+	power_supply_changed(sprd_2721->charger);
 	return IRQ_HANDLED;
 }
 
@@ -369,17 +369,34 @@ static int sprd2721_get_property(struct power_supply *psy,
 				    enum power_supply_property psp,
 				    union power_supply_propval *val)
 {
-	return -EINVAL;
+	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
+		return 0;
+	default:
+		return -EINVAL;
+	}
 }
 
+
+/* The legacy getter did not provide any property values. */
+static enum power_supply_property sprd2721_properties[] = {
+	POWER_SUPPLY_PROP_STATUS,
+};
+
+static const struct power_supply_desc sprd2721_charger_desc = {
+	.name = CHG_PSY_INNER,
+	.type = POWER_SUPPLY_TYPE_UNKNOWN,
+	.properties = sprd2721_properties,
+	.num_properties = ARRAY_SIZE(sprd2721_properties),
+	.get_property = sprd2721_get_property,
+};
 
 static int sprdchg_2721_probe(struct platform_device *pdev)
 {
 	struct sprd2721_device *sprd_2721 = NULL;
 	struct sprd2721_platform_data *pdata = pdev->dev.platform_data;
 	int ret = 0;
-	struct power_supply *ret_ptr = NULL;
-	struct power_supply_desc *charger_desc = NULL;
 
 	reg_map = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!reg_map) {
@@ -396,9 +413,18 @@ static int sprdchg_2721_probe(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(pdata))
 		return PTR_ERR(pdata);
 
-	g_pdata = pdata;
 	sprd_2721->dev = &pdev->dev;
+	sprd_2721->pdata = pdata;
 	platform_set_drvdata(pdev, sprd_2721);
+
+	/* Register before requesting IRQs so devres frees IRQs first. */
+	sprd_2721->charger = devm_power_supply_register(&pdev->dev,
+							&sprd2721_charger_desc, NULL);
+	if (IS_ERR(sprd_2721->charger)) {
+		ret = PTR_ERR(sprd_2721->charger);
+		dev_err(&pdev->dev, "failed to register sprd_2721 psy: %d\n", ret);
+		return ret;
+	}
 
 	if (pdata->gpio_chg_cv_state) {
 		ret = devm_gpio_request(&pdev->dev,
@@ -447,35 +473,17 @@ static int sprdchg_2721_probe(struct platform_device *pdev)
 			return ret;
 		}
 	}
+	g_pdata = pdata;
 	sprdchg_cccv_cal_get();
+	/* Publish only after all fallible probe steps have succeeded. */
 	sprdbat_register_ext_ops(&sprd_2721_op);
-	charger_desc = devm_kzalloc(&pdev->dev,
-		sizeof(*charger_desc), GFP_KERNEL);
-	if (charger_desc == NULL) {
-		ret = -ENOMEM;
-		sprd_2721 = NULL;
-		return ret;
-	}
-	sprd_2721->charger.desc = charger_desc;
-	charger_desc->name = CHG_PSY_INNER;
-	charger_desc->type = POWER_SUPPLY_TYPE_UNKNOWN;
-	charger_desc->get_property = sprd2721_get_property;
-	ret_ptr = power_supply_register(&pdev->dev,
-		sprd_2721->charger.desc, NULL);
-	if (IS_ERR(ret_ptr)) {
-		dev_err(&pdev->dev, "failed to register sprd_2721 psy: %p\n",
-			ret_ptr);
-		return PTR_ERR(ret_ptr);
-	}
 	SPRDCHG_DEBUG("%s probe ok\n", __func__);
 	return 0;
 }
 
 static void sprdchg_2721_remove(struct platform_device *pdev)
 {
-	struct sprd2721_device *sprd_2721 = platform_get_drvdata(pdev);
-
-	power_supply_unregister(&sprd_2721->charger);
+	/* IRQs and the power supply are released in devres reverse order. */
 }
 
 static const struct of_device_id sprdchg_2721_of_match[] = {

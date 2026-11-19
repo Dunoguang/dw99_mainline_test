@@ -2048,7 +2048,7 @@ static void sprdbat_chg_print_log(void)
 
 	cur_time = ktime_to_timespec64(ktime_get_boottime());
 #if __BITS_PER_LONG == 64
-	SPRDBAT_DEBUG("cur time:%ld\n", cur_time.tv_sec);
+	SPRDBAT_DEBUG("cur time:%lld\n", cur_time.tv_sec);
 #else
 	SPRDBAT_DEBUG("cur time:%lld\n", cur_time.tv_sec);
 #endif
@@ -2075,7 +2075,7 @@ static void sprdbat_print_battery_log(void)
 	cur_time = ktime_to_timespec64(ktime_get_boottime());
 
 #if __BITS_PER_LONG == 64
-	SPRDBAT_DEBUG("bat_log:time:%ld\n", cur_time.tv_sec);
+	SPRDBAT_DEBUG("bat_log:time:%lld\n", cur_time.tv_sec);
 #else
 	SPRDBAT_DEBUG("bat_log:time:%lld\n", cur_time.tv_sec);
 #endif
@@ -3043,9 +3043,11 @@ static int sprdbat_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 	if (sprd_ext_ic_op == NULL) {
-		dev_err(&pdev->dev, "sprd_ext_ic_op not found\n");
-		return -EINVAL;
+		dev_dbg(&pdev->dev, "sprd_ext_ic_op not ready\n");
+		return -EPROBE_DEFER;
 	}
+	if (!sprdchg_timer_op || !sprdfgu_probe_ready())
+		return -EPROBE_DEFER;
 
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (data == NULL) {
@@ -3131,6 +3133,7 @@ static int sprdbat_probe(struct platform_device *pdev)
 
 	ret_ptr = power_supply_register(&pdev->dev, battery_desc, &battery_cfg);
 	if (IS_ERR(ret_ptr)) {
+		ret = PTR_ERR(ret_ptr);
 		goto err_battery_failed;
 	} else {
 		data->battery = ret_ptr;
@@ -3141,6 +3144,7 @@ static int sprdbat_probe(struct platform_device *pdev)
 
 	ret_ptr = power_supply_register(&pdev->dev, ac_desc, &ac_cfg);
 	if (IS_ERR(ret_ptr)) {
+		ret = PTR_ERR(ret_ptr);
 		goto err_ac_failed;
 	} else {
 		data->ac = ret_ptr;
@@ -3150,6 +3154,7 @@ static int sprdbat_probe(struct platform_device *pdev)
 
 	ret_ptr = power_supply_register(&pdev->dev, usb_desc, &usb_cfg);
 	if (IS_ERR(ret_ptr)) {
+		ret = PTR_ERR(ret_ptr);
 		goto err_usb_failed;
 	} else {
 		data->usb = ret_ptr;
@@ -3207,16 +3212,24 @@ static int sprdbat_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&sprdbat_data->sprdbat_charge_work,
 			  sprdbat_charge_works);
 	data->monitor_wqueue = create_freezable_workqueue("sprdbat_monitor");
-	if (data->monitor_wqueue == NULL)
+	if (data->monitor_wqueue == NULL) {
+		ret = -ENOMEM;
 		goto err_create_wq;
+	}
 
 	sprdchg_init(data->pdata);
-	sprdfgu_init(data->pdata);
+	ret = sprdfgu_init(data->pdata);
+	if (ret)
+		goto err_fgu_failed;
 
-	if (sprdchg_timer_op->timer_request)
-		sprdchg_timer_op->timer_request(sprdbat_timer_handler,
-		data->pdata);
-	else
+	if (sprdchg_timer_op->timer_request) {
+		ret = sprdchg_timer_op->timer_request(sprdbat_timer_handler,
+						       data->pdata);
+		if (ret)
+			goto err_fgu_init;
+		data->timer_requested = true;
+		data->timer_free = sprdchg_timer_op->timer_free;
+	} else
 		SPRDBAT_DEBUG("warning !!charge timer ops = null\n");
 
 #ifdef CONFIG_LEDS_TRIGGERS
@@ -3271,6 +3284,12 @@ err_usb_find_name:
 	led_classdev_unregister(&data->charging_led);
 err_led_reg:
 #endif
+err_fgu_init:
+	if (data->timer_requested && data->timer_free)
+		data->timer_free(data->pdata);
+	cancel_delayed_work_sync(&data->sprdbat_charge_work);
+	sprdfgu_deinit();
+err_fgu_failed:
 	destroy_workqueue(data->monitor_wqueue);
 err_create_wq:
 	sysfs_remove_group(&data->battery->dev.kobj,
@@ -3305,8 +3324,14 @@ static void sprdbat_remove(struct platform_device *pdev)
 	if (sprdbat_data->usb_charger)
 		usb_charger_unregister_notify(sprdbat_data->usb_charger,
 				      &sprdbat_data->chg_usb_nb);
+	cancel_delayed_work_sync(&data->battery_sleep_work);
+	cancel_delayed_work_sync(&data->battery_work);
 	flush_workqueue(data->monitor_wqueue);
+	if (data->timer_requested && data->timer_free)
+		data->timer_free(data->pdata);
+	cancel_delayed_work_sync(&data->sprdbat_charge_work);
 	destroy_workqueue(data->monitor_wqueue);
+	sprdfgu_deinit();
 	power_supply_unregister(data->battery);
 	power_supply_unregister(data->ac);
 	power_supply_unregister(data->usb);

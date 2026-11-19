@@ -104,10 +104,20 @@ static int sprdchg_timer_request(irq_handler_t fn_cb, void *data)
 	return ret;
 }
 
+static void sprdchg_timer_free(void *data)
+{
+	sprdchg_timer_disable();
+	chgtimer_adi_write(TIMER_INT, CHG_TIMER_INT_CLR,
+			   CHG_TIMER_INT_EN | CHG_TIMER_INT_CLR);
+	free_irq(irq_chg_timer, data);
+	sprdchg_tm_cb = NULL;
+}
+
 static struct sprd_chg_timer_operations sprd_chg_timer_ops = {
 	.timer_enable = sprdchg_timer_enable,
 	.timer_disable = sprdchg_timer_disable,
 	.timer_request = sprdchg_timer_request,
+	.timer_free = sprdchg_timer_free,
 };
 
 static int sprdchg_timer_2721_probe(struct platform_device *pdev)

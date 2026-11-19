@@ -22,6 +22,8 @@
 #define SPRDBAT_FGUADC_CAL_NV         1
 #define SPRDBAT_FGUADC_CAL_CHIP      2
 
+bool sprdfgu_probe_ready(void);
+void sprdfgu_deinit(void);
 int sprdfgu_init(struct sprd_battery_platform_data *pdata);
 int sprdfgu_reset(void);
 int sprdfgu_force_set_soc(unsigned int cap);

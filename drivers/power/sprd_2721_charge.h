@@ -36,10 +36,10 @@ struct sprd2721_platform_data {
 
 struct sprd2721_device {
 	struct device *dev;
-	struct power_supply charger;
+	struct power_supply *charger;
 	struct delayed_work cv_irq_work;
 	struct work_struct ovi_irq_work;
-	struct sprd_battery_platform_data *pdata;
+	struct sprd2721_platform_data *pdata;
 };
 
 #endif /* _CHG_DRVAPI_H_ */
