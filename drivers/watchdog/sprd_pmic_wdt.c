@@ -433,6 +433,7 @@ static int __init sprd_reboot_init(void)
 	return platform_driver_register(&sprd_reboot_driver);
 }
 
-subsys_initcall_sync(sprd_reboot_init);
+/* Register before the PMIC creates its child devices at subsys_initcall_sync. */
+subsys_initcall(sprd_reboot_init);
 MODULE_DESCRIPTION("SPREADTRUM PMIC Watchdog Driver");
 MODULE_LICENSE("GPL v2");
