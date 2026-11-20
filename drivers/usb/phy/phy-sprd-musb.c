@@ -24,6 +24,7 @@
 #include <linux/sprd_otp.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
+#include <linux/usb/musb-earlycon.h>
 #include <linux/usb/phy.h>
 #include <linux/usb/otg.h>
 #include <linux/mfd/syscon/sprd-glb.h>
@@ -451,6 +452,8 @@ static int sprd_hsphy_probe(struct platform_device *pdev)
 		return PTR_ERR(phy->vdd);
 	}
 
+	/* The boot console shares the controller attached to this PHY. */
+	musb_earlycon_release_phy(res->start);
 	dev_dbg(dev, "configuring USB PHY supply\n");
 	ret = regulator_set_voltage(phy->vdd, phy->vdd_vol, phy->vdd_vol);
 	if (ret < 0) {

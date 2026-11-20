@@ -7,7 +7,9 @@
 
 #include <linux/console.h>
 #include <linux/io.h>
+#include <linux/export.h>
 #include <linux/printk.h>
+#include <linux/usb/musb-earlycon.h>
 #include <asm/memory.h>
 
 #define MUSB_IDXREG	0x0e
@@ -15,6 +17,9 @@
 #define MUSB_FIFO	0x34	/* fifox[EP] */
 #define MUSB_EP	5
 #define MUSB_PKTSZ	64
+
+/* The SharkLE USB PHY paired with MUSB_EARLYCON_PA. */
+#define MUSB_EARLYCON_PHY_PA	0x20e00000UL
 
 static void musb_ec_write(struct console *con, const char *s, unsigned int n)
 {
@@ -54,3 +59,16 @@ void __init musb_earlycon_init(void)
 {
 	register_console(&musb_early_console);
 }
+
+void musb_earlycon_release_phy(phys_addr_t phy_base)
+{
+	if (phy_base != MUSB_EARLYCON_PHY_PA)
+		return;
+
+	/*
+	 * Stop all writers before the native driver changes the supply or
+	 * isolates the PHY. Unregister even when keep_bootcon is set.
+	 */
+	unregister_console(&musb_early_console);
+}
+EXPORT_SYMBOL_GPL(musb_earlycon_release_phy);

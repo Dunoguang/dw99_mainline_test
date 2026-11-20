@@ -31,6 +31,7 @@
 #include <linux/acpi.h>
 #include <linux/bootconfig.h>
 #include <linux/console.h>
+#include <linux/usb/musb-earlycon.h>
 #include <linux/nmi.h>
 #include <linux/percpu.h>
 #include <linux/kmod.h>
@@ -989,10 +990,7 @@ void start_kernel(void)
 	char *command_line;
 	char *after_dashes;
 
-#ifdef CONFIG_USB_MUSB_EARLYCON
-extern void musb_earlycon_init(void);
-musb_earlycon_init();
-#endif
+	musb_earlycon_init();
 	set_task_stack_end_magic(&init_task);
 	smp_setup_processor_id();
 	debug_objects_early_init();
