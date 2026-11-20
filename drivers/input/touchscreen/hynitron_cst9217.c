@@ -252,11 +252,14 @@ static int cst9217_probe(struct i2c_client *client)
     mutex_init(&ts->mutex);
 
     // 电源
+    dev_dbg(&client->dev, "requesting vddsdcore\n");
     ts->vdd = regulator_get(NULL, "vddsdcore"); 
     if (!IS_ERR(ts->vdd)) {
+        dev_dbg(&client->dev, "setting vddsdcore voltage\n");
         ret = regulator_set_voltage(ts->vdd, 2800000, 3000000);
         if (ret) HYN_ERR("Failed to set regulator voltage\n");
         
+        dev_dbg(&client->dev, "enabling vddsdcore\n");
         ret = regulator_enable(ts->vdd);
         if (ret) HYN_ERR("Failed to enable regulator\n");
         
@@ -274,6 +277,7 @@ static int cst9217_probe(struct i2c_client *client)
     else
         ts->irq_gpio = -1;
 
+    dev_dbg(&client->dev, "resetting touchscreen\n");
     // 复位
     if (gpio_is_valid(ts->reset_gpio)) {
         if (gpio_request(ts->reset_gpio, "hyn_rst") == 0) {
@@ -284,6 +288,7 @@ static int cst9217_probe(struct i2c_client *client)
     // I2C 连通性测试
     {
         u8 dummy[4];
+        dev_dbg(&client->dev, "reading register 0xd000\n");
         if (hyn_i2c_read(client, 0xD000, dummy, 4) < 0) {
             HYN_ERR("I2C communication failed, trying reset...\n");
             cst9217_hw_reset(ts);
@@ -292,6 +297,7 @@ static int cst9217_probe(struct i2c_client *client)
     }
 
     // 发送初始化指令 0xD109
+    dev_dbg(&client->dev, "writing normal-mode command\n");
     ret = hyn_i2c_write_cmd(client, HYN_CMD_NORMAL);
     if (ret < 0) {
         HYN_ERR("Failed to send init cmd 0xD109\n");

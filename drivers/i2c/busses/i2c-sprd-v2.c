@@ -242,7 +242,7 @@ static int sprd_i2c_opt_start(struct sprd_i2c *pi2c)
 {
 	int cmd = readl_relaxed(pi2c->base + I2C_CTL);
 
-	writel_relaxed(cmd | I2C_START, pi2c->base + I2C_CTL);
+	writel(cmd | I2C_START | I2C_INT_EN, pi2c->base + I2C_CTL);
 
 	return 0;
 }
@@ -261,9 +261,8 @@ sprd_i2c_readbytes(struct sprd_i2c *pi2c, u8 *buf, u16 len)
 	return 0;
 }
 
-static void sprd_i2c_data_transfer(struct sprd_i2c *pi2c)
+static void sprd_i2c_data_transfer(struct sprd_i2c *pi2c, struct i2c_msg *m)
 {
-	struct i2c_msg *m = pi2c->msg;
 	u32 i2c_count = pi2c->count;
 	u32 need_tran = i2c_count  <= I2C_FIFO_DEEP ? i2c_count : I2C_FIFO_DEEP;
 
@@ -294,13 +293,40 @@ sprd_i2c_opt_mode(struct sprd_i2c *pi2c, int rw)
 	return 0;
 }
 
+static void sprd_i2c_enable(struct sprd_i2c *pi2c);
+
+static int sprd_i2c_handle_timeout(struct sprd_i2c *pi2c, struct i2c_msg *msg)
+{
+	int ret = -ETIMEDOUT;
+	u32 ctl, status;
+
+	/* Drain both IRQ handlers before the caller may free the message. */
+	disable_irq(pi2c->irq);
+	if (try_wait_for_completion(&pi2c->complete)) {
+		ret = pi2c->err;
+	} else {
+		ctl = readl(pi2c->base + I2C_CTL);
+		status = readl(pi2c->base + I2C_STATUS);
+		dev_err_ratelimited(pi2c->dev,
+				    "transfer to %#x timed out, ctl=%#x status=%#x\n",
+				    msg->addr, ctl, status);
+		sprd_i2c_enable(pi2c);
+		sprd_i2c_clear_ack(pi2c);
+		/* Flush the reset and IRQ ack before unmasking. */
+		readl(pi2c->base + I2C_STATUS);
+		WRITE_ONCE(pi2c->msg, NULL);
+	}
+	enable_irq(pi2c->irq);
+
+	return ret;
+}
+
 static int
 sprd_i2c_handle_msg(struct i2c_adapter *i2c_adap,
 			struct i2c_msg *pmsg, int is_last_msg)
 {
 	struct sprd_i2c *pi2c = i2c_adap->algo_data;
 
-	pi2c->msg = pmsg;
 	pi2c->buf = pmsg->buf;
 	pi2c->count = pmsg->len;
 
@@ -320,13 +346,16 @@ sprd_i2c_handle_msg(struct i2c_adapter *i2c_adap,
 	}
 
 	sprd_i2c_set_count(pi2c, pmsg->len);
-	if ((pmsg->flags & I2C_M_RD))
+	if (pmsg->flags & I2C_M_RD)
 		sprd_i2c_set_full_interrupt(pi2c, 1);
 	else
-		sprd_i2c_data_transfer(pi2c);
+		sprd_i2c_data_transfer(pi2c, pmsg);
+	/* Publish the prepared message and buffer to the IRQ handler. */
+	smp_store_release(&pi2c->msg, pmsg);
 	sprd_i2c_opt_start(pi2c);
 
-	wait_for_completion(&pi2c->complete);
+	if (!wait_for_completion_timeout(&pi2c->complete, SPRD_I2C_TIMEOUT))
+		return sprd_i2c_handle_timeout(pi2c, pmsg);
 
 	return pi2c->err;
 }
@@ -345,7 +374,7 @@ sprd_i2c_master_xfer(struct i2c_adapter *i2c_adap,
 		return -EIO;
 	}
 
-	ret = pm_runtime_get_sync(pi2c->dev);
+	ret = pm_runtime_resume_and_get(pi2c->dev);
 	if (ret < 0)
 		return ret;
 
@@ -388,7 +417,7 @@ static void  sprd_i2c_set_clk(struct sprd_i2c *pi2c, unsigned int freq)
 			pi2c->base + ADDR_STA0_DVD);
 }
 
-static void __maybe_unused sprd_i2c_enable(struct sprd_i2c *pi2c)
+static void sprd_i2c_enable(struct sprd_i2c *pi2c)
 {
 	unsigned int tmp = I2C_DVD_OPT;
 
@@ -402,16 +431,21 @@ static void __maybe_unused sprd_i2c_enable(struct sprd_i2c *pi2c)
 	sprd_i2c_reset_fifo(pi2c);
 	sprd_i2c_clear_irq(pi2c);
 	tmp = readl_relaxed(pi2c->base + I2C_CTL);
-	writel_relaxed(tmp | (I2C_EN | I2C_INT_EN), pi2c->base + I2C_CTL);
+	writel_relaxed(tmp | I2C_EN, pi2c->base + I2C_CTL);
 }
 
 static irqreturn_t sprd_i2c_isr(int irq, void *dev_id)
 {
 	struct sprd_i2c *pi2c = dev_id;
-	struct i2c_msg *m = pi2c->msg;
-	int ack = readl_relaxed(pi2c->base + I2C_STATUS) & I2C_RX_ACK;
+	/* Pair with the message publication before START. */
+	struct i2c_msg *m = smp_load_acquire(&pi2c->msg);
 	u32 i2c_tran = 0;
+	int ack;
 
+	if (!m)
+		return IRQ_NONE;
+
+	ack = readl_relaxed(pi2c->base + I2C_STATUS) & I2C_RX_ACK;
 	if (m->flags & I2C_M_RD)
 		i2c_tran = pi2c->count >= I2C_FIFO_FULL_THLD;
 	else
@@ -431,9 +465,9 @@ static irqreturn_t sprd_i2c_isr(int irq, void *dev_id)
 static irqreturn_t sprd_i2c_isr_thread(int irq, void *dev_id)
 {
 	struct sprd_i2c *pi2c = dev_id;
-	struct i2c_msg *m = pi2c->msg;
+	struct i2c_msg *m = READ_ONCE(pi2c->msg);
 	int ack = readl_relaxed(pi2c->base + I2C_STATUS) & I2C_RX_ACK;
-	u32 i2c_tran = 0;
+	u32 i2c_tran = 0, ctl;
 
 	if (m->flags & I2C_M_RD)
 		i2c_tran = pi2c->count >= I2C_FIFO_FULL_THLD;
@@ -441,7 +475,7 @@ static irqreturn_t sprd_i2c_isr_thread(int irq, void *dev_id)
 		i2c_tran = pi2c->count;
 
 	if (i2c_tran && !ack) {
-		sprd_i2c_data_transfer(pi2c);
+		sprd_i2c_data_transfer(pi2c, m);
 		return IRQ_HANDLED;
 	}
 
@@ -454,8 +488,13 @@ static irqreturn_t sprd_i2c_isr_thread(int irq, void *dev_id)
 		sprd_i2c_readbytes(pi2c, pi2c->buf, pi2c->count);
 	}
 
+	ctl = readl_relaxed(pi2c->base + I2C_CTL);
+	/* Mask controller interrupts before the oneshot IRQ is unmasked. */
+	writel_relaxed(ctl & ~(I2C_START | I2C_INT_EN), pi2c->base + I2C_CTL);
+	sprd_i2c_clear_irq(pi2c);
 	sprd_i2c_clear_ack(pi2c);
-	sprd_i2c_clear_start(pi2c);
+	readl(pi2c->base + I2C_STATUS);
+	WRITE_ONCE(pi2c->msg, NULL);
 	complete(&pi2c->complete);
 
 	return IRQ_HANDLED;
