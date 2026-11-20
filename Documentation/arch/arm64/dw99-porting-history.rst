@@ -15,8 +15,9 @@ DSH 阶段
 ========
 
 1. 将 DW99 主线测试树更新至 Linux 7.3.4，保留原有板级驱动和设备树，
-   处理内核升级产生的接口冲突并恢复 ARM64 编译。相关基线见
-   ``d4de4ef72``、``40fe4644c`` 和 ``5195dbf4f``。
+   处理内核升级产生的接口冲突并恢复 ARM64 编译，同期将 ReSukiSU
+   迁移到 BakaSU，并同步 SuSFS 2.4.0。相关基线见 ``d4de4ef72``、
+   ``40fe4644c`` 和 ``5195dbf4f``。
 2. 根据多轮早期启动日志，修复 PTM 通道名在读取通道数量之前分配、
    SharkLE 深睡眠 regmap 错误处理等问题（``93c55958c``、
    ``ffe6e2c98``）。随后将启动控制台收敛到 USB，保留 U-Boot
@@ -94,3 +95,45 @@ Watch-GKI 驱动审查
 * 构建验证的范围包括 ARM64 内核链接、DTB、诊断镜像封装及 Windows
   采集器离线流程。兼容驱动移植已开始，后续以目标内核的模块构建和
   ABI 校验结果更新本记录。
+
+第一轮厂商兼容移植
+==================
+
+* 将 SIPC 控制环映射恢复到 Watch-GKI 使用的非缓存页属性，并同步
+  notifier 解绑与正在执行的回调。WCN 分区读取按实际读入字节推进，
+  固件载入前核对目的区域长度，失败时向上层返回错误。
+* 蓝牙和 FM 保持原 ROM 的模块名及设备节点。FM 保留 32 位 ioctl
+  结构，蓝牙和 FM 分别绑定各自的设备树节点。SC2721 的 IRQ 极性、
+  ADC 的重复加锁和 PMIC eFuse 的硬件锁也已适配。
+* 从 Watch-GKI 引入 SharkLE Mali kbase r28p0，保留 UK 11.13
+  用户态头文件。GPU 的设备树散热绑定接入 7.3 devfreq 和 Energy
+  Model。散热功耗模型保留厂商系数，漏电估计采用板级临界温度作为
+  上界，实际限频仍由 DT 温区的温度和阈值决定，需在板上复核。
+* 恢复 USB gadget 充电器的初始化、连接和断开通知以及解绑清理，
+  修正 MUSB 的充电器引用和退出顺序。已分别编译检查启用和禁用
+  充电器的配置。
+* HyperOS 目前使用厂商 Vulkan 1.0 与 GLES 混合渲染。此次工作保留
+  现有用户态驱动的 ABI。更高的 Vulkan 版本需要经过适配和验证的
+  用户态 GPU 驱动，移植内核模块本身不会增加 Vulkan 功能。
+
+复现构建
+========
+
+在 DW99 源码树根目录运行。三个模块必须和一同使用的内核来自同一次
+构建。脚本会核对每个模块的 vermagic，CI 将内核、设备树、符号版本
+表和三个模块保存在同一构建产物中。
+
+.. code-block:: sh
+
+    make O=out-dw99 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+         lineageos_dw99_72_defconfig
+    make O=out-dw99 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+         -j"$(nproc)" Image sprd/dw99.dtb modules
+    tools/build-dw99-vendor-modules.sh out-dw99 out-dw99/vendor-modules
+
+在 WSL 中，三个 ARM64 模块均通过目标内核符号表的严格
+modpost 校验。Mali 继续使用 Watch-GKI 的 UK 11.13 和 ioctl
+ABI，设备树仍使用板级的 GPU 和 SIPC 绑定。
+
+实际开机、GPU 渲染、蓝牙和 FM 仍需板上验证。32 位 ADF、JPEG、
+相机和 ION 的其他兼容问题仍按审查记录跟踪。

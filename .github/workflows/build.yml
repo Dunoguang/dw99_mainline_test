@@ -55,8 +55,14 @@ jobs:
         run: |
           set -o pipefail
           make ARCH=arm64 CROSS_COMPILE="ccache aarch64-linux-gnu-" -j$(nproc) \
-               Image sprd/dw99.dtb 2>&1 | tee /tmp/build.log
+               Image sprd/dw99.dtb modules 2>&1 | tee /tmp/build.log
           echo "::notice::✅ Build complete at $(date)"
+
+      - name: Build DW99 vendor modules
+        env:
+          CROSS_COMPILE: "ccache aarch64-linux-gnu-"
+        run: |
+          tools/build-dw99-vendor-modules.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/vendor-modules"
 
       - name: Report versions
         run: |
@@ -123,6 +129,10 @@ jobs:
             System.map
             arch/arm64/boot/Image
             arch/arm64/boot/dts/sprd/dw99.dtb
+            Module.symvers
+            vendor-modules/mali.ko
+            vendor-modules/sprdbt_tty.ko
+            vendor-modules/sprd_fm.ko
 
       - name: ☁️ 上传到 Tempfile
         if: always()
