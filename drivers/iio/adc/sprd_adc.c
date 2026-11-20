@@ -83,22 +83,6 @@
 
 #define HWSPINLOCK_TIMEOUT		(5000)
 static DEFINE_MUTEX(adc_mutex);
-/* 7.2 compat: hwspinlock no_swlock API was removed upstream */
-static inline int sprd_hwspin_lock_timeout(struct hwspinlock *l,
-					   unsigned int to)
-{
-	unsigned long flags;
-
-	return __hwspin_lock_timeout(l, to, 0, &flags);
-}
-
-static inline void sprd_hwspin_unlock(struct hwspinlock *l)
-{
-	unsigned long flags;
-
-	__hwspin_unlock(l, 0, &flags);
-}
-
 
 static struct sprd_pmic_adc *pmic_adc;
 static u32 ana_chip_id;
@@ -152,8 +136,8 @@ static int pmic_adc_lock(void)
 	int ret = 0;
 
 	mutex_lock(&adc_mutex);
-	ret =
-	    sprd_hwspin_lock_timeout(pmic_adc->hw_lock, HWSPINLOCK_TIMEOUT);
+	/* The PMIC regmap performs sleepable SPI transfers. */
+	ret = hwspin_lock_timeout_raw(pmic_adc->hw_lock, HWSPINLOCK_TIMEOUT);
 	if (ret) {
 		pr_err("pmic adc:lock the hwlock failed.\n");
 		mutex_unlock(&adc_mutex);
@@ -164,7 +148,7 @@ static int pmic_adc_lock(void)
 
 static void pmic_adc_unlock(void)
 {
-	sprd_hwspin_unlock(pmic_adc->hw_lock);
+	hwspin_unlock_raw(pmic_adc->hw_lock);
 	mutex_unlock(&adc_mutex);
 }
 
@@ -919,52 +903,31 @@ static int sprd_pmic_read_raw(struct iio_dev *indio_dev,
 			      int *val, int *val2, long m)
 {
 	struct sprd_pmic_adc *st = iio_priv(indio_dev);
-	uint32_t vir_chan;
+	unsigned int scale;
 
-	vir_chan = chan->channel / 2;
-	if ((chan->channel < 0)
-	    || (chan->channel > st->info->num_channels))
+	if (chan->channel < 0 || chan->channel > st->info->num_channels)
 		return -EINVAL;
+
+	/* The conversion already serializes PMIC access in pmic_adc_lock(). */
+	scale = !(chan->channel % 2);
 	switch (m) {
 	case IIO_CHAN_INFO_RAW:
-		mutex_lock(&adc_mutex);
-		if (chan->channel % 2 == 0)
-			*val = sprd_get_adc_raw_value(chan->address, 1, 1);
-		else
-			*val = sprd_get_adc_raw_value(chan->address, 0, 1);
-
-		mutex_unlock(&adc_mutex);
-		return IIO_VAL_INT;
+		*val = sprd_get_adc_raw_value(chan->address, scale, 1);
+		break;
 	case IIO_CHAN_INFO_PROCESSED:
-		mutex_lock(&adc_mutex);
-		if (chan->channel % 2 == 0) {
-			*val =
-			    sprd_get_processed_adc_vol_value(vir_chan,
-							     chan->address, 1,
-							     ADC_MESURE_NUMBER);
-		} else {
-			*val =
-			    sprd_get_processed_adc_vol_value(vir_chan,
-							     chan->address, 0,
-							     ADC_MESURE_NUMBER);
-		}
-		mutex_unlock(&adc_mutex);
-		return IIO_VAL_INT;
+		*val = sprd_get_processed_adc_vol_value(chan->channel / 2,
+						       chan->address, scale,
+						       ADC_MESURE_NUMBER);
+		break;
 	case IIO_CHAN_INFO_AVERAGE_RAW:
-		mutex_lock(&adc_mutex);
-		if (chan->channel % 2 == 0) {
-			*val =
-			    sprd_get_average_adc_data(chan->address, 1,
-						      ADC_MESURE_NUMBER);
-		} else {
-			*val =
-			    sprd_get_average_adc_data(chan->address, 0,
-						      ADC_MESURE_NUMBER);
-		}
-		mutex_unlock(&adc_mutex);
-		return IIO_VAL_INT;
+		*val = sprd_get_average_adc_data(chan->address, scale,
+						ADC_MESURE_NUMBER);
+		break;
+	default:
+		return -EINVAL;
 	}
-	return -EINVAL;
+
+	return IIO_VAL_INT;
 }
 
 /*  _channel: is logical channel, even number representation of a big scale

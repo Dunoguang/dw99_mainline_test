@@ -160,11 +160,11 @@ static int sprd_pmic_probe(struct spi_device *pmic_dev)
 
 	sprd_pmic->irq_chip.name = dev_name(&pmic_dev->dev);
 	sprd_pmic->irq_chip.status_base = regbase + SPRD_PMIC_INT_MASK_STATUS;
-	sprd_pmic->irq_chip.mask_base = regbase + SPRD_PMIC_INT_EN;
+	/* INT_EN has one bit per enabled child interrupt. */
+	sprd_pmic->irq_chip.unmask_base = regbase + SPRD_PMIC_INT_EN;
 	sprd_pmic->irq_chip.ack_base = 0;
 	sprd_pmic->irq_chip.num_regs = 1;
 	sprd_pmic->irq_chip.num_irqs = irqmax;
-	sprd_pmic->irq_chip.mask_unmask_non_inverted = true;
 
 	sprd_pmic->irqs =
 	    devm_kzalloc(&pmic_dev->dev, sizeof(struct regmap_irq) * irqmax,

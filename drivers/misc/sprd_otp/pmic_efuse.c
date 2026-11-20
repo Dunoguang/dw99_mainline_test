@@ -133,9 +133,9 @@ static int pmic_efuse_lock(void)
 	int ret = 0;
 
 	mutex_lock(&pmic_efuse_mutex);
-	ret =
-	    hwspin_lock_timeout(pmic_efuse->hw_lock,
-					  HWSPINLOCK_TIMEOUT);
+	/* Retain the local mutex while taking the hardware lock alone. */
+	ret = hwspin_lock_timeout_raw(pmic_efuse->hw_lock,
+				     HWSPINLOCK_TIMEOUT);
 	if (ret) {
 		pr_err("pmic efuse:lock the hwlock failed.\n");
 		mutex_unlock(&pmic_efuse_mutex);
@@ -146,7 +146,7 @@ static int pmic_efuse_lock(void)
 
 static void pmic_efuse_unlock(void)
 {
-	hwspin_unlock(pmic_efuse->hw_lock);
+	hwspin_unlock_raw(pmic_efuse->hw_lock);
 	mutex_unlock(&pmic_efuse_mutex);
 }
 
