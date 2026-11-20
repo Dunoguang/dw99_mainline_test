@@ -15,6 +15,7 @@ ARM64 Architecture
     booting
     cpu-feature-registers
     cpu-hotplug
+    dw99-porting-history
     elf_hwcaps
     gcs
     hugetlbpage
