@@ -524,14 +524,24 @@ static int temp_binning_get(struct device *dev,
 	return 0;
 }
 
+static struct device_node *sprd_cpufreq_get_data_node(struct device *cpu_dev)
+{
+	struct device_node *np;
+
+	np = of_parse_phandle(cpu_dev->of_node, "cpufreq-data-v1", 0);
+	if (!np)
+		np = of_parse_phandle(cpu_dev->of_node, "cpufreq-data", 0);
+
+	return np;
+}
+
 /* Initializes OPP tables based on old-deprecated bindings */
 static int dev_pm_opp_of_add_table_binning(int cluster,
 	struct device *dev,
 	struct device_node *np_cpufreq_data,
 	struct sprd_cpufreq_driver_data *cpufreq_data)
 {
-	struct device_node *cpu_np = NULL;
-	struct device_node *np = NULL, *np1 = NULL;
+	struct device_node *np __free(device_node) = NULL;
 	const struct property *prop = NULL, *prop1 = NULL;
 	const __be32 *val;
 	int nr;
@@ -550,22 +560,12 @@ static int dev_pm_opp_of_add_table_binning(int cluster,
 		return -ENOENT;
 	}
 
-	if (dev && np_cpufreq_data == NULL) {
-		cpu_np = of_node_get(dev->of_node);
-		if (!cpu_np) {
-			dev_err(dev, "sprd_cpufreq: failed to find cpu node\n");
-			return -ENOENT;
-		}
-
-		np = of_parse_phandle(cpu_np, "cpufreq-data", 0);
-		np1 = of_parse_phandle(cpu_np, "cpufreq-data-v1", 0);
-		if (!np && !np1) {
+	if (dev && !np_cpufreq_data) {
+		np = sprd_cpufreq_get_data_node(dev);
+		if (!np) {
 			dev_err(dev, "sprd_cpufreq: failed to find cpufreq-data\n");
-			of_node_put(cpu_np);
 			return -ENOENT;
 		}
-		if (np1)
-			np = np1;
 		np_cpufreq_data = np;
 	}
 
@@ -652,8 +652,17 @@ static int dev_pm_opp_of_add_table_binning(int cluster,
 		unsigned long freq = be32_to_cpup(val++) * 1000;
 		unsigned long volt = be32_to_cpup(val++);
 
-		if (dev)
-			dev_pm_opp_remove(dev, freq);
+		if (dev) {
+			struct dev_pm_opp *old;
+
+			old = dev_pm_opp_find_freq_exact(dev, freq, true);
+			if (IS_ERR(old) && PTR_ERR(old) == -ERANGE)
+				old = dev_pm_opp_find_freq_exact(dev, freq, false);
+			if (!IS_ERR(old)) {
+				dev_pm_opp_put(old);
+				dev_pm_opp_remove(dev, freq);
+			}
+		}
 		if (max_freq_khz && freq / 1000 > max_freq_khz) {
 			nr -= 2;
 			continue;
@@ -694,8 +703,7 @@ static int dev_pm_opp_of_add_table_binning_slave(
 	int temp_now)
 {
 	struct device *cpu_dev;
-	struct device_node *cpu_np = NULL;
-	struct device_node *np = NULL, *np1 = NULL, *np_host = NULL;
+	struct device_node *np_host __free(device_node) = NULL;
 	unsigned int cluster;
 	int ret = 0, i;
 
@@ -709,40 +717,31 @@ static int dev_pm_opp_of_add_table_binning_slave(
 		return 0;
 
 	cpu_dev = c_host->cpu_dev;
-	if (IS_ERR(cpu_dev)) {
-		P_ERR("dev_host is ERR\n");
+	if (IS_ERR_OR_NULL(cpu_dev)) {
+		P_ERR("dev_host is invalid\n");
 		return -ENODEV;
 	}
-	cpu_np = of_node_get(cpu_dev->of_node);
-	if (!cpu_np) {
-		P_ERR("failed to find cpu node\n");
-		return -ENOENT;
-	}
 
-	np = of_parse_phandle(cpu_np, "cpufreq-data", 0);
-	np1 = of_parse_phandle(cpu_np, "cpufreq-data-v1", 0);
-	if (!np && !np1) {
+	np_host = sprd_cpufreq_get_data_node(cpu_dev);
+	if (!np_host) {
 		P_ERR("failed to find cpufreq-data\n");
-		of_node_put(cpu_np);
 		return -ENOENT;
 	}
-	if (np1)
-		np = np1;
 
-	np_host = np;
 	for (i = 0; i < SPRD_CPUFREQ_MAX_MODULE; i++) {
-		np = of_parse_phandle(np_host, "cpufreq-sub-clusters", i);
+		struct device_node *np __free(device_node) =
+			of_parse_phandle(np_host, "cpufreq-sub-clusters", i);
+
 		if (!np) {
 			P_DBG("index %d not found sub-clusters\n", i);
-			goto free_np;
+			break;
 		}
 		P_DBG("slave index %d name is found %s\n",
 			i, np->full_name);
 		cluster = SPRD_CPUFREQ_MAX_MODULE;
 		if (of_property_read_u32(np, "cpufreq-cluster-id", &cluster)) {
 			P_ERR("index %d not found cpufreq_custer_id\n", i);
-			ret = -ENODEV;
-			goto free_np;
+			return -ENODEV;
 		}
 		if (cluster >= SPRD_CPUFREQ_MAX_MODULE ||
 		cpufreq_datas[cluster] == NULL) {
@@ -755,14 +754,9 @@ static int dev_pm_opp_of_add_table_binning_slave(
 			np,
 			cpufreq_datas[cluster]);
 		if (ret)
-			goto free_np;
+			return ret;
 	}
 
-free_np:
-	if (np)
-		of_node_put(np);
-	if (np_host)
-		of_node_put(np_host);
 	return ret;
 }
 static int sprd_verify_opp_with_regulator(struct device *cpu_dev,
@@ -775,18 +769,12 @@ static int sprd_verify_opp_with_regulator(struct device *cpu_dev,
 		struct dev_pm_opp *opp;
 		unsigned long opp_uV, tol_uV;
 
-		rcu_read_lock();
 		opp = dev_pm_opp_find_freq_ceil(cpu_dev, &opp_freq);
-		if (IS_ERR(opp)) {
-			/* We dont have more freq in opp table,
-			 * break the loop
-			*/
-			rcu_read_unlock();
-			P_DBG("invalid opp freq %lu\n", opp_freq);
+		if (IS_ERR(opp))
 			break;
-		}
+
 		opp_uV = dev_pm_opp_get_voltage(opp);
-		rcu_read_unlock();
+		dev_pm_opp_put(opp);
 		tol_uV = opp_uV * volt_tol / 100;
 		if (regulator_is_supported_voltage(cpu_reg, opp_uV,
 							   opp_uV + tol_uV)) {
@@ -1204,14 +1192,12 @@ static int sprd_cpufreq_sync_current_voltage(
 		return -ENODEV;
 
 	freq_hz = clk_get_rate(cpufreq_data->clk);
-	rcu_read_lock();
 	opp = dev_pm_opp_find_freq_ceil(cpufreq_data->cpu_dev, &freq_hz);
-	if (IS_ERR(opp)) {
-		rcu_read_unlock();
+	if (IS_ERR(opp))
 		return PTR_ERR(opp);
-	}
+
 	volt_new = dev_pm_opp_get_voltage(opp);
-	rcu_read_unlock();
+	dev_pm_opp_put(opp);
 
 	old_uv = regulator_get_voltage(cpufreq_data->reg);
 	if (old_uv < 0)
@@ -1380,18 +1366,16 @@ static int sprd_cpufreq_set_target(
 		idx, cpufreq_data->freqvolt[idx].freq);
 	if (cpu_dev) {
 		/*for cpu device, get freq&volt from opp*/
-		rcu_read_lock();
 		opp = dev_pm_opp_find_freq_ceil(cpu_dev, &freq_Hz);
 		if (IS_ERR(opp)) {
-			rcu_read_unlock();
 			P_ERR("failed to find OPP for %luKhz\n",
 					freq_Hz / 1000);
 			ret = PTR_ERR(opp);
 			goto EXIT_UNLOCK;
 		}
 		volt_new = dev_pm_opp_get_voltage(opp);
-		opp_freq_hz = dev_pm_opp_get_freq(opp);
-		rcu_read_unlock();
+		opp_freq_hz = freq_Hz;
+		dev_pm_opp_put(opp);
 	} else {
 		/*for sub device, get freq&volt from table*/
 		volt_new = cpufreq_data->freqvolt[idx].volt;
@@ -1829,14 +1813,12 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 	char coreclk[15] = "core*_clk";
 	struct device *cpu_dev;
 	struct regulator *cpu_reg = NULL;
-	struct device_node *cpu_np;
-	struct device_node *np, *np1;
+	struct device_node *np __free(device_node) = NULL;
 	struct clk *cpu_clk;
 	struct sprd_cpufreq_driver_data *c;
 	unsigned int volt_tol = 0;
 	unsigned int transition_latency = CPUFREQ_ETERNAL;
 	unsigned long clk_low_freq_p_max = 0;
-	struct cpufreq_frequency_table *freq_table = NULL;
 	int cpu = 0;
 
 	if (!policy) {
@@ -1854,35 +1836,23 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 	cpu = policy->cpu;
 	P_DBG("going to get cpu%d device\n", cpu);
 	cpu_dev = get_cpu_device(cpu);
-	if (IS_ERR(cpu_dev)) {
+	if (!cpu_dev) {
 		P_ERR("failed to get cpu%d device\n", cpu);
 		return -ENODEV;
 	}
 
-	cpu_np = of_node_get(cpu_dev->of_node);
-	if (!cpu_np) {
-		P_ERR("failed to find cpu%d node\n", cpu);
-		return -ENOENT;
-	}
-
-	np = of_parse_phandle(cpu_np, "cpufreq-data", 0);
-	np1 = of_parse_phandle(cpu_np, "cpufreq-data-v1", 0);
-	if (!np && !np1) {
+	np = sprd_cpufreq_get_data_node(cpu_dev);
+	if (!np) {
 		P_ERR("failed to find cpufreq-data for cpu%d\n", cpu);
-		of_node_put(cpu_np);
 		return -ENOENT;
 	}
-	if (np1)
-		np = np1;
 
 	if (sprd_cpufreq_data(cpu))
 		c = sprd_cpufreq_data(cpu);
 	else {
 		c = kzalloc(sizeof(*c), GFP_KERNEL);
-		if (!c) {
-			ret = -ENOMEM;
-			goto free_np;
-		}
+		if (!c)
+			return -ENOMEM;
 	}
 
 	of_property_read_u32(np, "volt-share-masters-bits",
@@ -1992,17 +1962,12 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 	}
 
 	P_DBG("going to initialize freq_table\n");
-	ret = dev_pm_opp_init_cpufreq_table(cpu_dev, &freq_table);
+	ret = dev_pm_opp_init_cpufreq_table(cpu_dev, &policy->freq_table);
 	if (ret) {
 		P_ERR("%d in initializing freq_table\n", ret);
 		goto free_opp;
 	}
 
-	ret = cpufreq_table_validate_and_sort(policy);
-	if (ret) {
-		P_ERR("invalid frequency table: %d\n", ret);
-		goto free_table;
-	}
 	P_DBG("going to prepare clock\n");
 
 	if (!c->clk_en) {
@@ -2051,18 +2016,21 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 
 	policy->driver_data = c;
 	policy->clk = cpu_clk;
-	policy->suspend_freq = freq_table[0].frequency;
+	policy->suspend_freq = policy->freq_table[0].frequency;
 	if (sprd_cpufreqhw_probed(c->cluster))
 		policy->cur = sprd_cpufreqhw_get(c->cluster);
 	else
 		policy->cur = clk_get_rate(cpu_clk) / 1000;
 	policy->cpuinfo.transition_latency = transition_latency;
 	freq_Hz = policy->cur*1000;
-	rcu_read_lock();
 	opp = dev_pm_opp_find_freq_ceil(cpu_dev, &freq_Hz);
-	c->volt_req = dev_pm_opp_get_voltage(opp);
-	c->freq_req = dev_pm_opp_get_freq(opp);
-	rcu_read_unlock();
+	if (IS_ERR(opp))
+		opp = dev_pm_opp_find_freq_floor(cpu_dev, &freq_Hz);
+	if (!IS_ERR(opp)) {
+		c->volt_req = dev_pm_opp_get_voltage(opp);
+		c->freq_req = freq_Hz;
+		dev_pm_opp_put(opp);
+	}
 
 
 	if (sprd_cpufreqhw_probed(c->cluster)) {
@@ -2081,14 +2049,14 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 	P_INF("init cpu%d is ok, freq=%ld, freq_req=%ld, volt_req=%ld\n",
 		cpu, freq_Hz, c->freq_req, c->volt_req);
 
-	goto free_np;
+	return 0;
 
 free_table:
 	if (policy->freq_table != NULL)
 		dev_pm_opp_free_cpufreq_table(cpu_dev,
 			&policy->freq_table);
 free_opp:
-	dev_pm_opp_of_remove_table(cpu_dev);
+	dev_pm_opp_remove_all_dynamic(cpu_dev);
 free_reg:
 	if (!IS_ERR(cpu_reg))
 		devm_regulator_put(cpu_reg);
@@ -2115,13 +2083,6 @@ free_mem:
 	}
 	kfree(c);
 	sprd_cpufreq_data(cpu) = NULL;
-free_np:
-	if (np)
-		of_node_put(np);
-	if (np1)
-		of_node_put(np1);
-	if (cpu_np)
-		of_node_put(cpu_np);
 	return ret;
 }
 
@@ -2355,8 +2316,7 @@ static int  sprd_cpufreq_probe(struct platform_device *pdev)
 	struct device *cpu_dev = NULL;
 	struct clk *cpu_clk = NULL;
 	struct regulator *cpu_reg = NULL;
-	struct device_node *cpu_np;
-	struct device_node *np = NULL, *np1 = NULL;
+	struct device_node *np __free(device_node) = NULL;
 	int ret = 0, i;
 	/* doing probe only for cpu 0 */
 	int cpu = 0;
@@ -2370,28 +2330,17 @@ static int  sprd_cpufreq_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	cpu_np = of_node_get(cpu_dev->of_node);
-	if (!cpu_np) {
-		P_ERR("failed to find cpu node\n");
-		return -ENODEV;
-	}
-
-	np = of_parse_phandle(cpu_np, "cpufreq-data", 0);
-	np1 = of_parse_phandle(cpu_np, "cpufreq-data-v1", 0);
-	if (!np && !np1) {
+	np = sprd_cpufreq_get_data_node(cpu_dev);
+	if (!np) {
 		P_ERR("failed to find cpufreq-data for cpu%d\n", cpu);
-		of_node_put(cpu_np);
 		return -ENOENT;
 	}
-	if (np1)
-		np = np1;
 
 	cpu_clk = of_clk_get_by_name(np, CORE_CLK);
 	if (IS_ERR(cpu_clk)) {
 		P_ERR("failed in clock getting, %ld\n",
 				PTR_ERR(cpu_clk));
-		ret = PTR_ERR(cpu_clk);
-		goto put_np;
+		return PTR_ERR(cpu_clk);
 	}
 
 	cpu_reg = devm_regulator_get(cpu_dev, CORE_SUPPLY);
@@ -2418,14 +2367,6 @@ put_clk:
 		P_DBG("putting clk\n");
 		clk_put(cpu_clk);
 	}
-
-put_np:
-	if (np)
-		of_node_put(np);
-	if (np1)
-		of_node_put(np1);
-	if (cpu_np)
-		of_node_put(cpu_np);
 
 	/* ret is not zero? we encountered an error.
 	 * return failure/probe deferred
