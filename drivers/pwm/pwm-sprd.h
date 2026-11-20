@@ -15,14 +15,14 @@
  *
  * @mmio_base: base address of pwm chip
  * @clk: pointer to clk structure of pwm chip
- * @chip: linux pwm chip representation
  * @syscon: syscon of pwm chip
+ * @core_ops: register operations for this hardware version
  */
 struct sprd_pwm_chip {
 	void __iomem *mmio_base;
 	struct clk *clk;
-	struct pwm_chip chip;
 	struct regmap *syscon;
+	const struct pwm_core_ops *core_ops;
 };
 
 struct pwm_core_ops {
@@ -31,6 +31,9 @@ struct pwm_core_ops {
 	void (*pwm_config)(struct pwm_chip *chip,
 		struct pwm_device *pwm, int level, int precale);
 };
+
+extern const struct pwm_core_ops pwm_r2p0_ops;
+extern const struct pwm_core_ops pwm_r3p0_ops;
 
 static inline struct sprd_pwm_chip *to_sprd_pwm_chip(struct pwm_chip *chip)
 {

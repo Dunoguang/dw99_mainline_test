@@ -211,6 +211,7 @@ static int sprd_hsphy_init(struct usb_phy *x)
 	writel_relaxed(reg1, PHY_REG_BASE + REG_AP_AHB_OTG_CTRL1);
 
 	if (!atomic_read(&phy->reset)) {
+		dev_dbg(x->dev, "resetting the USB PHY and MUSB controller\n");
 		msleep(20);
 		__reset_core(PHY_REG_BASE);
 		atomic_set(&phy->reset, 1);
@@ -450,6 +451,7 @@ static int sprd_hsphy_probe(struct platform_device *pdev)
 		return PTR_ERR(phy->vdd);
 	}
 
+	dev_dbg(dev, "configuring USB PHY supply\n");
 	ret = regulator_set_voltage(phy->vdd, phy->vdd_vol, phy->vdd_vol);
 	if (ret < 0) {
 		dev_err(dev, "fail to set ssphy vdd voltage at %dmV\n",
@@ -468,6 +470,7 @@ static int sprd_hsphy_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	dev_dbg(dev, "powering down the USB PHY during probe\n");
 	regmap_update_bits(hsphy_glb, REG_AON_APB_PWR_CTRL,
 		BIT_AON_APB_USB_PHY_PD_L, BIT_AON_APB_USB_PHY_PD_L);
 	regmap_update_bits(hsphy_glb, REG_AON_APB_PWR_CTRL,

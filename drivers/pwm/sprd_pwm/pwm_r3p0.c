@@ -14,8 +14,7 @@ enum pwm_r3p0_reg_t {
 static void sprd_pwm_early_config(struct pwm_chip *chip,
 	struct pwm_device *pwm, bool enable)
 {
-	struct sprd_pwm_chip *pc = container_of(chip,
-		struct sprd_pwm_chip, chip);
+	struct sprd_pwm_chip *pc = to_sprd_pwm_chip(chip);
 	unsigned int mask = 0xf0;
 
 	if (enable)
@@ -29,8 +28,7 @@ static void sprd_pwm_early_config(struct pwm_chip *chip,
 static void sprd_pwm_config(struct pwm_chip *chip,
 	struct pwm_device *pwm, int level, int prescale)
 {
-	struct sprd_pwm_chip *pc = container_of(chip,
-		struct sprd_pwm_chip, chip);
+	struct sprd_pwm_chip *pc = to_sprd_pwm_chip(chip);
 
 	if (level == 0) {
 		sprd_pwm_writel(pc, pwm->hwpwm, PWM_R3P0_ENABLE, 0);
@@ -45,7 +43,7 @@ static void sprd_pwm_config(struct pwm_chip *chip,
 	sprd_pwm_writel(pc, pwm->hwpwm, PWM_R3P0_ENABLE, 1);
 }
 
-struct pwm_core_ops pwm_r3p0_ops = {
+const struct pwm_core_ops pwm_r3p0_ops = {
 	.pwm_early_config = sprd_pwm_early_config,
 	.pwm_config = sprd_pwm_config,
 };

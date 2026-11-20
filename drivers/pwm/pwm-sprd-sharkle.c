@@ -25,10 +25,6 @@
 #define		PWM_CLK_PARENT		"sprd_pwm_clk_parent"
 #define		PWM_CLK			"clk_pwm"
 
-struct pwm_core_ops *sprd_core_ops;
-extern struct pwm_core_ops pwm_r2p0_ops;
-extern struct pwm_core_ops pwm_r3p0_ops;
-
 static int sprd_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 				int duty_ns, int period_ns)
 {
@@ -61,11 +57,11 @@ static int sprd_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 		config_state = 1;
 	}
 
-	sprd_core_ops->pwm_early_config(chip, pwm, true);
-	sprd_core_ops->pwm_config(chip, pwm, led_level, pwm_scale);
+	pc->core_ops->pwm_early_config(chip, pwm, true);
+	pc->core_ops->pwm_config(chip, pwm, led_level, pwm_scale);
 
 	if (led_level == 0)
-		sprd_core_ops->pwm_early_config(chip, pwm, false);
+		pc->core_ops->pwm_early_config(chip, pwm, false);
 
 	return 0;
 }
@@ -149,6 +145,7 @@ static const struct of_device_id sprd_pwm_matches[] = {
 	},
 	{},
 };
+MODULE_DEVICE_TABLE(of, sprd_pwm_matches);
 
 static int sprd_pwm_probe(struct platform_device *pdev)
 {
@@ -162,10 +159,8 @@ static int sprd_pwm_probe(struct platform_device *pdev)
 	pr_debug("%s:enter\n", __func__);
 
 	of_id = of_match_node(sprd_pwm_matches, pdev->dev.of_node);
-	if (of_id)
-		sprd_core_ops = (struct pwm_core_ops *)of_id->data;
-	else
-		pr_err("%s: Not found match of_id\n", __func__);
+	if (!of_id)
+		return -ENODEV;
 
 	chip = devm_pwmchip_alloc(&pdev->dev, NUM_PWM,
 				  sizeof(struct sprd_pwm_chip));
@@ -173,6 +168,7 @@ static int sprd_pwm_probe(struct platform_device *pdev)
 		return PTR_ERR(chip);
 
 	pc = to_sprd_pwm_chip(chip);
+	pc->core_ops = of_id->data;
 	platform_set_drvdata(pdev, pc);
 	chip->ops = &sprd_pwm_ops;
 
@@ -196,17 +192,12 @@ static int sprd_pwm_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "pwm syscon get failed\n");
 		return PTR_ERR(pc->syscon);
 	}
-	pc->syscon = syscon_regmap_lookup_by_compatible("sprd,sys-aon-apb");
-	if (IS_ERR(pc->syscon)) {
-		dev_err(&pdev->dev, "pwm syscon get failed\n");
-		return PTR_ERR(pc->syscon);
-	}
 
 	ret = clk_prepare(pc->clk);
 	if (ret)
 		return ret;
 
-	ret = devm_pwmchip_add(&pdev->dev, &pc->chip);
+	ret = devm_pwmchip_add(&pdev->dev, chip);
 	if (ret < 0) {
 		clk_unprepare(pc->clk);
 		dev_err(&pdev->dev, "devm_pwmchip_add() failed: %d\n", ret);
@@ -225,7 +216,7 @@ static void sprd_pwm_remove(struct platform_device *pdev)
 
 static struct platform_driver sprd_pwm_driver = {
 	.driver = {
-		.name = "sprd-pwm",
+		.name = "sprd-pwm-sharkle",
 		.owner = THIS_MODULE,
 		.pm = &pwm_sprd_pm_ops,
 		.of_match_table = of_match_ptr(sprd_pwm_matches),
@@ -238,4 +229,4 @@ module_platform_driver(sprd_pwm_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Billy Zhang <billy.zhang@spreadtrum.com>");
-MODULE_ALIAS("platform:sprd-pwm");
+MODULE_ALIAS("platform:sprd-pwm-sharkle");

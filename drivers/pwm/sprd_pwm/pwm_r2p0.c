@@ -11,8 +11,7 @@ enum pwm_r2p0_reg_t {
 static void sprd_pwm_early_config(struct pwm_chip *chip,
 	struct pwm_device *pwm, bool enable)
 {
-	struct sprd_pwm_chip *pc = container_of(chip,
-		struct sprd_pwm_chip, chip);
+	struct sprd_pwm_chip *pc = to_sprd_pwm_chip(chip);
 	int mask, val;
 
 	mask = 0x10 << (pwm->hwpwm);
@@ -29,8 +28,7 @@ static void sprd_pwm_early_config(struct pwm_chip *chip,
 static void sprd_pwm_config(struct pwm_chip *chip,
 	struct pwm_device *pwm, int level, int prescale)
 {
-	struct sprd_pwm_chip *pc = container_of(chip,
-		struct sprd_pwm_chip, chip);
+	struct sprd_pwm_chip *pc = to_sprd_pwm_chip(chip);
 
 	sprd_pwm_writel(pc, pwm->hwpwm, PWM_R2P0_CNT,
 			(level << 8) | PWM_MOD_MAX);
@@ -39,7 +37,7 @@ static void sprd_pwm_config(struct pwm_chip *chip,
 	sprd_pwm_writel(pc, pwm->hwpwm, PWM_R2P0_PRESCALE, (1 << 8) | prescale);
 }
 
-struct pwm_core_ops pwm_r2p0_ops = {
+const struct pwm_core_ops pwm_r2p0_ops = {
 	.pwm_early_config = sprd_pwm_early_config,
 	.pwm_config = sprd_pwm_config,
 };

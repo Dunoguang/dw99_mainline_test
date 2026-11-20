@@ -3714,7 +3714,8 @@
 		compatible = "sprd,mailbox";
 		reg = <0x00 0x400a0000 0x00 0x8000 0x00 0x400a8000 0x00 0x8000>;
 		sprd,syscon-ap-apb = <0x2b>;
-		interrupts = <0x00 0x44 0x00 0x00 0x45 0x00>;
+		/* GICv2 initializes both mailbox SPIs as level-triggered. */
+		interrupts = <0x00 0x44 0x04 0x00 0x45 0x04>;
 		sprd,core-cnt = <0x07>;
 		sprd,version = <0x03>;
 	};
@@ -5176,10 +5177,23 @@
 			phandle = <0xb3>;
 		};
 
-		pstore@8845a800 {
-			reg = <0x00 0x8845a800 0x00 0x40000>;
+		/* Keep the vendor pstore carveout, including both half-page edges. */
+		pstore-padding@8845a800 {
+			reg = <0x00 0x8845a800 0x00 0x800>;
+		};
+
+		ramoops@8845b000 {
+			compatible = "ramoops";
+			reg = <0x00 0x8845b000 0x00 0x3f000>;
+			record-size = <0x8000>;
+			console-size = <0x20000>;
+			pmsg-size = <0x4000>;
 			linux,phandle = <0xc5>;
 			phandle = <0xc5>;
+		};
+
+		pstore-padding@8849a000 {
+			reg = <0x00 0x8849a000 0x00 0x800>;
 		};
 
 		cp-modem@89600000 {
@@ -5231,14 +5245,6 @@
 			linux,phandle = <0xc6>;
 			phandle = <0xc6>;
 		};
-	};
-
-	ramoops {
-		compatible = "ramoops";
-		memory-region = <0xc5>;
-		record-size = <0x00 0x8000>;
-		console-size = <0x00 0x8000>;
-		pmsg-size = <0x00 0x8000>;
 	};
 
 	ion {

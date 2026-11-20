@@ -80,5 +80,7 @@ obj-$(CONFIG_PWM_VT8500)	+= pwm-vt8500.o
 obj-$(CONFIG_PWM_XILINX)	+= pwm-xilinx.o
 
 # ---- SPRD vendor drivers (ported from 4.4) ----
-obj-$(CONFIG_PWM_SPRD_SHARKLE)		+= pwm-sprd-sharkle.o sprd_pwm/
+obj-$(CONFIG_PWM_SPRD_SHARKLE)		+= sprd-pwm-sharkle.o
+sprd-pwm-sharkle-y			:= pwm-sprd-sharkle.o sprd_pwm/pwm_r2p0.o \
+					   sprd_pwm/pwm_r3p0.o
 obj-$(CONFIG_PWM_SPRD_PMIC)	+= pwm-sprd-pmic.o
