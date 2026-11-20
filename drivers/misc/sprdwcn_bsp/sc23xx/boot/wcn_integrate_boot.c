@@ -285,97 +285,73 @@ static void gnss_write_version_data(void)
 static int wcn_load_firmware_img(struct wcn_device *wcn_dev,
 				 const char *path, unsigned int len)
 {
-	int read_len, size, i, ret;
+	ssize_t read_len;
+	int i, ret;
 	loff_t off = 0;
 	unsigned long timeout;
-	char *data = NULL;
-	char *wcn_image_buffer;
+	char *data;
 	struct file *file;
 
-	/* try to open file */
-	for (i = 1; i <= WCN_OPEN_MAX_CNT; i++) {
+	if (!len || len > wcn_dev->maxsz)
+		return -EINVAL;
+
+	for (i = 1; ; i++) {
 		file = filp_open(path, O_RDONLY, 0);
-		if (IS_ERR(file)) {
-			WCN_ERR("try open file %s,count_num:%d, file=%p\n",
-				path, i, file);
-			if (i == WCN_OPEN_MAX_CNT) {
-				WCN_ERR("open file %s error\n", path);
-				return -EINVAL;
-			}
-			msleep(200);
-		} else
+		if (!IS_ERR(file))
 			break;
-	}
 
-	WCN_INFO("open image file %s  successfully\n", path);
-	/* read file to buffer */
-	size = len;
-	wcn_image_buffer = vmalloc(size);
-	if (!wcn_image_buffer) {
-		fput(file);
-		WCN_ERR("no memory\n");
-		return -ENOMEM;
-	}
-	WCN_INFO("wcn_image_buffer=%p will read len:%u\n",
-		 wcn_image_buffer, len);
-
-	data = wcn_image_buffer;
-	timeout = jiffies + msecs_to_jiffies(4000);
-	do {
-read_retry:
-		read_len = kernel_read(file, wcn_image_buffer, size, &off);
-		if (read_len > 0) {
-			off += read_len;
-			size -= read_len;
-			wcn_image_buffer += read_len;
-		} else if (read_len < 0) {
-			WCN_INFO("image read erro:%d read:%lld\n",
-				 read_len, off);
-			msleep(200);
-			if (time_before(jiffies, timeout)) {
-				goto read_retry;
-			} else {
-				vfree(data);
-				fput(file);
-				WCN_INFO("load image fail:%d off:%lld len:%d\n",
-					 read_len, off, len);
-				return read_len;
-			}
+		if (i == WCN_OPEN_MAX_CNT) {
+			WCN_ERR("open image %s: %ld\n", path, PTR_ERR(file));
+			return PTR_ERR(file);
 		}
-	} while ((read_len > 0) && (size > 0));
+		msleep(200);
+	}
 
-	fput(file);
-	WCN_INFO("After read, wcn_image_buffer=%p size:%d read:%lld\n",
-		 wcn_image_buffer, size, off);
-	if (size + off != len)
-		WCN_INFO("download image may erro!!\n");
+	data = vmalloc(len);
+	if (!data) {
+		ret = -ENOMEM;
+		goto out_file;
+	}
 
-	wcn_image_buffer = data;
-	if (wcn_dev_is_gnss(wcn_dev) && gnss_ops && (gnss_ops->file_judge)) {
-		ret = gnss_ops->file_judge(wcn_image_buffer,
-					   s_wcn_device.gnss_type);
+	timeout = jiffies + msecs_to_jiffies(4000);
+	while (off < len) {
+		read_len = kernel_read(file, data + off, len - off, &off);
+		if (read_len > 0)
+			continue;
+
+		if (!read_len || time_after_eq(jiffies, timeout)) {
+			ret = read_len ?: -EIO;
+			WCN_ERR("read image %s: %d at %lld of %u bytes\n",
+				path, ret, off, len);
+			goto out_data;
+		}
+		msleep(200);
+	}
+
+	if (wcn_dev_is_gnss(wcn_dev) && gnss_ops && gnss_ops->file_judge) {
+		ret = gnss_ops->file_judge(data, s_wcn_device.gnss_type);
 		if (ret == 1) {
-			vfree(wcn_image_buffer);
 			WCN_INFO("change gnss file path\n");
-			return 1;
+			goto out_data;
 		}
 	}
 
 #if WCN_INTEGRATE_PLATFORM_DEBUG
 	if (s_wcn_debug_case == WCN_START_MARLIN_DDR_FIRMWARE_DEBUG)
-		memcpy(wcn_image_buffer, marlin_firmware_bin, len);
+		memcpy(data, marlin_firmware_bin, len);
 	else if (s_wcn_debug_case == WCN_START_GNSS_DDR_FIRMWARE_DEBUG)
-		memcpy(wcn_image_buffer, gnss_firmware_bin, len);
+		memcpy(data, gnss_firmware_bin, len);
 #endif
 
-	/* copy file data to target ddr address */
-	wcn_write_data_to_phy_addr(wcn_dev->base_addr, data, len);
+	ret = wcn_write_data_to_phy_addr(wcn_dev->base_addr, data, len);
+	if (!ret)
+		WCN_INFO("loaded image %s (%u bytes)\n", path, len);
 
-	vfree(wcn_image_buffer);
-
-	WCN_INFO("finish\n");
-
-	return 0;
+out_data:
+	vfree(data);
+out_file:
+	fput(file);
+	return ret;
 }
 
 static int wcn_load_firmware_data(struct wcn_device *wcn_dev)
@@ -423,7 +399,6 @@ static int wcn_load_firmware_data(struct wcn_device *wcn_dev)
 static int wcn_download_image(struct wcn_device *wcn_dev)
 {
 	const struct firmware *firmware;
-	int load_fimrware_ret;
 	bool is_marlin;
 	int err;
 
@@ -446,30 +421,28 @@ static int wcn_download_image(struct wcn_device *wcn_dev)
 	WCN_INFO("loading image [%s] from firmware subsystem ...\n",
 			firmware_file_name);
 	err = request_firmware_direct(&firmware, firmware_file_name, NULL);
-	if (err < 0) {
-		WCN_ERR("no find image [%s] errno:(%d)(ignore!!)\n",
-				firmware_file_name, err);
-		load_fimrware_ret = wcn_load_firmware_data(wcn_dev);
-		if (load_fimrware_ret != 0) {
-			WCN_ERR("wcn_load_firmware_data ERR!\n");
-			return -EINVAL;
-		}
-	} else {
-		WCN_INFO("image size = %d\n", (int)firmware->size);
-		if (wcn_write_data_to_phy_addr(wcn_dev->base_addr,
-					       (void *)firmware->data,
-					       firmware->size)) {
-			WCN_ERR("wcn_mem_ram_vmap_nocache fail\n");
-			release_firmware(firmware);
-			return -ENOMEM;
-		}
-
-		release_firmware(firmware);
-		WCN_INFO("loading image [%s] successfully!\n",
-				firmware_file_name);
+	if (err) {
+		WCN_INFO("firmware %s unavailable (%d), trying partition\n",
+			 firmware_file_name, err);
+		err = wcn_load_firmware_data(wcn_dev);
+		return err > 0 ? -EINVAL : err;
 	}
 
-	return 0;
+	if (!firmware->size || firmware->size > wcn_dev->maxsz) {
+		WCN_ERR("image %s length %zu exceeds firmware region or is empty\n",
+			firmware_file_name, firmware->size);
+		err = -EINVAL;
+	} else {
+		err = wcn_write_data_to_phy_addr(wcn_dev->base_addr,
+						(void *)firmware->data,
+						firmware->size);
+		if (!err)
+			WCN_INFO("loaded image %s (%zu bytes)\n",
+				 firmware_file_name, firmware->size);
+	}
+
+	release_firmware(firmware);
+	return err;
 }
 
 static int wcn_download_image_new(struct wcn_device *wcn_dev)
@@ -497,10 +470,10 @@ static int wcn_download_image_new(struct wcn_device *wcn_dev)
 				file = wcn_dev->file_path_ext;
 			gnss_file_path_set(file);
 			WCN_INFO("load config file:%s\n", file);
-			wcn_load_firmware_img(wcn_dev, file,
-					      wcn_dev->file_length);
+			ret = wcn_load_firmware_img(wcn_dev, file,
+						     wcn_dev->file_length);
 		}
-		return 0;
+		return ret > 0 ? -EINVAL : ret;
 	}
 
 	/* old function */

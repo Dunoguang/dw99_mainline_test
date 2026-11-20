@@ -78,6 +78,8 @@ struct sbuf_ring {
 	u8			rx_wakelock_state;
 	u16			need_wake_lock;
 
+	/* Serializes notification delivery with handler replacement. */
+	struct mutex		notify_lock;
 	void			(*handler)(int event, void *data);
 	void			*data;
 };

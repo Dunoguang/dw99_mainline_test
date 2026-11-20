@@ -17,6 +17,7 @@
 #include <linux/list.h>
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/overflow.h>
 #include <linux/vmalloc.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
@@ -53,21 +54,14 @@ struct smem_record {
 	u32 addr;
 };
 
-struct smem_map_list {
-	struct list_head map_head;
-	spinlock_t       lock;
-	u32         inited;
-};
-
 struct smem_map {
 	struct list_head map_list;
-	struct task_struct *task;
 	const void *mem;
-	unsigned int count;
 };
 
 static struct smem_phead	sipc_smem_phead;
-static struct smem_map_list	mem_mp;
+static LIST_HEAD(smem_mappings);
+static DEFINE_SPINLOCK(smem_mappings_lock);
 
 int smem_set_default_pool(u32 addr)
 {
@@ -84,7 +78,6 @@ int smem_set_default_pool(u32 addr)
 int smem_init(u32 addr, u32 size, u32 dst)
 {
 	struct smem_phead *phead = &sipc_smem_phead;
-	struct smem_map_list *smem = &mem_mp;
 	struct smem_pool *spool, *pos;
 	unsigned long flags;
 
@@ -124,10 +117,6 @@ int smem_init(u32 addr, u32 size, u32 dst)
 	atomic_set(&spool->used, 0);
 	spin_lock_init(&spool->lock);
 	INIT_LIST_HEAD(&spool->smem_head);
-
-	spin_lock_init(&smem->lock);
-	INIT_LIST_HEAD(&smem->map_head);
-	smem->inited = 1;
 
 	/* allocator block size is times of pages */
 	if (spool->size >= SMEM_ALIGN_POOLSZ)
@@ -219,87 +208,87 @@ u32 smem_alloc(u32 size)
 }
 EXPORT_SYMBOL(smem_alloc);
 
-static void *shmem_ram_vmap(phys_addr_t start, size_t size, int noncached)
+static void *shmem_ram_vmap(phys_addr_t start, size_t size, bool noncached)
 {
-	struct page **pages;
-	phys_addr_t page_start;
-	unsigned int page_count;
-	pgprot_t prot;
-	unsigned int i;
-	void *vaddr;
-	phys_addr_t addr;
-	unsigned long flags;
+	unsigned long first_pfn = PHYS_PFN(start);
+	unsigned int i, page_count;
 	struct smem_map *map;
-	struct smem_map_list *smem = &mem_mp;
+	struct page **pages;
+	unsigned long flags;
+	phys_addr_t last;
+	pgprot_t prot;
+	void *vaddr;
 
-	map = kzalloc(sizeof(struct smem_map), GFP_KERNEL);
-	if (!map)
+	if (!size || check_add_overflow(start, size - 1, &last) ||
+	    PHYS_PFN(last) - first_pfn >= UINT_MAX)
 		return NULL;
 
-	page_start = start - offset_in_page(start);
-	page_count = DIV_ROUND_UP(size + offset_in_page(start), PAGE_SIZE);
-	if (noncached)
-		prot = pgprot_noncached(PAGE_KERNEL);
-	else
-		prot = PAGE_KERNEL;
-
-	pages = kmalloc_array(page_count, sizeof(struct page *), GFP_KERNEL);
-	if (!pages) {
-		pr_err("%s: Failed to allocate array for %u pages\n",
-		       __func__, page_count);
-		kfree(map);
+	page_count = PHYS_PFN(last) - first_pfn + 1;
+	pages = kvmalloc_array(page_count, sizeof(*pages), GFP_KERNEL);
+	if (!pages)
 		return NULL;
-	}
 
 	for (i = 0; i < page_count; i++) {
-		addr = page_start + i * PAGE_SIZE;
-		pages[i] = pfn_to_page(addr >> PAGE_SHIFT);
+		if (!pfn_valid(first_pfn + i))
+			goto out_pages;
+		pages[i] = pfn_to_page(first_pfn + i);
 	}
-	vaddr = vm_map_ram(pages, page_count, -1) + offset_in_page(start);
-	kfree(pages);
 
-	map->count = page_count;
+	map = kmalloc(sizeof(*map), GFP_KERNEL);
+	if (!map)
+		goto out_pages;
+
+	/* The CP's control rings rely on Watch-GKI's uncached mapping. */
+	prot = noncached ? pgprot_noncached(PAGE_KERNEL) : PAGE_KERNEL;
+	vaddr = vmap(pages, page_count, VM_MAP, prot);
+	if (!vaddr) {
+		kfree(map);
+		goto out_pages;
+	}
+
+	kvfree(pages);
+	vaddr += offset_in_page(start);
 	map->mem = vaddr;
-	map->task = current;
+	spin_lock_irqsave(&smem_mappings_lock, flags);
+	list_add_tail(&map->map_list, &smem_mappings);
+	spin_unlock_irqrestore(&smem_mappings_lock, flags);
 
-	if (smem->inited) {
-		spin_lock_irqsave(&smem->lock, flags);
-		list_add_tail(&map->map_list, &smem->map_head);
-		spin_unlock_irqrestore(&smem->lock, flags);
-	}
 	return vaddr;
+
+out_pages:
+	kvfree(pages);
+	return NULL;
 }
 
 void shmem_ram_unmap(const void *mem)
 {
-	struct smem_map *map, *next;
+	struct smem_map *map;
 	unsigned long flags;
-	struct smem_map_list *smem = &mem_mp;
 
-	if (smem->inited) {
-		spin_lock_irqsave(&smem->lock, flags);
-		list_for_each_entry_safe(map, next, &smem->map_head, map_list) {
-		if (map->mem == mem) {
-				list_del(&map->map_list);
-				vm_unmap_ram(mem - offset_in_page(mem), map->count);
-				kfree(map);
-				break;
-			}
-		}
-		spin_unlock_irqrestore(&smem->lock, flags);
+	spin_lock_irqsave(&smem_mappings_lock, flags);
+	list_for_each_entry(map, &smem_mappings, map_list) {
+		if (map->mem != mem)
+			continue;
+
+		list_del(&map->map_list);
+		spin_unlock_irqrestore(&smem_mappings_lock, flags);
+		vunmap(mem - offset_in_page(mem));
+		kfree(map);
+		return;
 	}
+	spin_unlock_irqrestore(&smem_mappings_lock, flags);
 }
 EXPORT_SYMBOL(shmem_ram_unmap);
 
 void *shmem_ram_vmap_nocache(phys_addr_t start, size_t size)
 {
-	return shmem_ram_vmap(start, size, 1);
+	return shmem_ram_vmap(start, size, true);
 }
 EXPORT_SYMBOL(shmem_ram_vmap_nocache);
 
 void *shmem_ram_vmap_cache(phys_addr_t start, size_t size)
 {
-	return shmem_ram_vmap(start, size, 0);
+	return shmem_ram_vmap(start, size, false);
 }
 EXPORT_SYMBOL(shmem_ram_vmap_cache);
 

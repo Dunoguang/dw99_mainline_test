@@ -496,13 +496,15 @@ int sbuf_status(u8 dst, u8 channel);
 /**
  * sbuf_register_notifier -- register a callback that's called
  *		when a tx sbuf is available or a rx sbuf is received.
- *		non-blocked sbuf_read can be called.
+ *		The callback may call nonblocking sbuf_read, but must not
+ *		register, unregister or destroy the channel from the callback.
+ *		Call from process context. Passing a NULL handler removes the
+ *		callback and waits for any delivery in progress to finish.
  *
  * @dst: dest processor ID
  * @channel: channel ID
  * @bufid: buf ID
- * @handler: a callback handler
- * @event: NOTIFY_READ, NOTIFY_WRITE, or both
+ * @handler: callback for SBUF_NOTIFY_READ or SBUF_NOTIFY_WRITE
  * @data: opaque data passed to the receiver
  * @return: 0 on success, <0 on failure
  */

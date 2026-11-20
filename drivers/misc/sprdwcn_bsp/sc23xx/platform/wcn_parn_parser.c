@@ -54,29 +54,22 @@ static char fstab_dir[FSTAB_PATH_NUM][32] = {
 
 static char *fgets(char *buf, int buf_len, struct file *fp)
 {
-	int ret;
-	int i = 0;
+	loff_t read_pos = fp->f_pos;
+	ssize_t ret;
+	size_t used;
+	char *newline;
 
-	ret = kernel_read(fp, buf, buf_len, &fp->f_pos);
-
+	ret = kernel_read(fp, buf, buf_len - 1, &read_pos);
 	if (ret <= 0)
 		return NULL;
 
-	while (buf[i++] != '\n' && i < ret)
-		;
-
-	if (i <= ret)
-		fp->f_pos += i;
-	else
-		return NULL;
-
-	if (i < buf_len)
-		buf[i] = 0;
+	newline = memchr(buf, '\n', ret);
+	used = newline ? newline - buf + 1 : ret;
+	buf[used] = '\0';
+	fp->f_pos += used;
 
 	return buf;
 }
-
-
 
 static int load_fstab_conf(const char *p_path, char *WCN_PATH)
 {

@@ -82,6 +82,7 @@ enum task_type {
 };
 
 static struct sbuf_mgr *sbufs[SIPC_ID_NR][SMSG_VALID_CH_NR];
+static DEFINE_MUTEX(sbuf_registration_lock);
 
 static struct task_struct *sbuf_wait_get_task(wait_queue_entry_t *pos, u32 *b_select)
 {
@@ -217,12 +218,30 @@ static void sbuf_skip_old_data(struct sbuf_mgr *sbuf)
 	}
 }
 
+static void sbuf_notify(struct sbuf_ring *ring, int event)
+{
+	mutex_lock(&ring->notify_lock);
+	if (ring->handler)
+		ring->handler(event, ring->data);
+	mutex_unlock(&ring->notify_lock);
+}
+
+static void sbuf_set_notifier(struct sbuf_ring *ring,
+			      void (*handler)(int event, void *data), void *data)
+{
+	mutex_lock(&ring->notify_lock);
+	ring->handler = handler;
+	ring->data = data;
+	mutex_unlock(&ring->notify_lock);
+}
+
 static int sbuf_thread(void *data)
 {
 	struct sbuf_mgr *sbuf = data;
 	struct sbuf_ring *ring;
 	struct smsg mcmd, mrecv;
-	int rval, bufid;
+	int rval;
+	u32 bufid;
 	struct sched_param param = {.sched_priority = 90};
 
 	/*set the thread as a real time thread, and its priority is 90*/
@@ -299,14 +318,13 @@ static int sbuf_thread(void *data)
 			break;
 		case SMSG_TYPE_EVENT:
 			bufid = mrecv.value;
-			WARN_ON(bufid >= sbuf->ringnr);
+			if (WARN_ON_ONCE(bufid >= sbuf->ringnr))
+				break;
 			ring = &sbuf->rings[bufid];
 			switch (mrecv.flag) {
 			case SMSG_EVENT_SBUF_RDPTR:
 				wake_up_interruptible_all(&ring->txwait);
-				if (ring->handler)
-					ring->handler(SBUF_NOTIFY_WRITE,
-						      ring->data);
+				sbuf_notify(ring, SBUF_NOTIFY_WRITE);
 
 				wake_lock_timeout(&ring->tx_wake_lock,
 						  HZ / 2);
@@ -316,9 +334,7 @@ static int sbuf_thread(void *data)
 				break;
 			case SMSG_EVENT_SBUF_WRPTR:
 				wake_up_interruptible_all(&ring->rxwait);
-				if (ring->handler)
-					ring->handler(SBUF_NOTIFY_READ,
-						      ring->data);
+				sbuf_notify(ring, SBUF_NOTIFY_READ);
 
 				wake_lock_timeout(&ring->rx_wake_lock,
 						  HZ / 2);
@@ -465,6 +481,7 @@ int sbuf_create(u8 dst, u8 channel, u32 bufnum, u32 txbufsize, u32 rxbufsize)
 #endif
 		mutex_init(&ring->txlock);
 		mutex_init(&ring->rxlock);
+		mutex_init(&ring->notify_lock);
 		ring->need_wake_lock = 1;
 		ring->tx_wakelock_state = 0;
 		ring->rx_wakelock_state = 0;
@@ -496,8 +513,10 @@ int sbuf_create(u8 dst, u8 channel, u32 bufnum, u32 txbufsize, u32 rxbufsize)
 		return result;
 	}
 
+	mutex_lock(&sbuf_registration_lock);
 	sbufs[dst][ch_index] = sbuf;
 	wake_up_process(sbuf->thread);
+	mutex_unlock(&sbuf_registration_lock);
 
 	return 0;
 }
@@ -536,7 +555,17 @@ void sbuf_destroy(u8 dst, u8 channel)
 		return;
 	}
 
+	if (dst >= SIPC_ID_NR)
+		return;
+
+	mutex_lock(&sbuf_registration_lock);
 	sbuf = sbufs[dst][ch_index];
+	if (sbuf) {
+		for (i = 0; i < sbuf->ringnr; i++)
+			sbuf_set_notifier(&sbuf->rings[i], NULL, NULL);
+		sbufs[dst][ch_index] = NULL;
+	}
+	mutex_unlock(&sbuf_registration_lock);
 	if (!sbuf)
 		return;
 
@@ -564,8 +593,6 @@ void sbuf_destroy(u8 dst, u8 channel)
 		shmem_ram_unmap(sbuf->smem_virt);
 	smem_free(sbuf->smem_addr, sbuf->smem_size);
 	kfree(sbuf);
-
-	sbufs[dst][ch_index] = NULL;
 }
 EXPORT_SYMBOL(sbuf_destroy);
 
@@ -995,22 +1022,24 @@ int sbuf_register_notifier(u8 dst, u8 channel, u32 bufid,
 			   void (*handler)(int event, void *data), void *data)
 {
 	struct sbuf_mgr *sbuf;
-	struct sbuf_ring *ring = NULL;
+	int ret = 0;
 	u8 ch_index;
 
 	ch_index = sipc_channel2index(channel);
-	if (ch_index == INVALID_CHANEL_INDEX) {
-		pr_err("%s:channel %d invalid!\n", __func__, channel);
+	if (dst >= SIPC_ID_NR || ch_index == INVALID_CHANEL_INDEX)
 		return -EINVAL;
-	}
+
+	mutex_lock(&sbuf_registration_lock);
 	sbuf = sbufs[dst][ch_index];
 	if (!sbuf)
-		return -ENODEV;
-	ring = &sbuf->rings[bufid];
-	ring->handler = handler;
-	ring->data = data;
+		ret = -ENODEV;
+	else if (bufid >= sbuf->ringnr)
+		ret = -EINVAL;
+	else
+		sbuf_set_notifier(&sbuf->rings[bufid], handler, data);
+	mutex_unlock(&sbuf_registration_lock);
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(sbuf_register_notifier);
 
