@@ -62,7 +62,6 @@ struct cluster_power_coefficients {
 
 static struct cluster_power_coefficients gpu_coefficients;
 static struct thermal_cooling_device *gpu_cdev;
-static struct device *gpu_em_device;
 static unsigned int gpu_cores;
 static DEFINE_MUTEX(gpu_cooling_lock);
 
@@ -400,21 +399,21 @@ int create_gpu_cooling_device(struct devfreq *gpudev, u64 *mask)
 		goto unlock;
 	}
 
-	if (!em_pd_get(dev)) {
-		ret = em_dev_register_perf_domain(dev, nr_opps, &em_cb, NULL, true);
-		if (ret)
-			goto unlock;
-		gpu_em_device = dev;
+	/* Devfreq cooling owns and removes the EM after registration. */
+	if (em_pd_get(dev)) {
+		ret = -EEXIST;
+		goto unlock;
 	}
+
+	ret = em_dev_register_perf_domain(dev, nr_opps, &em_cb, NULL, true);
+	if (ret)
+		goto unlock;
 
 	gpu_cdev = of_devfreq_cooling_register_power(child, gpudev, &power_model_ops);
 	if (IS_ERR(gpu_cdev)) {
 		ret = PTR_ERR(gpu_cdev);
 		gpu_cdev = NULL;
-		if (gpu_em_device) {
-			em_dev_unregister_perf_domain(gpu_em_device);
-			gpu_em_device = NULL;
-		}
+		em_dev_unregister_perf_domain(dev);
 	}
 
 unlock:
@@ -431,10 +430,6 @@ int destroy_gpu_cooling_device(void)
 	if (gpu_cdev) {
 		devfreq_cooling_unregister(gpu_cdev);
 		gpu_cdev = NULL;
-	}
-	if (gpu_em_device) {
-		em_dev_unregister_perf_domain(gpu_em_device);
-		gpu_em_device = NULL;
 	}
 	mutex_unlock(&gpu_cooling_lock);
 	return 0;
