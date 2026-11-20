@@ -448,7 +448,7 @@
 
 			aon_timer0: timer@40050000 {
 				compatible = "sprd,bcevt-r4p0";
-				reg = <0 0x40050000 0 0x14>;
+				reg = <0 0x40050000 0 0x18>;
 				interrupts = <GIC_SPI 28 IRQ_TYPE_LEVEL_HIGH>;
 				clock-frequency = <32768>;
 			};

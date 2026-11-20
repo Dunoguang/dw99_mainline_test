@@ -5,6 +5,7 @@
 
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/of.h>
 
 #include "timer-of.h"
 
@@ -156,6 +157,87 @@ static int __init sprd_timer_init(struct device_node *np)
 
 	return 0;
 }
+
+static int sprd_r4p0_bcevt_set_next(unsigned long cycles,
+				   struct clock_event_device *ce)
+{
+	void __iomem *base = timer_of_base(to_timer_of(ce));
+
+	sprd_timer_disable(base);
+	sprd_timer_update_counter(base, cycles);
+	sprd_timer_enable(base, TIMER_CTL_64BIT_WIDTH);
+
+	return 0;
+}
+
+static irqreturn_t sprd_r4p0_bcevt_irq(int irq, void *dev_id)
+{
+	struct clock_event_device *ce = dev_id;
+	void __iomem *base = timer_of_base(to_timer_of(ce));
+	u32 status = readl_relaxed(base + TIMER_INT);
+
+	if (!(status & TIMER_INT_RAW_STS))
+		return IRQ_NONE;
+
+	sprd_timer_disable(base);
+	writel_relaxed(TIMER_INT_EN | TIMER_INT_CLR, base + TIMER_INT);
+	/* Flush the interrupt acknowledgment before leaving the handler. */
+	readl(base + TIMER_INT);
+
+	if (ce->event_handler)
+		ce->event_handler(ce);
+
+	return IRQ_HANDLED;
+}
+
+static struct timer_of r4p0_bcevt_to = {
+	.flags = TIMER_OF_BASE | TIMER_OF_IRQ,
+	.clkevt = {
+		.name = "sprd-r4p0-bcevt",
+		.rating = 150,
+		.features = CLOCK_EVT_FEAT_ONESHOT | CLOCK_EVT_FEAT_DYNIRQ,
+		.set_state_shutdown = sprd_timer_shutdown,
+		.set_next_event = sprd_r4p0_bcevt_set_next,
+		.cpumask = cpu_possible_mask,
+	},
+	.of_irq = {
+		.handler = sprd_r4p0_bcevt_irq,
+		.flags = IRQF_TIMER | IRQF_NO_AUTOEN,
+	},
+};
+
+static int __init sprd_r4p0_bcevt_init(struct device_node *np)
+{
+	void __iomem *base;
+	u32 rate;
+	int ret;
+
+	if (r4p0_bcevt_to.np)
+		return -EBUSY;
+
+	ret = of_property_read_u32(np, "clock-frequency", &rate);
+	if (ret || !rate)
+		return -EINVAL;
+
+	ret = timer_of_init(np, &r4p0_bcevt_to);
+	if (ret)
+		return ret;
+
+	base = timer_of_base(&r4p0_bcevt_to);
+	writel_relaxed(TIMER_CTL_64BIT_WIDTH, base + TIMER_CTL);
+	writel_relaxed(TIMER_INT_EN | TIMER_INT_CLR, base + TIMER_INT);
+	readl(base + TIMER_INT);
+
+	clockevents_config_and_register(&r4p0_bcevt_to.clkevt, rate,
+					0xf, 0x7fffffff);
+	enable_irq(r4p0_bcevt_to.clkevt.irq);
+
+	pr_info("%pOF: R4P0 broadcast clockevent at %u Hz (IRQ %d)\n",
+		np, rate, r4p0_bcevt_to.clkevt.irq);
+
+	return 0;
+}
+TIMER_OF_DECLARE(r4p0_bcevt_timer, "sprd,bcevt-r4p0", sprd_r4p0_bcevt_init);
 
 static struct timer_of suspend_to = {
 	.flags = TIMER_OF_BASE | TIMER_OF_CLOCK,
