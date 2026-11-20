@@ -2,6 +2,7 @@
 #define __LINUX_USB_CHARGER_H__
 
 #include <uapi/linux/usb/ch9.h>
+#include <linux/workqueue.h>
 #include <uapi/linux/usb/charger.h>
 
 /* Current limitation by charger type */
@@ -29,6 +30,8 @@ struct usb_charger {
 	/* for supporting extcon usb gpio */
 	struct extcon_dev	*extcon_dev;
 	struct usb_charger_nb	extcon_nb;
+	struct work_struct	extcon_work;
+	bool			extcon_present;
 
 	/* for supporting usb gadget */
 	struct usb_gadget	*gadget;

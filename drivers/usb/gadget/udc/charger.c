@@ -20,6 +20,7 @@
 #include <linux/usb/gadget.h>
 #include <linux/usb/charger.h>
 #include <linux/power_supply.h>
+#include <linux/property.h>
 
 #define DEFAULT_SDP_CUR_LIMIT		500
 #define DEFAULT_SDP_CUR_LIMIT_SS	900
@@ -46,7 +47,7 @@ static ssize_t charger_current_show(struct device *dev,
 {
 	struct usb_charger *uchger = dev_to_uchger(dev);
 
-	return sprintf(buf, "%u\n", usb_charger_get_cur_limit(uchger));
+	return sysfs_emit(buf, "%u\n", usb_charger_get_current(uchger));
 }
 static DEVICE_ATTR_RO(charger_current);
 
@@ -129,24 +130,14 @@ ATTRIBUTE_GROUPS(usb_charger);
  */
 struct usb_charger *usb_charger_find_by_name(const char *name)
 {
-	struct class_dev_iter iter;
 	struct device *dev;
 
-	if (WARN(!name, "can't work with NULL name"))
+	if (!name)
 		return ERR_PTR(-EINVAL);
-
-	/* Iterate all usb charger devices in the class */
-	class_dev_iter_init(&iter, usb_charger_class, NULL, NULL);
-	while ((dev = class_dev_iter_next(&iter))) {
-		if (!strcmp(dev_name(dev), name))
-			break;
-	}
-	class_dev_iter_exit(&iter);
-
-	if (WARN(!dev, "can't find usb charger device"))
+	if (IS_ERR_OR_NULL(usb_charger_class))
 		return ERR_PTR(-ENODEV);
-
-	return dev_to_uchger(dev);
+	dev = class_find_device_by_name(usb_charger_class, name);
+	return dev ? dev_to_uchger(dev) : ERR_PTR(-ENODEV);
 }
 EXPORT_SYMBOL_GPL(usb_charger_find_by_name);
 
@@ -247,15 +238,18 @@ EXPORT_SYMBOL_GPL(usb_charger_detect_type);
 static enum usb_charger_type
 usb_charger_get_type_by_others(struct usb_charger *uchger)
 {
+	enum usb_charger_type (*detect_type)(struct usb_charger *);
+
 	if (uchger->type != UNKNOWN_TYPE)
 		return uchger->type;
 
 	if (uchger->psy) {
 		union power_supply_propval val;
 
-		power_supply_get_property(uchger->psy,
-					  POWER_SUPPLY_PROP_CHARGE_TYPE,
-					  &val);
+		if (power_supply_get_property(uchger->psy,
+					      POWER_SUPPLY_PROP_CHARGE_TYPE,
+					      &val))
+			return UNKNOWN_TYPE;
 		switch (val.intval) {
 		case POWER_SUPPLY_TYPE_USB:
 			uchger->type = SDP_TYPE;
@@ -273,10 +267,10 @@ usb_charger_get_type_by_others(struct usb_charger *uchger)
 			uchger->type = UNKNOWN_TYPE;
 			break;
 		}
-	} else if (uchger->get_charger_type) {
-		uchger->type = uchger->get_charger_type(uchger);
 	} else {
-		uchger->type = UNKNOWN_TYPE;
+		detect_type = READ_ONCE(uchger->get_charger_type);
+		if (detect_type)
+			uchger->type = detect_type(uchger);
 	}
 
 	return uchger->type;
@@ -533,39 +527,23 @@ usb_charger_notify_others(struct usb_charger *uchger,
 	mutex_unlock(&uchger->lock);
 }
 
-/*
- * usb_charger_plug_by_extcon() - The notifier call function which is registered
- * on the extcon device.
- * @nb - the notifier block that notified by extcon device.
- * @state - the extcon device state.
- * @data - here specify a extcon device.
- *
- * return the notify flag.
- */
-static int
-usb_charger_plug_by_extcon(struct notifier_block *nb,
-			   unsigned long state, void *data)
+static void usb_charger_extcon_work(struct work_struct *work)
 {
-	struct usb_charger_nb *extcon_nb =
-		container_of(nb, struct usb_charger_nb, nb);
+	struct usb_charger *uchger = container_of(work, struct usb_charger, extcon_work);
+
+	usb_charger_notify_others(uchger, READ_ONCE(uchger->extcon_present) ?
+				  USB_CHARGER_PRESENT : USB_CHARGER_REMOVE);
+}
+
+static int usb_charger_plug_by_extcon(struct notifier_block *nb,
+				      unsigned long state, void *data)
+{
+	struct usb_charger_nb *extcon_nb = container_of(nb, struct usb_charger_nb, nb);
 	struct usb_charger *uchger = extcon_nb->uchger;
-	enum usb_charger_state uchger_state;
 
-	if (WARN(!uchger, "charger can not be NULL"))
-		return NOTIFY_BAD;
-
-	/*
-	 * Report event to power to setting the current limitation
-	 * for this usb charger when one usb charger is added or removed
-	 * with detecting by extcon device.
-	 */
-	if (state)
-		uchger_state = USB_CHARGER_PRESENT;
-	else
-		uchger_state = USB_CHARGER_REMOVE;
-
-	usb_charger_notify_others(uchger, uchger_state);
-
+	/* Extcon invokes its raw notifier while holding its spinlock. */
+	WRITE_ONCE(uchger->extcon_present, !!state);
+	schedule_work(&uchger->extcon_work);
 	return NOTIFY_OK;
 }
 
@@ -578,11 +556,11 @@ usb_charger_plug_by_extcon(struct notifier_block *nb,
 int usb_charger_plug_by_gadget(struct usb_gadget *gadget,
 			       unsigned long state)
 {
-	struct usb_charger *uchger = gadget->charger;
+	struct usb_charger *uchger = smp_load_acquire(&gadget->charger);
 	enum usb_charger_state uchger_state;
 
-	if (WARN(!uchger, "charger can not be NULL"))
-		return -EINVAL;
+	if (!uchger)
+		return -ENODEV;
 
 	/*
 	 * Report event to power to setting the current limitation
@@ -623,24 +601,14 @@ static int devm_uchger_dev_match(struct device *dev, void *res, void *data)
 
 static void usb_charger_release(struct device *dev)
 {
-	struct usb_charger *uchger = dev_get_drvdata(dev);
-	struct usb_gadget *gadget = uchger->gadget;
-
-	kfree(uchger);
-	gadget->charger = NULL;
+	kfree(dev_to_uchger(dev));
 }
 
-/*
- * usb_charger_unregister() - Unregister a usb charger device.
- * @uchger - the usb charger to be unregistered.
- */
-static int usb_charger_unregister(struct usb_charger *uchger)
+static void usb_charger_unregister(struct usb_charger *uchger)
 {
-	if (WARN(!uchger, "charger can not be NULL"))
-		return -EINVAL;
-
-	device_unregister(&uchger->dev);
-	return 0;
+	device_del(&uchger->dev);
+	ida_free(&usb_charger_ida, uchger->id);
+	put_device(&uchger->dev);
 }
 
 static void devm_uchger_dev_unreg(struct device *dev, void *res)
@@ -656,45 +624,28 @@ void devm_usb_charger_unregister(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(devm_usb_charger_unregister);
 
-/*
- * usb_charger_register() - Register a new usb charger device
- * which is created by the usb charger framework.
- * @parent - the parent device of the new usb charger.
- * @uchger - the new usb charger device.
- */
-static int usb_charger_register(struct device *parent,
-				struct usb_charger *uchger)
+/* The caller puts the initialized device if registration fails. */
+static int usb_charger_register(struct device *parent, struct usb_charger *uchger)
 {
 	int ret;
 
-	if (WARN(!uchger, "charger can not be NULL"))
-		return -EINVAL;
-
-	uchger->dev.parent = parent;
+	device_initialize(&uchger->dev);
 	uchger->dev.release = usb_charger_release;
+	uchger->dev.parent = parent;
+	if (IS_ERR_OR_NULL(usb_charger_class))
+		return -ENODEV;
 	uchger->dev.class = usb_charger_class;
 	uchger->dev.groups = usb_charger_groups;
 
 	ret = ida_alloc(&usb_charger_ida, GFP_KERNEL);
 	if (ret < 0)
-		goto fail_ida;
-
+		return ret;
 	uchger->id = ret;
-	dev_set_name(&uchger->dev, "usb-charger.%d", uchger->id);
-	dev_set_drvdata(&uchger->dev, uchger);
-
-	ret = device_register(&uchger->dev);
+	ret = dev_set_name(&uchger->dev, "usb-charger.%d", uchger->id);
+	if (!ret)
+		ret = device_add(&uchger->dev);
 	if (ret)
-		goto fail_register;
-
-	return 0;
-
-fail_register:
-	put_device(&uchger->dev);
-	ida_free(&usb_charger_ida, uchger->id);
-	uchger->id = -1;
-fail_ida:
-	dev_err(parent, "Failed to register usb charger: %d\n", ret);
+		ida_free(&usb_charger_ida, uchger->id);
 	return ret;
 }
 
@@ -704,6 +655,8 @@ int devm_usb_charger_register(struct device *dev,
 	struct usb_charger **ptr;
 	int ret;
 
+	if (!uchger)
+		return -EINVAL;
 	ptr = devres_alloc(devm_uchger_dev_unreg, sizeof(*ptr), GFP_KERNEL);
 	if (!ptr)
 		return -ENOMEM;
@@ -711,6 +664,7 @@ int devm_usb_charger_register(struct device *dev,
 	ret = usb_charger_register(dev, uchger);
 	if (ret) {
 		devres_free(ptr);
+		put_device(&uchger->dev);
 		return ret;
 	}
 
@@ -721,85 +675,82 @@ int devm_usb_charger_register(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(devm_usb_charger_register);
 
-int usb_charger_init(struct usb_gadget *ugadget)
+int usb_charger_init(struct usb_gadget *gadget)
 {
+	struct device *parent = gadget->dev.parent;
 	struct usb_charger *uchger;
 	struct extcon_dev *edev;
 	struct power_supply *psy;
 	int ret;
 
-	uchger = kzalloc(sizeof(struct usb_charger), GFP_KERNEL);
+	uchger = kzalloc_obj(*uchger);
 	if (!uchger)
 		return -ENOMEM;
 
 	uchger->type = UNKNOWN_TYPE;
 	uchger->state = USB_CHARGER_DEFAULT;
-	uchger->id = -1;
-	uchger->sdp_default_cur_change = 0;
-
 	uchger->cur_limit.sdp_cur_limit = DEFAULT_SDP_CUR_LIMIT;
 	uchger->cur_limit.dcp_cur_limit = DEFAULT_DCP_CUR_LIMIT;
 	uchger->cur_limit.cdp_cur_limit = DEFAULT_CDP_CUR_LIMIT;
 	uchger->cur_limit.aca_cur_limit = DEFAULT_ACA_CUR_LIMIT;
-
+	uchger->gadget = gadget;
+	uchger->old_gadget_state = USB_STATE_NOTATTACHED;
 	mutex_init(&uchger->lock);
 	RAW_INIT_NOTIFIER_HEAD(&uchger->uchger_nh);
+	INIT_WORK(&uchger->extcon_work, usb_charger_extcon_work);
 
-	/* register a notifier on a extcon device if it is exsited */
-	edev = extcon_get_edev_by_phandle(ugadget->dev.parent, 0);
-	if (!IS_ERR_OR_NULL(edev)) {
-		uchger->extcon_dev = edev;
-		uchger->extcon_nb.nb.notifier_call = usb_charger_plug_by_extcon;
-		uchger->extcon_nb.uchger = uchger;
-		extcon_register_notifier(edev, EXTCON_USB,
-					 &uchger->extcon_nb.nb);
-	}
-
-	/* to check if the usb charger is link to a power supply */
-	psy = devm_power_supply_get_by_reference(ugadget->dev.parent,
-					       "power-supplies");
+	psy = power_supply_get_by_reference(dev_fwnode(parent), "power-supplies");
 	if (!IS_ERR_OR_NULL(psy))
 		uchger->psy = psy;
-	else
-		uchger->psy = NULL;
 
-	/* register a notifier on a usb gadget device */
-	uchger->gadget = ugadget;
-	ugadget->charger = uchger;
-	uchger->old_gadget_state = USB_STATE_NOTATTACHED;
+	ret = usb_charger_register(&gadget->dev, uchger);
+	if (ret) {
+		if (uchger->psy)
+			power_supply_put(uchger->psy);
+		put_device(&uchger->dev);
+		return ret;
+	}
+	smp_store_release(&gadget->charger, uchger);
 
-	/* register a new usb charger */
-	ret = usb_charger_register(&ugadget->dev, uchger);
-	if (ret)
-		goto fail;
-
+	edev = extcon_get_edev_by_phandle(parent, 0);
+	if (!IS_ERR_OR_NULL(edev)) {
+		uchger->extcon_nb.nb.notifier_call = usb_charger_plug_by_extcon;
+		uchger->extcon_nb.uchger = uchger;
+		ret = extcon_register_notifier(edev, EXTCON_USB, &uchger->extcon_nb.nb);
+		if (!ret)
+			uchger->extcon_dev = edev;
+		else
+			dev_warn(parent, "failed to register USB charger extcon notifier: %d\n", ret);
+	}
 	return 0;
-
-fail:
-	if (uchger->extcon_dev)
-		extcon_unregister_notifier(uchger->extcon_dev,
-					   EXTCON_USB, &uchger->extcon_nb.nb);
-
-	kfree(uchger);
-	return ret;
 }
+EXPORT_SYMBOL_GPL(usb_charger_init);
 
-int usb_charger_exit(struct usb_gadget *ugadget)
+int usb_charger_exit(struct usb_gadget *gadget)
 {
-	struct usb_charger *uchger = ugadget->charger;
+	struct usb_charger *uchger = xchg(&gadget->charger, NULL);
+	struct power_supply *psy;
 
-	if (WARN(!uchger, "charger can not be NULL"))
-		return -EINVAL;
-
+	if (!uchger)
+		return 0;
 	if (uchger->extcon_dev)
-		extcon_unregister_notifier(uchger->extcon_dev,
-					   EXTCON_USB,
-					   &uchger->extcon_nb.nb);
+		extcon_unregister_notifier(uchger->extcon_dev, EXTCON_USB, &uchger->extcon_nb.nb);
+	cancel_work_sync(&uchger->extcon_work);
+	usb_charger_notify_others(uchger, USB_CHARGER_REMOVE);
 
-	ida_free(&usb_charger_ida, uchger->id);
-
-	return usb_charger_unregister(uchger);
+	/* A notifier consumer can hold the class device past gadget removal. */
+	mutex_lock(&uchger->lock);
+	psy = uchger->psy;
+	uchger->psy = NULL;
+	uchger->gadget = NULL;
+	WRITE_ONCE(uchger->get_charger_type, NULL);
+	mutex_unlock(&uchger->lock);
+	if (psy)
+		power_supply_put(psy);
+	usb_charger_unregister(uchger);
+	return 0;
 }
+EXPORT_SYMBOL_GPL(usb_charger_exit);
 
 static int __init usb_charger_class_init(void)
 {

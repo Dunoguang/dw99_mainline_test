@@ -17,6 +17,7 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
+#include <linux/of_platform.h>
 #include <linux/regmap.h>
 #include <linux/vmalloc.h>
 #include <linux/sprd_otp.h>
@@ -688,9 +689,9 @@ static int sprd_flash_sc2731s_probe(struct platform_device *pdev)
 	drv_data->usb_charger =
 		usb_charger_find_by_name("usb-charger.0");
 	if (IS_ERR(drv_data->usb_charger)) {
-		res = -EPROBE_DEFER;
-		dev_err(&pdev->dev,
-			"Failed to find USB gadget: %d\n", ret);
+		dev_dbg(&pdev->dev, "USB charger not available: %ld\n",
+			PTR_ERR(drv_data->usb_charger));
+		drv_data->usb_charger = NULL;
 		goto exit;
 	}
 
@@ -699,8 +700,9 @@ static int sprd_flash_sc2731s_probe(struct platform_device *pdev)
 	res = usb_charger_register_notify(drv_data->usb_charger,
 					  &drv_data->chg_usb_nb);
 	if (res != 0) {
-		dev_err(&pdev->dev,
-			"Failed to register notifier: %d\n", ret);
+		usb_charger_put(drv_data->usb_charger);
+		drv_data->usb_charger = NULL;
+		dev_warn(&pdev->dev, "failed to register USB charger notifier: %d\n", res);
 		goto exit;
 	}
 
@@ -713,15 +715,14 @@ exit:
 	return ret;
 }
 
-static int sprd_flash_sc2731s_remove(struct platform_device *pdev)
+static void sprd_flash_sc2731s_remove(struct platform_device *pdev)
 {
 	struct flash_driver_data *drv_data = platform_get_drvdata(pdev);
 
-	if (drv_data != NULL)
-		usb_charger_unregister_notify(drv_data->usb_charger,
-				      &drv_data->chg_usb_nb);
-
-	return 0;
+	if (drv_data && drv_data->usb_charger) {
+		usb_charger_unregister_notify(drv_data->usb_charger, &drv_data->chg_usb_nb);
+		usb_charger_put(drv_data->usb_charger);
+	}
 }
 
 static struct platform_driver sprd_flash_sc2731s_drvier = {

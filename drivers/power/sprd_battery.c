@@ -3263,8 +3263,8 @@ static int sprdbat_probe(struct platform_device *pdev)
 			"Failed to register notifier: %d\n", ret);
 		goto err_usb_reg_notify;
 	}
-	sprdbat_data->usb_charger->get_charger_type =
-		sprdchg_charger_is_adapter_for_usb;
+	WRITE_ONCE(sprdbat_data->usb_charger->get_charger_type,
+		   sprdchg_charger_is_adapter_for_usb);
 	usb_online_state = usb_charger_get_state(sprdbat_data->usb_charger);
 	if (usb_online_state == USB_CHARGER_PRESENT)
 		queue_work(sprdbat_data->monitor_wqueue,
@@ -3279,6 +3279,7 @@ static int sprdbat_probe(struct platform_device *pdev)
 	return 0;
 
 err_usb_reg_notify:
+	usb_charger_put(sprdbat_data->usb_charger);
 err_usb_find_name:
 #ifdef CONFIG_LEDS_TRIGGERS
 	led_classdev_unregister(&data->charging_led);
@@ -3321,9 +3322,8 @@ static void sprdbat_remove(struct platform_device *pdev)
 
 	sysfs_remove_group(&data->battery->dev.kobj,
 		&sprd_bat_group);
-	if (sprdbat_data->usb_charger)
-		usb_charger_unregister_notify(sprdbat_data->usb_charger,
-				      &sprdbat_data->chg_usb_nb);
+	if (data->usb_charger)
+		usb_charger_unregister_notify(data->usb_charger, &data->chg_usb_nb);
 	cancel_delayed_work_sync(&data->battery_sleep_work);
 	cancel_delayed_work_sync(&data->battery_work);
 	flush_workqueue(data->monitor_wqueue);
@@ -3331,6 +3331,7 @@ static void sprdbat_remove(struct platform_device *pdev)
 		data->timer_free(data->pdata);
 	cancel_delayed_work_sync(&data->sprdbat_charge_work);
 	destroy_workqueue(data->monitor_wqueue);
+	usb_charger_put(data->usb_charger);
 	sprdfgu_deinit();
 	power_supply_unregister(data->battery);
 	power_supply_unregister(data->ac);

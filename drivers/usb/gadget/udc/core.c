@@ -19,6 +19,7 @@
 #include <linux/workqueue.h>
 
 #include <linux/usb/ch9.h>
+#include <linux/usb/charger.h>
 #include <linux/usb/gadget.h>
 #include <linux/usb.h>
 
@@ -1126,6 +1127,8 @@ static void usb_gadget_state_work(struct work_struct *work)
 	struct usb_gadget *gadget = work_to_gadget(work);
 	struct usb_udc *udc = gadget->udc;
 
+	if (!READ_ONCE(gadget->teardown))
+		usb_charger_plug_by_gadget(gadget, READ_ONCE(gadget->state));
 	if (udc)
 		sysfs_notify(&udc->dev.kobj, NULL, "state");
 }
@@ -1143,6 +1146,16 @@ void usb_gadget_set_state(struct usb_gadget *gadget,
 	trace_usb_gadget_set_state(gadget, 0);
 }
 EXPORT_SYMBOL_GPL(usb_gadget_set_state);
+
+static void usb_gadget_stop_state_work(struct usb_gadget *gadget)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&gadget->state_lock, flags);
+	WRITE_ONCE(gadget->teardown, true);
+	spin_unlock_irqrestore(&gadget->state_lock, flags);
+	flush_work(&gadget->work);
+}
 
 /* ------------------------------------------------------------------------- */
 
@@ -1387,6 +1400,9 @@ void usb_initialize_gadget(struct device *parent, struct usb_gadget *gadget,
 {
 	spin_lock_init(&gadget->state_lock);
 	gadget->teardown = false;
+#ifdef CONFIG_USB_CHARGER
+	gadget->charger = NULL;
+#endif
 	INIT_WORK(&gadget->work, usb_gadget_state_work);
 	gadget->dev.parent = parent;
 
@@ -1467,8 +1483,15 @@ int usb_add_gadget(struct usb_gadget *gadget)
 	if (ret)
 		goto err_del_gadget;
 
+	ret = usb_charger_init(gadget);
+	if (ret)
+		goto err_remove_link;
+	if (IS_ENABLED(CONFIG_USB_CHARGER))
+		schedule_work(&gadget->work);
 	return 0;
 
+ err_remove_link:
+	sysfs_remove_link(&udc->dev.kobj, "gadget");
  err_del_gadget:
 	device_del(&gadget->dev);
 
@@ -1476,10 +1499,11 @@ int usb_add_gadget(struct usb_gadget *gadget)
 	ida_free(&gadget_id_numbers, gadget->id_number);
 
  err_del_udc:
-	flush_work(&gadget->work);
+	usb_gadget_stop_state_work(gadget);
 	device_del(&udc->dev);
 
  err_unlist_udc:
+	cancel_work_sync(&udc->vbus_work);
 	mutex_lock(&udc_lock);
 	list_del(&udc->list);
 	mutex_unlock(&udc_lock);
@@ -1488,6 +1512,7 @@ int usb_add_gadget(struct usb_gadget *gadget)
 	 * leaking the UDC if the gadget was statically allocated.
 	 */
 	gadget->dev.release = udc->gadget_release;
+	gadget->udc = NULL;
 	put_device(&udc->dev);
 
  err_put_udc:
@@ -1575,7 +1600,6 @@ EXPORT_SYMBOL_GPL(usb_add_gadget_udc);
 void usb_del_gadget(struct usb_gadget *gadget)
 {
 	struct usb_udc *udc = gadget->udc;
-	unsigned long flags;
 
 	if (!udc)
 		return;
@@ -1588,15 +1612,9 @@ void usb_del_gadget(struct usb_gadget *gadget)
 
 	kobject_uevent(&udc->dev.kobj, KOBJ_REMOVE);
 	sysfs_remove_link(&udc->dev.kobj, "gadget");
+	usb_gadget_stop_state_work(gadget);
+	usb_charger_exit(gadget);
 	device_del(&gadget->dev);
-	/*
-	 * Set the teardown flag before flushing the work to prevent new work
-	 * from being scheduled while we are cleaning up.
-	 */
-	spin_lock_irqsave(&gadget->state_lock, flags);
-	gadget->teardown = true;
-	spin_unlock_irqrestore(&gadget->state_lock, flags);
-	flush_work(&gadget->work);
 	ida_free(&gadget_id_numbers, gadget->id_number);
 	cancel_work_sync(&udc->vbus_work);
 	device_unregister(&udc->dev);
