@@ -557,6 +557,7 @@ config SPRD_GPU_COOLING_DEVICE
 	bool "sprd gpu cooling device"
 	depends on THERMAL
 	depends on DEVFREQ_THERMAL
+	depends on ENERGY_MODEL
 	help
 	  Say Y here to create gpu cooling device node and build power model for IPA.
 	  The sprd cooling devices can be bound to thermal zone trip points. When a
