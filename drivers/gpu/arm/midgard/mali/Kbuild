@@ -1,0 +1,96 @@
+#
+# (C) COPYRIGHT 2012-2018 ARM Limited. All rights reserved.
+#
+# This program is free software and is provided to you under the terms of the
+# GNU General Public License version 2 as published by the Free Software
+# Foundation, and any use by you of this program is subject to the terms
+# of such GNU licence.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, you can access it online at
+# http://www.gnu.org/licenses/gpl-2.0.html.
+#
+# SPDX-License-Identifier: GPL-2.0
+#
+#
+
+
+# Arm Midgard kbase as shipped for the SharkLE platform.
+ifneq ($(KBUILD_EXTMOD),)
+CONFIG_MALI_MIDGARD ?= m
+endif
+
+MALI_CUSTOMER_RELEASE := 1
+CONFIG_MALI_DEVFREQ := y
+
+ccflags-y += -DMALI_CUSTOMER_RELEASE=1 -DMALI_USE_CSF=0
+ccflags-y += -DMALI_KERNEL_TEST_API=0 -DMALI_UNIT_TEST=0
+ccflags-y += -DMALI_COVERAGE=0 -DMALI_INSTRUMENTATION_LEVEL=0
+ccflags-y += -DMALI_RELEASE_NAME=\"r28p0-01rel0\"
+ccflags-y += -DMALI_KBASE_BUILD -DCONFIG_MALI_DEVFREQ
+ccflags-y += -DCONFIG_INIT_VOLTAGE -DCONFIG_ADJUST_VOLTAGE -DCONFIG_MALI_BOOST
+ccflags-y += -I$(src) -I$(src)/backend/gpu -I$(src)/platform/sharkle
+ccflags-y += -I$(srctree)/drivers/staging/android
+
+SRC := \
+	mali_kbase_device.c \
+	mali_kbase_cache_policy.c \
+	mali_kbase_mem.c \
+	mali_kbase_mmu.c \
+	mali_kbase_ctx_sched.c \
+	mali_kbase_jd.c \
+	mali_kbase_jd_debugfs.c \
+	mali_kbase_jm.c \
+	mali_kbase_gpuprops.c \
+	mali_kbase_js.c \
+	mali_kbase_js_ctx_attr.c \
+	mali_kbase_event.c \
+	mali_kbase_context.c \
+	mali_kbase_pm.c \
+	mali_kbase_config.c \
+	mali_kbase_vinstr.c \
+	mali_kbase_hwcnt.c \
+	mali_kbase_hwcnt_backend_gpu.c \
+	mali_kbase_hwcnt_gpu.c \
+	mali_kbase_hwcnt_legacy.c \
+	mali_kbase_hwcnt_types.c \
+	mali_kbase_hwcnt_virtualizer.c \
+	mali_kbase_softjobs.c \
+	mali_kbase_10969_workaround.c \
+	mali_kbase_hw.c \
+	mali_kbase_debug.c \
+	mali_kbase_gpu_memory_debugfs.c \
+	mali_kbase_gpu_utilisation_debugfs.c \
+	mali_kbase_mem_linux.c \
+	mali_kbase_core_linux.c \
+	mali_kbase_replay.c \
+	mali_kbase_mem_profile_debugfs.c \
+	mali_kbase_mmu_mode_lpae.c \
+	mali_kbase_mmu_mode_aarch64.c \
+	mali_kbase_disjoint_events.c \
+	mali_kbase_gator_api.c \
+	mali_kbase_debug_mem_view.c \
+	mali_kbase_debug_job_fault.c \
+	mali_kbase_smc.c \
+	mali_kbase_mem_pool.c \
+	mali_kbase_mem_pool_debugfs.c \
+	mali_kbase_tlstream.c \
+	mali_kbase_strings.c \
+	mali_kbase_as_fault_debugfs.c \
+	mali_kbase_regs_history_debugfs.c \
+	thirdparty/mali_kbase_mmap.c
+
+include $(src)/backend/gpu/Kbuild
+
+obj-$(CONFIG_MALI_MIDGARD) += mali.o
+mali-y := $(SRC:.c=.o) $(BACKEND:.c=.o) platform/sharkle/mali_kbase_config_sharkle.o
+
+mali-y += mali_kbase_sync_file.o mali_kbase_sync_common.o mali_kbase_fence.o
+ifeq ($(CONFIG_DEVFREQ_THERMAL),y)
+include $(src)/ipa/Kbuild
+endif
