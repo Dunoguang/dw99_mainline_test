@@ -42,11 +42,12 @@ struct packet_receive_data_t {
 	uint8_t buffer[HCI_HAL_SERIAL_BUFFER_SIZE + BYTE_ALIGNMENT];
 };
 
-typedef int (*frame_complete_cb)(uint8_t *data, size_t len);
+typedef int (*frame_complete_cb)(void *context, uint8_t *data, size_t len);
 typedef int (*data_ready_cb)(uint8_t *data, uint32_t len);
 
 
-int sitm_write(const uint8_t *buf, int count, frame_complete_cb frame_complete);
+int sitm_write(const uint8_t *buf, int count, frame_complete_cb frame_complete,
+	       void *context);
 int sitm_ini(void);
 int sitm_cleanup(void);
 #endif

@@ -47,12 +47,15 @@
 //#endif
 
 struct wake_lock fm_wakelock;
+static DEFINE_MUTEX(fm_user_lock);
+static unsigned int fm_openers;
+static atomic_t fm_claimed = ATOMIC_INIT(0);
 
 #include <linux/delay.h>
 
-#include <misc/wcn_integrate_platform.h>
+#include <linux/wcn_integrate_platform.h>
 
-long fm_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
+static long fm_ioctl_command(struct file *filep, unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
 	long ret = 0;
@@ -61,8 +64,9 @@ long fm_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	pr_info("FM_IOCTL cmd: 0x%x.\n", cmd);
 	switch (cmd) {
 	case FM_IOCTL_POWERUP:
-		fm_powerup(argp);
-		ret = fm_tune(argp);
+		ret = fm_powerup();
+		if (!ret)
+			ret = fm_tune(argp);
 		break;
 	case FM_IOCTL_POWERDOWN:
 		ret = fm_powerdown();
@@ -220,36 +224,46 @@ long fm_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
-int fm_open(struct inode *inode, struct file *filep)
+static long fm_ioctl(struct file *file, unsigned int cmd, unsigned long data)
 {
-	struct fm_tune_parm powerup_parm;
-	powerup_parm.err = 0;
-	powerup_parm.freq = 875;
-	fm_powerup(&powerup_parm);
-	pr_info("start open SPRD fm module...\n");
-	return 0;
-}
-int fm_release(struct inode *inode, struct file *filep)
-{
-	pr_info("fm_misc_release.\n");
-	fm_powerdown();
-    /*stop_marlin(MARLIN_FM);*/
-	wake_up_interruptible(&fmdev->rds_han.rx_queue);
-	fmdev->rds_han.new_data_flag = 1;
+	long ret;
 
-	if (stop_marlin(WCN_MARLIN_FM) < 0) {
-		pr_info("fm_open stop_marlin failed");
+	mutex_lock(&fm_user_lock);
+	ret = fm_ioctl_command(file, cmd, data);
+	mutex_unlock(&fm_user_lock);
+	return ret;
+}
+
+static int fm_open(struct inode *inode, struct file *file)
+{
+	int ret = 0;
+
+	mutex_lock(&fm_user_lock);
+	if (!fm_openers)
+		ret = fm_powerup();
+	if (!ret)
+		fm_openers++;
+	mutex_unlock(&fm_user_lock);
+	return ret;
+}
+
+static int fm_release(struct inode *inode, struct file *file)
+{
+	mutex_lock(&fm_user_lock);
+	if (!--fm_openers) {
+		fm_powerdown();
+		fm_stop_wcn();
 	}
-
+	mutex_unlock(&fm_user_lock);
 	return 0;
 }
+
 #ifdef CONFIG_COMPAT
 static long fm_compat_ioctl(struct file *file, unsigned int cmd, unsigned long data)
 {
-	pr_info("start_fm_compat_ioctl FM_IOCTL cmd: 0x%x.\n", cmd);
-	cmd = cmd & 0xFFF0FFFF;
-	cmd = cmd | 0x00080000;
-	pr_info("fm_compat_ioctl FM_IOCTL cmd: 0x%x.\n", cmd);
+	/* Legacy pointer encodings change width; commands without arguments don't. */
+	if (_IOC_TYPE(cmd) == FM_IOC_MAGIC && _IOC_SIZE(cmd) == sizeof(compat_uptr_t))
+		cmd = _IOC(_IOC_DIR(cmd), _IOC_TYPE(cmd), _IOC_NR(cmd), sizeof(void *));
 	return fm_ioctl(file, cmd, (unsigned long)compat_ptr(data));
 }
 #endif
@@ -280,31 +294,34 @@ MODULE_DEVICE_TABLE(of, of_match_table_fm);
 static int fm_parse_dt(struct fm_init_data **init, struct device *dev)
 {
 	struct device_node *np = dev->of_node;
-	struct fm_init_data *pdata = NULL;
+	struct fm_init_data *pdata;
+	const char *name;
+	u32 data;
 	int ret;
-	uint32_t data;
+
+	ret = of_property_read_string(np, "sprd,name", &name);
+	if (ret || strcmp(name, FM_DEV_NAME))
+		return -ENODEV;
 
 	pdata = devm_kzalloc(dev, sizeof(struct fm_init_data), GFP_KERNEL);
 	if (!pdata)
 		return -ENOMEM;
-	ret = of_property_read_string(np, "sprd,name", (const char **)&pdata->name);
-	if (ret)
-		goto error;
+	pdata->name = (char *)name;
 
-	ret = of_property_read_u32(np, "sprd,dst", (uint32_t *)&data);
-	if (ret)
-		goto error;
-	pdata->dst = (uint8_t)data;
+	ret = of_property_read_u32(np, "sprd,dst", &data);
+	if (ret || data >= SIPC_ID_NR)
+		return ret ?: -EINVAL;
+	pdata->dst = data;
 
-	ret = of_property_read_u32(np, "sprd,tx_channel", (uint32_t *)&data);
-	if (ret)
-		goto error;
-	pdata->tx_channel = (uint8_t)data;
+	ret = of_property_read_u32(np, "sprd,tx_channel", &data);
+	if (ret || data > U8_MAX)
+		return ret ?: -EINVAL;
+	pdata->tx_channel = data;
 
-	ret = of_property_read_u32(np, "sprd,rx_channel", (uint32_t *)&data);
-	if (ret)
-		goto error;
-	pdata->rx_channel = (uint8_t)data;
+	ret = of_property_read_u32(np, "sprd,rx_channel", &data);
+	if (ret || data > U8_MAX)
+		return ret ?: -EINVAL;
+	pdata->rx_channel = data;
 	ret = of_property_read_u32(np, "sprd,tx_bufid", (uint32_t *)&pdata->tx_bufid);
 	if (ret)
 		goto error;
@@ -312,8 +329,8 @@ static int fm_parse_dt(struct fm_init_data **init, struct device *dev)
 	if (ret)
 		goto error;
 
-    ret = of_property_read_u32(np, "sprd,lna_gpio", (uint32_t *)&pdata->lna_gpio);
-    ret = of_property_read_u32(np, "sprd,ana_inner", (uint32_t *)&pdata->ana_inner);
+	of_property_read_u32(np, "sprd,lna_gpio", &pdata->lna_gpio);
+	of_property_read_u32(np, "sprd,ana_inner", &pdata->ana_inner);
 
 	*init = pdata;
 	return 0;
@@ -325,59 +342,46 @@ error:
 
 static int fm_probe(struct platform_device *pdev)
 {
-	int ret = -EINVAL;
-	char *ver_str = FM_VERSION;
-	int rval = 0;
+	struct fm_init_data *pdata;
+	int ret;
 
-	struct fm_init_data *pdata = (struct fm_init_data *)pdev->dev.platform_data;
-
-	pr_info(" marlin2 FM driver ");
-	pr_info(" Version: %s", ver_str);
-
-	if (pdev->dev.of_node && !pdata) {
-		ret = fm_parse_dt(&pdata, &pdev->dev);
-		if (ret) {
-		pr_info("failed to parse fm device tree, ret=%d\n", ret);
-			return ret;
-		}
-	}
-
-	pr_info("fm: after parse device tree, name=%s, dst=%u, tx_channel=%u, rx_channel=%u, tx_bufid=%u, rx_bufid=%u\n",
-		pdata->name, pdata->dst, pdata->tx_channel, pdata->rx_channel, pdata->tx_bufid, pdata->rx_bufid);
+	ret = fm_parse_dt(&pdata, &pdev->dev);
+	if (ret)
+		return ret;
+	if (atomic_cmpxchg(&fm_claimed, 0, 1))
+		return -EBUSY;
 
 	fmdev->pdata = pdata;
-
-	ret = sbuf_register_notifier(pdata->dst, pdata->tx_channel,
-					pdata->rx_bufid, fm_handler, pdata);
+	ret = sbuf_register_notifier(pdata->dst, pdata->rx_channel,
+				     pdata->rx_bufid, fm_handler, pdata);
 	if (ret) {
-		pr_info("regitster notifier failed (%d)\n", ret);
-		return ret;
+		if (ret == -ENODEV)
+			ret = -EPROBE_DEFER;
+		goto release_claim;
 	}
-
 	ret = misc_register(&fm_misc_device);
-	if (ret < 0) {
-		pr_info("misc_register failed!");
-		rval = sbuf_register_notifier(fmdev->pdata->dst, fmdev->pdata->tx_channel,
-					fmdev->pdata->rx_bufid, NULL, NULL);
-		return ret;
-	}
-	pr_info("fm_init success.\n");
-	return 0;
+	if (!ret)
+		return 0;
+
+	sbuf_register_notifier(pdata->dst, pdata->rx_channel, pdata->rx_bufid,
+			       NULL, NULL);
+	fm_rx_stop();
+release_claim:
+	fmdev->pdata = NULL;
+	atomic_set(&fm_claimed, 0);
+	return ret;
 }
 
-static int fm_remove(struct platform_device *pdev)
+static void fm_remove(struct platform_device *pdev)
 {
-	int rval = 0;
-	pr_info("exit_fm_driver!\n");
-	misc_deregister(&fm_misc_device);
-	rval = sbuf_register_notifier(fmdev->pdata->dst, fmdev->pdata->tx_channel,
-					fmdev->pdata->rx_bufid, NULL, NULL);
-	if (rval) {
-		pr_info("unregitster notifier failed (%d)\n", rval);
-		return rval;
-	}
+	struct fm_init_data *pdata = fmdev->pdata;
 
-	return 0;
+	misc_deregister(&fm_misc_device);
+	sbuf_register_notifier(pdata->dst, pdata->rx_channel, pdata->rx_bufid,
+			       NULL, NULL);
+	fm_rx_stop();
+	fmdev->pdata = NULL;
+	atomic_set(&fm_claimed, 0);
 }
 
 #ifdef CONFIG_PM
@@ -400,6 +404,8 @@ static struct platform_driver fm_driver = {
 		.name = "sprd-fm",
 		.owner = THIS_MODULE,
 		.of_match_table = of_match_ptr(of_match_table_fm),
+		/* Open stock FM character devices hold the driver until close. */
+		.suppress_bind_attrs = true,
 		},
 	.probe = fm_probe,
 	.remove = fm_remove,
@@ -407,28 +413,16 @@ static struct platform_driver fm_driver = {
 	.resume = fm_resume,
 };
 
-struct platform_device fm_device = {
-	.name = "sprd-fm",
-	.id = -1,
-};
-
-int  fm_device_init_driver(void)
+int fm_device_init_driver(void)
 {
 	int ret;
-	pr_info("++++++ fm_device_init_driver!\n");
-    /*ret = platform_device_register(&fm_device);
-	if (ret) {
-		pr_info("fm: platform_device_register failed: %d\n", ret);
+
+	ret = wake_lock_init(&fm_wakelock, WAKE_LOCK_SUSPEND, "FM_wakelock");
+	if (ret)
 		return ret;
-	}*/
 	ret = platform_driver_register(&fm_driver);
-	if (ret) {
-		/*platform_device_unregister(&fm_device);*/
-		pr_info("fm: probe failed: %d\n", ret);
-	}
-	pr_info("fm: probe success: %d\n", ret);
-	wake_lock_init(&fm_wakelock, WAKE_LOCK_SUSPEND, "FM_wakelock");
-	pr_info("------- fm_device_init_driver!\n");
+	if (ret)
+		wake_lock_destroy(&fm_wakelock);
 	return ret;
 }
 

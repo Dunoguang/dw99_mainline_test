@@ -505,8 +505,8 @@ struct fmdrv_ops {
 	void				*seek_response;
 	unsigned int		tx_len;
 	unsigned char		write_buf[FM_WRITE_SIZE];
-	unsigned char		com_respbuf[12];
-	unsigned char		seek_respbuf[12];
+	unsigned char		com_respbuf[FM_READ_SIZE];
+	unsigned char		seek_respbuf[FM_READ_SIZE];
 	struct tasklet_struct rx_task;
 	struct tasklet_struct tx_task;
 	struct fm_rds_data rds_data;

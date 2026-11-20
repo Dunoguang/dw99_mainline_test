@@ -18,6 +18,8 @@
 #define DRIVER_DESC "FM"
 
 #include <linux/completion.h>
+#include <linux/timekeeping.h>
+#include <linux/gpio/legacy.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -55,7 +57,7 @@
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 
-#include <misc/wcn_integrate_platform.h>
+#include <linux/wcn_integrate_platform.h>
 
 #define FM_CHANNEL_WRITE		5
 #define FM_CHANNEL_READ			10
@@ -225,46 +227,41 @@ static int fm_send_cmd(unsigned char subcmd, void *payload,
 }
 
 static int fm_write_cmd(unsigned char subcmd, void *payload,
-		unsigned char payload_len, void *response, unsigned char *response_len)
+			unsigned char payload_len, void *response, size_t response_size)
 {
-	unsigned long timeleft;
+	size_t response_len;
 	int ret;
 
-	wake_lock(&fm_wakelock);
 	mutex_lock(&fmdev->mutex);
-	init_completion(&fmdev->commontask_completion);
+	wake_lock(&fm_wakelock);
+	reinit_completion(&fmdev->commontask_completion);
 	ret = fm_send_cmd(subcmd, payload, payload_len);
-	if (ret < 0) {
-		wake_unlock(&fm_wakelock);
-		mutex_unlock(&fmdev->mutex);
-		return ret;
+	if (ret)
+		goto unlock;
+	if (!wait_for_completion_timeout(&fmdev->commontask_completion,
+					 FM_DRV_TX_TIMEOUT)) {
+		ret = -ETIMEDOUT;
+		goto unlock;
 	}
 
-	timeleft = wait_for_completion_timeout(&fmdev->commontask_completion,
-		FM_DRV_TX_TIMEOUT);
-	if (!timeleft) {
-		pr_err("(fmdrv) %s(): Timeout(%d sec),didn't get fm SubCmd\n"
-			"0x%02X completion signal from RX tasklet\n",
-		__func__, jiffies_to_msecs(FM_DRV_TX_TIMEOUT) / 1000, subcmd);
-		wake_unlock(&fm_wakelock);
-		mutex_unlock(&fmdev->mutex);
-		return -ETIMEDOUT;
+	spin_lock_bh(&fmdev->rw_lock);
+	if (fmdev->com_respbuf[0] < 4 || fmdev->com_respbuf[4]) {
+		ret = -EIO;
+	} else if (response) {
+		response_len = fmdev->com_respbuf[0] - 4;
+		if (!response_len || response_len > response_size) {
+			ret = -EMSGSIZE;
+		} else {
+			memset(response, 0, response_size);
+			memcpy(response, &fmdev->com_respbuf[5], response_len);
+		}
 	}
+	spin_unlock_bh(&fmdev->rw_lock);
+
+unlock:
+	wake_unlock(&fm_wakelock);
 	mutex_unlock(&fmdev->mutex);
-	pr_info("fmdrv wait command have complete\n");
-	/* 0:len; XX XX XX sttaus */
-	if ((fmdev->com_respbuf[4]) != 0) {
-		pr_err("(fmdrv) %s(): Response status not success for 0x%02X\n",
-			__func__, subcmd);
-		return -EFAULT;
-	}
-	pr_info("(fmdrv) %s(): Response status success for 0x%02X: %d\n",
-			__func__, subcmd, fmdev->com_respbuf[4]);
-	/* the event : 04 0e len 01 8C  fc  00(status) rssi snr freq .p->len */
-	if (response != NULL && response_len != NULL)
-		memcpy(response, &(fmdev->com_respbuf[5]), fmdev->com_respbuf[0]-4);
-
-	return 0;
+	return ret;
 }
 
 /*
@@ -282,83 +279,48 @@ static int fm_write_cmd(unsigned char subcmd, void *payload,
 
 static void receive_tasklet(unsigned long arg)
 {
-	struct fmdrv_ops *fmdev;
-	struct fm_rx_data *rx = NULL;
-	unsigned char *p = NULL;
-	int next_packet_len = 0;
-	int last_packet_len = 0;
+	struct fmdrv_ops *fm = (struct fmdrv_ops *)arg;
+	struct fm_rx_data *rx;
+	u8 *frame;
+	size_t remaining, len;
 
-	fmdev = (struct fmdrv_ops *)arg;
-	if (unlikely(!fmdev)) {
-		pr_err("fm_rx_task fmdev is NULL\n");
-		return;
-	}
-	pr_info("fm receive_tasklet start running\n");
-	while (!list_empty(&fmdev->rx_head)) {
-		spin_lock_bh(&fmdev->rw_lock);
-
-		rx = list_first_entry_or_null(&fmdev->rx_head,
-				struct fm_rx_data, entry);
-		if (rx)
-			list_del(&rx->entry);
-		else {
-			spin_unlock_bh(&fmdev->rw_lock);
+	for (;;) {
+		spin_lock_bh(&fm->rw_lock);
+		rx = list_first_entry_or_null(&fm->rx_head, struct fm_rx_data, entry);
+		if (!rx) {
+			spin_unlock_bh(&fm->rw_lock);
 			return;
 		}
-			p = rx->addr;
-			next_packet_len = rx->len;
-		do{
-			if ((*((rx->addr)+1)) == 0x0e) {
-				memcpy(fmdev->com_respbuf, rx->addr + 2 , (*(rx->addr+2)) + 1 );
-				pr_info("fm RX before commontask_completion=0x%x\n",
-				fmdev->commontask_completion.done);
-				complete(&fmdev->commontask_completion);
-				pr_info("fm RX after commontask_completion=0x%x\n",
-				fmdev->commontask_completion.done);
+		list_del(&rx->entry);
+		frame = rx->addr;
+		remaining = rx->len;
+		while (remaining >= 3) {
+			len = frame[2];
+			if (len + 3 > remaining)
+				break;
+			if (frame[1] == 0x0e && len >= 4) {
+				memcpy(fm->com_respbuf, frame + 2, len + 1);
+				complete(&fm->commontask_completion);
+			} else if (frame[1] == 0xff && len >= 6 && frame[3] == 0x30) {
+				memcpy(fm->seek_respbuf, frame + 2, len + 1);
+				complete(&fm->seektask_completion);
+			} else if (frame[1] == 0xff && len >= 13 && frame[3] == 0x00) {
+				rds_parser(frame + 4);
 			}
-
-			else if (((*((rx->addr)+1)) == 0xFF) &&
-				((*((rx->addr)+3)) == 0x30)) {
-				memcpy(fmdev->seek_respbuf, rx->addr + 2 ,
-				(*(rx->addr+2)) + 1 );
-				/*fmdev->seek_response = rx;*/
-				pr_info("fm RX before seektask_completion=0x%x\n",
-				fmdev->seektask_completion.done);
-				complete(&fmdev->seektask_completion);
-				pr_info("fm RX after seektask_completion=0x%x\n",
-				fmdev->seektask_completion.done);
-			}
-			else if (((*((rx->addr)+1)) == 0xFF) &&
-				((*((rx->addr)+3)) == 0x00))
-				rds_parser(rx->addr + 4);
-			else {
-				pr_err("fmdrv error:unknown event !!!\n");
-			}
-
-				last_packet_len = *((rx->addr)+2) + 3;
-				pr_info("this packet len is %d\n ", last_packet_len);
-				next_packet_len = next_packet_len - last_packet_len;
-				pr_info("next packet len is %d\n ", next_packet_len);
-			if(next_packet_len>0){
-				rx->addr = rx->addr + last_packet_len;
-			}
+			frame += len + 3;
+			remaining -= len + 3;
 		}
-		while(next_packet_len>0);
-
-		kfree(p);
-		p  = NULL;
+		spin_unlock_bh(&fm->rw_lock);
+		kfree(rx->addr);
 		kfree(rx);
-		rx = NULL;
-		spin_unlock_bh(&fmdev->rw_lock);
 	}
 }
 
 ssize_t fm_read_rds_data(struct file *filp, char __user *buf,
 	size_t count, loff_t *pos)
 {
-	int timeout = -1;
-
-	pr_info("(FM_RDS) fm start to read RDS data\n");
+	if (count < sizeof(fmdev->rds_data))
+		return -EINVAL;
 
 #ifdef RDS_DEBUG
 	sprintf(rds_debug_data.ps_data.PS[3], "PS_debug");
@@ -380,21 +342,19 @@ ssize_t fm_read_rds_data(struct file *filp, char __user *buf,
 	return sizeof(rds_debug_data);
 #endif
 
-	if (filp->f_flags & O_NONBLOCK) {
-		timeout = 0;
-		pr_err("fm_read_rds_data NON BLOCK!!!\n");
+	if (filp->f_flags & O_NONBLOCK)
 		return -EWOULDBLOCK;
-	}
 
 	fmdev->rds_data.rt_data.textlength =
-		strlen(fmdev->rds_data.rt_data.textdata[3]);
+		strnlen(fmdev->rds_data.rt_data.textdata[3],
+			sizeof(fmdev->rds_data.rt_data.textdata[3]));
 	pr_info("fm RT len is %d\n", fmdev->rds_data.rt_data.textlength);
 	if (copy_to_user(buf, &(fmdev->rds_data), sizeof(fmdev->rds_data))) {
 		pr_info("fm_read_rds_data ret value is -eFAULT\n");
 		return -EFAULT;
 	}
 	pr_info("(fm drs) fm event is %x\n", fmdev->rds_data.event_status);
-	fmdev->rds_han.rds_parse_stop_time = get_seconds();
+	fmdev->rds_han.rds_parse_stop_time = ktime_get_real_seconds();
 	if ((fmdev->rds_han.rds_parse_stop_time -
 		fmdev->rds_han.rds_parse_start_time) >
 		FM_RDS_PARSE_TIME) {
@@ -403,121 +363,90 @@ ssize_t fm_read_rds_data(struct file *filp, char __user *buf,
 			fmdev->rds_han.rds_parse_stop_time);
 		fmdev->rds_data.event_status = 0;
 	}
-	pr_info("PS=%s\n", fmdev->rds_data.ps_data.PS[3]);
-	pr_info("RT=%s\n", fmdev->rds_data.rt_data.textdata[3]);
 	pr_info("fm_read_rds_data end....\n");
 
 	return sizeof(fmdev->rds_data);
 }
 
-void fm_handler (int event, void *data)
+void fm_handler(int event, void *data)
 {
-    struct fm_init_data *pdata = data;
-    int cnt = 0;
-    unsigned char *buf;
+	struct fm_init_data *pdata = data;
+	struct fm_rx_data *rx;
+	int count;
 
-    wake_lock_timeout(&fm_wakelock, HZ*1);
-    pr_info("fm handler event=%d\n", event);
+	if (event != SBUF_NOTIFY_READ)
+		return;
+	wake_lock_timeout(&fm_wakelock, HZ);
 
-	switch (event) {
-	case SBUF_NOTIFY_WRITE:
-		break;
-	case SBUF_NOTIFY_READ:
-		buf = kzalloc(FM_READ_SIZE, GFP_KERNEL);
-		if (!buf) {
-			pr_err("(fmdrv): %s(): failed to create buffer.\n", __func__);
+	do {
+		rx = kmalloc(sizeof(*rx), GFP_KERNEL);
+		if (!rx)
+			return;
+		rx->addr = kmalloc(FM_READ_SIZE, GFP_KERNEL);
+		if (!rx->addr) {
+			kfree(rx);
 			return;
 		}
-		cnt = sbuf_read(pdata->dst,
-				pdata->rx_channel,
-				pdata->rx_bufid,
-				(void *)buf,
-				FM_READ_SIZE,
-				0);
-
-		pr_info("fm handler read data len =%d\n", cnt);
-
-		if (cnt < 0) {
-			kfree(buf);
-			break;
+		count = sbuf_read(pdata->dst, pdata->rx_channel, pdata->rx_bufid,
+				  rx->addr, FM_READ_SIZE, 0);
+		if (count <= 0) {
+			kfree(rx->addr);
+			kfree(rx);
+			return;
 		}
-#ifdef FM_DUMP_DATA
-			dump_rx_data(buf, cnt);
-#endif
-
-		if (fmdev != NULL) {
-			struct fm_rx_data *rx = kzalloc(sizeof(struct fm_rx_data), GFP_KERNEL);
-			if (!rx) {
-				pr_err("(fmdrv): %s(): No memory to create fm rx buf\n", __func__);
-				return;
-			}
-
-			rx->addr = buf;
-			rx->len  = cnt;
-			spin_lock_bh(&fmdev->rw_lock);
-			list_add_tail(&rx->entry, &fmdev->rx_head);
-			spin_unlock_bh(&fmdev->rw_lock);
-			pr_info("(fmdrv) %s(): tasklet_schedule start\n", __func__);
-			tasklet_schedule(&fmdev->rx_task);
-		}
-		break;
-	default:
-		pr_info("Received event is invalid(event=%d)\n", event);
-		break;
-	}
-
-	//kfree(buf);
-
+		rx->len = count;
+		spin_lock_bh(&fmdev->rw_lock);
+		list_add_tail(&rx->entry, &fmdev->rx_head);
+		spin_unlock_bh(&fmdev->rw_lock);
+		tasklet_schedule(&fmdev->rx_task);
+	} while (count == FM_READ_SIZE);
 }
 
-int fm_powerup(struct fm_tune_parm *p)
+/* Serialized by the FM file operations. */
+static bool fm_wcn_started;
+
+void fm_stop_wcn(void)
 {
-	struct fm_tune_parm parm;
-	unsigned short payload;
-	int ret = -1;
-	uint32_t anten=fmdev->pdata->lna_gpio;
-	uint32_t ana_switch = fmdev->pdata->ana_inner;
-    if (ana_switch == 1){
+	if (fm_wcn_started && !stop_marlin(WCN_MARLIN_FM))
+		fm_wcn_started = false;
+}
+
+int fm_powerup(void)
+{
+	struct fm_init_data *pdata = fmdev->pdata;
+	bool start_wcn = !fm_wcn_started;
+	u16 frequency = 8750;
+	int ret;
+
+	if (start_wcn) {
+		ret = start_marlin(WCN_MARLIN_FM);
+		if (ret)
+			return ret;
+		fm_wcn_started = true;
+	}
+	ret = sbuf_status(pdata->dst, pdata->tx_channel);
+	if (!ret)
+		ret = sbuf_status(pdata->dst, pdata->rx_channel);
+	if (ret)
+		goto stop_on_error;
+
+	if (pdata->ana_inner == 1) {
+		ret = gpio_request(pdata->lna_gpio, "FM_ANT_EN_GPIO");
+		if (ret)
+			goto stop_on_error;
+		ret = gpio_direction_output(pdata->lna_gpio, fmdev->headset_state == 1);
+		gpio_free(pdata->lna_gpio);
+		if (ret)
+			goto stop_on_error;
 		fmdev->fm_state = 1;
-		gpio_request(anten, "FM_ANT_EN_GPIO");
-		gpio_direction_output(anten, 0);
-	/* headset_state: plugin: 0, plugout: 1 */
-		if (fmdev->headset_state == 1)
-			gpio_set_value(anten, 1);
-		}
-	// if (copy_from_user(&parm, arg, sizeof(parm))) {
-		// pr_err("fm powerup 's ret value is -eFAULT\n");
-		// return -EFAULT;
-	// }
-
-	if (start_marlin(WCN_MARLIN_FM) < 0) {
-		pr_info("fm_open start_marlin failed");
 	}
+	ret = fm_write_cmd(FM_POWERUP_CMD, &frequency, sizeof(frequency), NULL, 0);
+	if (!ret)
+		return 0;
 
-	if (sbuf_status(fmdev->pdata->dst, fmdev->pdata->tx_channel) != 0) {
-		pr_info("fm_open sbuf not ready to open!dst=%d,tx_channel=%d\n",
-			fmdev->pdata->dst, fmdev->pdata->tx_channel);
-		return -ENODEV;
-	}
-
-	if (sbuf_status(fmdev->pdata->dst, fmdev->pdata->rx_channel) != 0) {
-		pr_info("fm_open sbuf not ready to open!dst=%d,rx_channel=%d\n",
-			fmdev->pdata->dst, fmdev->pdata->rx_channel);
-		return -ENODEV;
-	}
-	parm.freq = 875;
-	parm.freq *= 10;
-	pr_info("fm ioctl power up freq= %d\n", parm.freq);
-
-	payload = parm.freq;
-	ret = fm_write_cmd(FM_POWERUP_CMD, &payload,
-		sizeof(payload), NULL, NULL);
-	if (ret < 0) {
-		pr_err("(fmdrv) %s FM write pwrup cmd status failed %d\n",
-			__func__, ret);
-		return ret;
-	}
-
+stop_on_error:
+	if (start_wcn)
+		fm_stop_wcn();
 	return ret;
 }
 
@@ -533,7 +462,7 @@ int fm_powerdown(void)
 	fmdev->rds_han.new_data_flag = 1;
 	wake_up_interruptible(&fmdev->rds_han.rx_queue);
 	ret = fm_write_cmd(FM_POWERDOWN_CMD, &payload, sizeof(payload),
-		NULL, NULL);
+		NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write pwrdown cmd status failed %d\n",
 			__func__, ret);
@@ -541,10 +470,12 @@ int fm_powerdown(void)
 	}
 	/* stop_marlin(MARLIN_FM); */
 	if (ana_switch == 1){
-	fmdev->fm_state = 0;
-	gpio_request(anten, "FM_ANT_EN_GPIO");
-	gpio_direction_output(anten, 0);
-	gpio_set_value(anten, 0);
+		fmdev->fm_state = 0;
+		ret = gpio_request(anten, "FM_ANT_EN_GPIO");
+		if (!ret) {
+			ret = gpio_direction_output(anten, 0);
+			gpio_free(anten);
+		}
 	}
 
 	return ret;
@@ -586,7 +517,7 @@ int fm_ana_switch_inner(void *arg)
 int fm_tune(void *arg)
 {   struct fm_tune_parm parm;
 	int ret = 0;
-	unsigned char respond_buf[4], respond_len;
+	unsigned char respond_buf[4];
 	unsigned short freq;
 
 	if (copy_from_user(&parm, arg, sizeof(parm))) {
@@ -599,7 +530,7 @@ int fm_tune(void *arg)
 #endif
 	pr_info("fm ioctl tune 50k/100k freq = %d\n", parm.freq);
 	ret = fm_write_cmd(FM_TUNE_CMD, &parm.freq, sizeof(parm.freq),
-		respond_buf, &respond_len);
+		respond_buf, sizeof(respond_buf));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write tune cmd status failed %d\n",
 			__func__, ret);
@@ -632,13 +563,13 @@ int fm_seek(void *arg)
 	payload[1] = (parm.freq >> 8);
 	payload[2] = parm.seekdir;
 	pr_info("fm ioctl seek freq=%d,dir =%d\n", parm.freq, parm.seekdir);
-	ret = fm_write_cmd(FM_SEEK_CMD, payload, sizeof(payload), NULL, NULL);
+	reinit_completion(&fmdev->seektask_completion);
+	ret = fm_write_cmd(FM_SEEK_CMD, payload, sizeof(payload), NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write seek cmd status failed %d\n",
 			__func__, ret);
 		return ret;
 	}
-	init_completion(&fmdev->seektask_completion);
 	timeleft = wait_for_completion_timeout(&fmdev->seektask_completion,
 		FM_DRV_RX_SEEK_TIMEOUT);
 	if (!timeleft) {
@@ -648,8 +579,9 @@ int fm_seek(void *arg)
 		return -ETIMEDOUT;
 	}
 
-	memcpy(respond_buf, &(fmdev->seek_respbuf[2]),
-		fmdev->seek_respbuf[0] - 1);
+	spin_lock_bh(&fmdev->rw_lock);
+	memcpy(respond_buf, &fmdev->seek_respbuf[2], sizeof(respond_buf));
+	spin_unlock_bh(&fmdev->rw_lock);
 #ifdef SEEK_NEW
 	rx = fmdev->seek_response;
 	if (fmdev->seek_response == NULL)
@@ -698,7 +630,7 @@ int fm_mute(void *arg)
 		pr_info("fm ioctl unknown cmd mute\n");
 
 	ret = fm_write_cmd(FM_MUTE_CMD, &mute,
-		sizeof(mute), NULL, NULL);
+		sizeof(mute), NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write mute cmd status failed %d\n",
 			__func__, ret);
@@ -719,7 +651,7 @@ int fm_set_volume(void *arg)
 	}
 	pr_info("fm ioctl set_volume =%d\n", vol);
 	ret = fm_write_cmd(FM_SET_VOLUME_CMD, &vol, sizeof(vol),
-			NULL, NULL);
+			NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM set volume status failed %d\n",
 			__func__, ret);
@@ -732,13 +664,13 @@ int fm_set_volume(void *arg)
 int fm_get_volume(void *arg)
 {
 	unsigned char payload = 0;
-	unsigned char res_len;
+
 	int volume;
 	unsigned char resp_buf[1];
 	int ret = -1;
 
 	ret = fm_write_cmd(FM_GET_VOLUME_CMD, &payload, sizeof(payload),
-		&resp_buf[0], &res_len);
+		resp_buf, sizeof(resp_buf));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write get volime cmd status failed %d\n",
 			__func__, ret);
@@ -760,7 +692,7 @@ int fm_stop_scan(void *arg)
 
 	pr_info("fm ioctl stop scan\n");
 	ret = fm_write_cmd(FM_SEARCH_ABORT, NULL, 0,
-		NULL, NULL);
+		NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write stop scan cmd status failed %d\n",
 			__func__, ret);
@@ -775,7 +707,7 @@ int fm_scan_all(void *arg)
 {
 	struct fm_scan_all_parm parm;
 	int ret = 0;
-	unsigned char respond_len;
+
 	struct fm_scan_all_parm respond_buf;
 
 
@@ -786,7 +718,7 @@ int fm_scan_all(void *arg)
 	}
 
 	ret = fm_write_cmd(FM_SCAN_ALL_CMD, &parm, sizeof(parm),
-		&respond_buf, &respond_len);
+		&respond_buf, sizeof(respond_buf));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write scan all cmd status failed %d\n",
 			__func__, ret);
@@ -802,7 +734,7 @@ int fm_rw_reg(void *arg)
 {
 	struct fm_reg_ctl_parm parm;
 	int ret = 0;
-	unsigned char  respond_len;
+
 
 	if (copy_from_user(&parm, arg, sizeof(parm))) {
 		pr_err("fm read and write register 's ret value is -eFAULT\n");
@@ -810,7 +742,7 @@ int fm_rw_reg(void *arg)
 	}
 	pr_info("fm ioctl read write reg = %d\n", parm.rw_flag);
 	ret = fm_write_cmd(FM_READ_WRITE_REG_CMD, &parm, sizeof(parm),
-		&parm, &respond_len);
+		&parm, sizeof(parm));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write register cmd status failed %d\n",
 			__func__, ret);
@@ -839,7 +771,7 @@ int fm_set_audio_mode(void *arg)
 	}
 	pr_info("fm ioctl set audio mode =%d\n", mode);
 	ret = fm_write_cmd(FM_SET_AUDIO_MODE, &mode, sizeof(mode),
-			NULL, NULL);
+			NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM set audio mode status failed %d\n",
 			__func__, ret);
@@ -872,7 +804,7 @@ int fm_set_region(void *arg)
 	}
 	pr_info("fm ioctl set region =%d\n", region);
 	ret = fm_write_cmd(FM_SET_REGION, &region, sizeof(region),
-			NULL, NULL);
+			NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM set region status failed %d\n",
 			__func__, ret);
@@ -898,7 +830,7 @@ int fm_set_scan_step(void *arg)
 	}
 	pr_info("fm ioctl set scan step =%d\n", step);
 	ret = fm_write_cmd(FM_SET_SCAN_STEP, &step, sizeof(step),
-			NULL, NULL);
+			NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM set scan step status failed %d\n",
 			__func__, ret);
@@ -919,7 +851,7 @@ int fm_config_deemphasis(void *arg)
 	}
 	pr_info("fm ioctl config_deemphasis =%d\n", dp);
 	ret = fm_write_cmd(FM_CONFIG_DEEMPHASIS, &dp, sizeof(dp),
-			NULL, NULL);
+			NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM config_deemphasis status failed %d\n",
 			__func__, ret);
@@ -931,14 +863,14 @@ int fm_config_deemphasis(void *arg)
 
 int fm_get_audio_mode(void *arg)
 {
-	unsigned char res_len;
+
 	int audio_mode;
 	unsigned char resp_buf[2];
 	int ret = -1;
 
 	pr_info("fm ioctl get audio mode\n");
 	ret = fm_write_cmd(FM_GET_AUDIO_MODE, NULL, 0,
-		&resp_buf[0], &res_len);
+		resp_buf, sizeof(resp_buf));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM get audio mode cmd status failed %d\n",
 			__func__, ret);
@@ -954,14 +886,14 @@ int fm_get_audio_mode(void *arg)
 
 int fm_get_current_bler(void *arg)
 {
-	unsigned char res_len;
+
 	int BLER;
 	unsigned char resp_buf[1];
 	int ret = -1;
 
 	pr_info("fm ioctl get current BLER\n");
 	ret = fm_write_cmd(DM_GET_CUR_BLER_CMD, NULL, 0,
-		&resp_buf[0], &res_len);
+		resp_buf, sizeof(resp_buf));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM get BLER cmd status failed %d\n",
 			__func__, ret);
@@ -977,14 +909,14 @@ int fm_get_current_bler(void *arg)
 
 int fm_get_cur_snr(void *arg)
 {
-	unsigned char res_len;
+
 	int SNR;
 	unsigned char resp_buf[1];
 	int ret = -1;
 
 	pr_info("fm ioctl get current SNR\n");
 	ret = fm_write_cmd(FM_GET_SNR_CMD, NULL, 0,
-		&resp_buf[0], &res_len);
+		resp_buf, sizeof(resp_buf));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM get SNR cmd status failed %d\n",
 			__func__, ret);
@@ -1016,7 +948,7 @@ int fm_softmute_onoff(void *arg)
 		pr_info("fm ioctl unknown softmute\n");
 	payload = softmute_on;
 	ret = fm_write_cmd(FM_SOFTMUTE_ONOFF_CMD, &payload,
-		sizeof(payload), NULL, NULL);
+		sizeof(payload), NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write softmute onoff cmd status failed %d\n",
 			__func__, ret);
@@ -1040,7 +972,7 @@ int fm_set_seek_criteria(void *arg)
 		parm.snr_th, parm.freq_offset_th,
 		parm.pilot_power_th, parm.noise_power_th);
 	ret = fm_write_cmd(FM_SET_SEEK_CRITERIA_CMD, &parm, sizeof(parm),
-		NULL, NULL);
+		NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM set seek criteria cmd status failed %d\n",
 			__func__, ret);
@@ -1085,7 +1017,7 @@ int fm_set_audio_threshold(void *arg)
 		parm.hbound, parm.lbound,
 		parm.power_th, parm.phyt, parm.snr_th);
 	ret = fm_write_cmd(FM_SET_AUDIO_THRESHOLD_CMD, &parm, sizeof(parm),
-		NULL, NULL);
+		NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM set audio threshold cmd status failed %d\n",
 			__func__, ret);
@@ -1099,13 +1031,13 @@ int fm_get_seek_criteria(void *arg)
 {
 
 	struct fm_seek_criteria_parm parm;
-	unsigned char res_len;
+
 
 	int ret = -1;
 
 	pr_info("fm ioctl get_seek_criteria\n");
 	ret = fm_write_cmd(FM_GET_SEEK_CRITERIA_CMD, NULL, 0,
-		&parm, &res_len);
+		&parm, sizeof(parm));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write get seek_criteria cmd status failed %d\n",
 			__func__, ret);
@@ -1121,12 +1053,12 @@ int fm_get_seek_criteria(void *arg)
 int fm_get_audio_threshold(void *arg)
 {
 	struct fm_audio_threshold_parm parm;
-	unsigned char res_len;
+
 	int ret = -1;
 
 	pr_info("fm ioctl get_audio_threshold\n");
 	ret = fm_write_cmd(FM_GET_AUDIO_THRESHOLD_CMD, NULL, 0,
-		&parm, &res_len);
+		&parm, sizeof(parm));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write get audio_thresholdi cmd status failed %d\n",
 			__func__, ret);
@@ -1143,13 +1075,13 @@ int fm_get_audio_threshold(void *arg)
 int fm_getrssi(void *arg)
 {
 	unsigned char payload = 0;
-	unsigned char res_len;
+
 	int rssi;
 	unsigned char resp_buf[1];
 	int ret = -1;
 
 	ret = fm_write_cmd(FM_GET_RSSI_CMD, &payload, sizeof(payload),
-		&resp_buf[0], &res_len);
+		resp_buf, sizeof(resp_buf));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write getrssi cmd status failed %d\n",
 			__func__, ret);
@@ -1203,14 +1135,14 @@ int fm_rds_onoff(void *arg)
 	af_on = rds_on;
 	pr_info("fm cmd: %d,%d,%d\n", FM_SET_RDS_MODE, rds_on, af_on);
 	ret = fm_write_cmd(FM_SET_RDS_MODE, payload,
-		sizeof(payload), NULL, NULL);
+		sizeof(payload), NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write rds mode cmd status failed %d\n",
 			__func__, ret);
 		return ret;
 	}
 
-	fmdev->rds_han.rds_parse_start_time = get_seconds();
+	fmdev->rds_han.rds_parse_start_time = ktime_get_real_seconds();
 
 	return ret;
 }
@@ -1230,7 +1162,7 @@ int fm_ana_switch(void *arg)
 
 	payload = antenna;
 	ret = fm_write_cmd(FM_SET_ANA_SWITCH_CMD, &payload,
-		sizeof(payload), NULL, NULL);
+		sizeof(payload), NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write ANA switch cmd status failed %d\n",
 			__func__, ret);
@@ -1259,7 +1191,7 @@ int fm_af_onoff(void *arg)
 		pr_info("fm ioctl unknown AF\n");
 	payload = af_on;
 	ret = fm_write_cmd(FM_SET_AF_ONOFF, &payload,
-		sizeof(payload), NULL, NULL);
+		sizeof(payload), NULL, 0);
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write af on off cmd status failed %d\n",
 			__func__, ret);
@@ -1277,8 +1209,7 @@ int fm_af_onoff(void *arg)
 */
 int fm_getcur_pamd(void *arg)
 {
-	unsigned char PAMD_LEN;
-	unsigned short PAMD;
+		unsigned short PAMD;
 	int ret = -1;
 	unsigned char resp_buf[1];
 #ifdef RDS_DEBUG
@@ -1303,7 +1234,7 @@ int fm_getcur_pamd(void *arg)
 #endif
 
 	ret = fm_write_cmd(FM_GET_CURPAMD, NULL, 0,
-		&resp_buf[0], &PAMD_LEN);
+		resp_buf, sizeof(resp_buf));
 	if (ret < 0) {
 		pr_err("(fmdrv) %s FM write getcur PAMD cmd status failed %d\n",
 			__func__, ret);
@@ -1318,67 +1249,80 @@ int fm_getcur_pamd(void *arg)
 	return ret;
 }
 
-void set_rds_drv_data(struct fm_rds_data *fm_rds_info)
+static void set_rds_drv_data(struct fm_rds_data *fm_rds_info)
 {
 	g_rds_data_string = fm_rds_info;
 }
 
-void fm_rds_init(void)
+static void fm_rds_init(void)
 {
 	fmdev->rds_han.new_data_flag = 0;
 }
 
-int __init init_fm_driver(void)
+void fm_rx_stop(void)
 {
-	int ret = 0;
+	struct fm_rx_data *item, *next;
+
+	tasklet_kill(&fmdev->rx_task);
+	list_for_each_entry_safe(item, next, &fmdev->rx_head, entry) {
+		list_del(&item->entry);
+		kfree(item->addr);
+		kfree(item);
+	}
+}
+
+static int __init init_fm_driver(void)
+{
 	struct fm_rds_data *fm_rds_info;
-	fmdev = kzalloc(sizeof(struct fmdrv_ops), GFP_KERNEL);
+	int ret = -ENOMEM;
+
+	fmdev = kzalloc(sizeof(*fmdev), GFP_KERNEL);
 	if (!fmdev)
 		return -ENOMEM;
+	fmdev->read_buf = kzalloc(FM_READ_SIZE, GFP_KERNEL);
+	if (!fmdev->read_buf)
+		goto free_fmdev;
+	fm_rds_info = kzalloc(sizeof(*fm_rds_info), GFP_KERNEL);
+	if (!fm_rds_info)
+		goto free_read_buf;
+	set_rds_drv_data(fm_rds_info);
 
 	init_completion(&fmdev->completed);
 	init_completion(&fmdev->commontask_completion);
 	init_completion(&fmdev->seektask_completion);
-	spin_lock_init(&(fmdev->rw_lock));
+	spin_lock_init(&fmdev->rw_lock);
 	mutex_init(&fmdev->mutex);
-	INIT_LIST_HEAD(&(fmdev->rx_head));
-
-	fmdev->read_buf = kzalloc(FM_READ_SIZE, GFP_KERNEL);
-	/* malloc mem for rds struct */
-	fm_rds_info = kzalloc(sizeof(struct fm_rds_data), GFP_KERNEL);
-	if (fm_rds_info == NULL) {
-		kfree(fmdev);
-		fmdev = NULL;
-		pr_err("fm can't allocate FM RDS buffer\n");
-		return -ENOMEM;
-	}
-	set_rds_drv_data(fm_rds_info);
+	INIT_LIST_HEAD(&fmdev->rx_head);
+	tasklet_init(&fmdev->rx_task, receive_tasklet, (unsigned long)fmdev);
+	init_waitqueue_head(&fmdev->rds_han.rx_queue);
+	fm_rds_init();
+	fmdev->headset_state = 1;
 
 	ret = fm_device_init_driver();
-
-	tasklet_init(&fmdev->rx_task, receive_tasklet, (unsigned long)fmdev);
-	/* RDS init */
-	fm_rds_init();
-	init_waitqueue_head(&fmdev->rds_han.rx_queue);
-
+	if (ret)
+		goto free_rds;
 #ifdef FM_TEST
 	setup_timer(&test_timer, timer_cb, 0);
 	test_init();
 #endif
+	return 0;
 
-	fmdev->fm_state = 0;
-	fmdev->headset_state = 1;
-
+free_rds:
+	kfree(g_rds_data_string);
+	g_rds_data_string = NULL;
+free_read_buf:
+	kfree(fmdev->read_buf);
+free_fmdev:
+	kfree(fmdev);
+	fmdev = NULL;
 	return ret;
 }
 
-void __exit exit_fm_driver(void)
+static void __exit exit_fm_driver(void)
 {
 	fm_device_exit_driver();
-	tasklet_kill(&fmdev->tx_task);
-	tasklet_kill(&fmdev->rx_task);
+	fm_stop_wcn();
 	kfree(fmdev->read_buf);
-	fmdev->read_buf = NULL;
 	kfree(g_rds_data_string);
 	g_rds_data_string = NULL;
 	kfree(fmdev);

@@ -19,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -26,16 +27,18 @@
 #include <linux/tty_flip.h>
 #include <linux/types.h>
 #include <linux/vt_kern.h>
+#include <linux/vmalloc.h>
 #include <linux/sipc.h>
 #include <linux/io.h>
 #include "alignment/sitm.h"
 
-#include <misc/wcn_integrate_platform.h>
+#include <linux/wcn_integrate_platform.h>
 
 
 #include "tty.h"
 #include "rfkill.h"
 #include "dump.h"
+#include "lpm.h"
 
 #define STTY_DEV_MAX_NR		1
 #define STTY_MAX_DATA_LEN	4096
@@ -58,49 +61,36 @@ static unsigned int log_level = MTTY_LOG_LEVEL_DEBUG;
 	} while (0)
 
 struct stty_device {
-	struct stty_init_data	*pdata;
-	struct tty_port		*port;
-	struct tty_struct	*tty;
-	struct tty_driver	*driver;
-
-	/* stty state */
-	uint32_t		state;
-	struct mutex		stat_lock;
+	struct stty_init_data pdata;
+	struct tty_port port;
+	struct tty_driver *driver;
+	struct mutex state_lock;
+	struct mutex tx_lock;
+	unsigned int openers;
+	bool removed;
 };
 
-static bool is_user_debug = false;
-bt_host_data_dump *data_dump = NULL;
-static bool is_dumped = false;
-
-#if 0
-static void stty_address_init(void);
-static unsigned long bt_data_addr;
-#else
-static struct tty_struct *mtty;
-#endif
+static atomic_t stty_claimed = ATOMIC_INIT(0);
+static bool is_user_debug;
+static bool is_dumped;
 
 static ssize_t dumpmem_store(struct device *dev,
-    struct device_attribute *attr, const char *buf, size_t count)
+			     struct device_attribute *attr, const char *buf,
+			     size_t count)
 {
-    if (buf[0] == 2) {
-        pr_info("Set is_user_debug true!\n");
-        is_user_debug = true;
-        return 0;
-    }
+	struct stty_device *stty = dev_get_drvdata(dev);
 
-    if (is_dumped == false) {
-		pr_info("mtty BT start dump cp mem !\n");
-        bt_host_data_printf();
-        if (data_dump != NULL) {
-			vfree(data_dump);
-            data_dump = NULL;
-        }
-    } else {
-        pr_info("mtty BT has dumped cp mem, pls restart phone!\n");
-    }
-    is_dumped = true;
-
-    return 0;
+	if (!count)
+		return -EINVAL;
+	mutex_lock(&stty->state_lock);
+	if (buf[0] == 2 || sysfs_streq(buf, "2")) {
+		WRITE_ONCE(is_user_debug, true);
+	} else if (!is_dumped) {
+		bt_host_data_printf();
+		is_dumped = true;
+	}
+	mutex_unlock(&stty->state_lock);
+	return count;
 }
 
 static void hex_dump(unsigned char *bin, size_t binsz)
@@ -170,463 +160,317 @@ static struct attribute_group bluetooth_group = {
 };
 
 
-static void stty_handler (int event, void *data)
+static void stty_handler(int event, void *data)
 {
 	struct stty_device *stty = data;
-	int i, cnt = 0, ret = -1, retry_count = 10;
+	struct stty_init_data *pdata = &stty->pdata;
 	unsigned char *buf;
+	int count;
 
-	buf = kzalloc(STTY_MAX_DATA_LEN, GFP_KERNEL);
-	if (!buf) {
+	if (event != SBUF_NOTIFY_READ)
 		return;
-	}
+	bt_wakeup_host();
+	buf = kmalloc(STTY_MAX_DATA_LEN, GFP_KERNEL);
+	if (!buf)
+		return;
 
-	BT_VER("stty handler event=%d\n", event);
+	do {
+		count = sbuf_read(pdata->dst, pdata->channel, pdata->rx_bufid,
+				  buf, STTY_MAX_DATA_LEN, 0);
+		if (count <= 0)
+			break;
+		mutex_lock(&stty->state_lock);
+		if (stty->openers && !stty->removed) {
+			int copied;
 
-	switch (event) {
-	case SBUF_NOTIFY_WRITE:
-		break;
-	case SBUF_NOTIFY_READ:
-		do {
-			cnt = sbuf_read(stty->pdata->dst,
-					stty->pdata->channel,
-					stty->pdata->rx_bufid,
-					(void *)buf,
-					STTY_MAX_DATA_LEN,
-					0);
-			BT_VER("%s read data len =%d\n",__func__, cnt);
-			if (is_user_debug && (cnt > 0)) {
-				bt_host_data_save(buf, cnt, BT_DATA_IN);
-			}
-			mutex_lock(&(stty->stat_lock));
-			if ((stty->state == STTY_STATE_OPEN) && (cnt > 0)) {
-				for (i = 0; i < cnt; i++) {
-					ret = tty_insert_flip_char(stty->port,
-								buf[i],
-								TTY_NORMAL);
-					while((ret != 1) && retry_count--) {
-						msleep(2);
-						pr_info("stty insert data fail ret =%d, retry_count = %d\n", ret, 10 - retry_count);
-						ret = tty_insert_flip_char(stty->port,
-									buf[i],
-									TTY_NORMAL);
-					}
-					if(retry_count != 10)
-						retry_count = 10;
-				}
-				tty_schedule_flip(stty->port);
-			}
-			mutex_unlock(&(stty->stat_lock));
-		} while(cnt == STTY_MAX_DATA_LEN);
-		break;
-	default:
-		BT_VER("Received event is invalid(event=%d)\n", event);
-	}
+			if (READ_ONCE(is_user_debug))
+				bt_host_data_save(buf, count, BT_DATA_IN);
+			copied = tty_insert_flip_string(&stty->port, buf, count);
+			tty_flip_buffer_push(&stty->port);
+			if (copied != count)
+				pr_warn_ratelimited("ttyBT: receive buffer accepted %d/%d bytes\n",
+						    copied, count);
+		}
+		mutex_unlock(&stty->state_lock);
+	} while (count == STTY_MAX_DATA_LEN);
 
 	kfree(buf);
 }
 
-static int stty_open(struct tty_struct *tty, struct file *filp)
+static int stty_install(struct tty_driver *driver, struct tty_struct *tty)
 {
-	struct stty_device *stty = NULL;
-	struct tty_driver *driver = NULL;
+	struct stty_device *stty = driver->driver_state;
+	int ret;
 
-    data_dump = (bt_host_data_dump* )vmalloc(sizeof(bt_host_data_dump));
-    memset(data_dump, 0 , sizeof(bt_host_data_dump));
+	tty_port_get(&stty->port);
+	ret = tty_port_install(&stty->port, driver, tty);
+	if (ret)
+		tty_port_put(&stty->port);
+	else
+		tty->driver_data = stty;
+	return ret;
+}
 
-	pr_debug("stty_open\n");
+static void stty_cleanup(struct tty_struct *tty)
+{
+	struct stty_device *stty = tty->driver_data;
 
-	if (tty == NULL) {
-		pr_debug("stty open input tty is NULL!\n");
-		return -ENOMEM;
+	tty_port_put(&stty->port);
+}
+
+static int stty_open(struct tty_struct *tty, struct file *file)
+{
+	struct stty_device *stty = tty->driver_data;
+	int ret = 0;
+
+	mutex_lock(&stty->tx_lock);
+	mutex_lock(&stty->state_lock);
+	if (stty->removed) {
+		ret = -ENODEV;
+		goto unlock;
 	}
-	driver = tty->driver;
-	stty = (struct stty_device *)driver->driver_state;
+	if (!stty->openers) {
+		ret = sbuf_status(stty->pdata.dst, stty->pdata.channel);
+		if (ret)
+			goto unlock;
+		ret = sitm_ini();
+		if (ret)
+			goto unlock;
+		bt_host_data_reset();
+		tty_port_tty_set(&stty->port, tty);
+	}
+	stty->openers++;
+unlock:
+	mutex_unlock(&stty->state_lock);
+	mutex_unlock(&stty->tx_lock);
+	return ret;
+}
 
-	if (stty == NULL) {
-		pr_debug("stty open input stty NULL!\n");
-		return -ENOMEM;
+static void stty_close(struct tty_struct *tty, struct file *file)
+{
+	struct stty_device *stty = tty->driver_data;
+
+	mutex_lock(&stty->tx_lock);
+	mutex_lock(&stty->state_lock);
+	if (stty->openers && !--stty->openers) {
+		tty_port_tty_set(&stty->port, NULL);
+		sitm_cleanup();
+	}
+	mutex_unlock(&stty->state_lock);
+	mutex_unlock(&stty->tx_lock);
+}
+
+static int stty_data_transmit(void *context, u8 *buf, size_t count)
+{
+	struct stty_device *stty = context;
+	struct stty_init_data *pdata = &stty->pdata;
+	size_t sent = 0;
+	int ret;
+
+	if (READ_ONCE(is_user_debug))
+		bt_host_data_save(buf, count, BT_DATA_OUT);
+	if (buf[0] == COMMAND_HEAD && log_level >= MTTY_LOG_LEVEL_DEBUG) {
+		if (count <= 16) {
+			hex_dump_block(buf, count);
+		} else {
+			hex_dump_block(buf, 8);
+			hex_dump_block(buf + count - 8, 8);
+		}
 	}
 
-	if (sbuf_status(stty->pdata->dst, stty->pdata->channel) != 0) {
-		pr_debug("stty_open sbuf not ready to open!dst=%d,channel=%d\n",
-			stty->pdata->dst, stty->pdata->channel);
-		return -ENODEV;
+	while (sent < count) {
+		ret = sbuf_write(pdata->dst, pdata->channel, pdata->tx_bufid,
+				 buf + sent, count - sent,
+				 msecs_to_jiffies(STTY_SBUF_WRITE_TIMEOUT_MS));
+		if (ret <= 0)
+			return ret ? ret : -ETIMEDOUT;
+		if (ret > count - sent)
+			return -EIO;
+		sent += ret;
 	}
-	stty->tty = tty;
-	tty->driver_data = (void *)stty;
-
-	mtty = tty;
-
-	mutex_lock(&(stty->stat_lock));
-	stty->state = STTY_STATE_OPEN;
-	mutex_unlock(&(stty->stat_lock));
-
-#ifdef CONFIG_ARCH_SCX20
-	rf2351_vddwpa_ctrl_power_enable(1);
-#endif
-
-	pr_debug("stty_open device success!\n");
-	sitm_ini();
-#if 0
-	stty_address_init();
-#endif
 	return 0;
 }
 
-static void stty_close(struct tty_struct *tty, struct file *filp)
-{
-	struct stty_device *stty = NULL;
-
-	pr_debug("stty_close\n");
-
-	if (tty == NULL) {
-		pr_debug("stty close input tty is NULL!\n");
-		return;
-	}
-	stty = (struct stty_device *) tty->driver_data;
-	if (stty == NULL) {
-		pr_debug("stty close s tty is NULL!\n");
-		return;
-	}
-
-	mutex_lock(&(stty->stat_lock));
-	stty->state = STTY_STATE_CLOSE;
-	mutex_unlock(&(stty->stat_lock));
-
-	pr_debug("stty_close device success !\n");
-	sitm_cleanup();
-#ifdef CONFIG_ARCH_SCX20
-	rf2351_vddwpa_ctrl_power_enable(0);
-#endif
-
-    if (data_dump != NULL) {
-       vfree(data_dump);
-       data_dump = NULL;
-    }
-}
-
-#if 0
-static void stty_address_init(void)
-{
-	static unsigned long bt_aon_addr;
-	static unsigned long bt_aon_enable_addr;
-	static unsigned long aon_enable_data;
-	bt_aon_addr = (unsigned long)ioremap_nocache(0x40440FF8,0x10);
-	bt_data_addr = (unsigned long)ioremap_nocache(0x40440FFC,0x10);
-	bt_aon_enable_addr = (unsigned long)ioremap_nocache(0x402e00b0,0x10);
-	aon_enable_data = __raw_readw((void __iomem *)(bt_aon_enable_addr));
-	aon_enable_data = aon_enable_data | 0x0800; //bit11 need write 1
-	__raw_writel(aon_enable_data, (void __iomem *)(bt_aon_enable_addr));
-	__raw_writel(0x51004000, (void __iomem *)(bt_aon_addr));
-}
-
-static int stty_write(struct tty_struct *tty,
-		      const unsigned char *buf,
-		      int count)
-{
-    int loop_count = count / 4;
-    int loop_count_i = 0;
-    unsigned long bt_data2send = 0;
-    unsigned char *tx_buf = kmalloc(count, GFP_KERNEL);
-    unsigned char *p_buf = tx_buf;
-    memset(tx_buf, 0, count);
-    memcpy(tx_buf, buf, count);
-
-	pr_debug("stty write buf length = %d\n",count);
-
-    for(loop_count_i = 0; loop_count_i < loop_count; loop_count_i++)
-    {
-        bt_data2send = (*p_buf) + ((*(p_buf + 1)) << 8) + ((*(p_buf + 2)) << 16) + ((*(p_buf + 3)) << 24);
-        __raw_writel(bt_data2send, (void __iomem *)(bt_data_addr));
-
-        p_buf += 4;
-    }
-    kfree(tx_buf);
-    tx_buf = NULL;
-
-    return count;
-}
-#else
-static int stty_write(struct tty_struct *tty,
-		      const unsigned char *buf,
-		      int count)
+static ssize_t stty_write(struct tty_struct *tty, const u8 *buf, size_t count)
 {
 	struct stty_device *stty = tty->driver_data;
-	int write_length = 0, left_legnth = 0;
-	if (is_user_debug) {
-		bt_host_data_save(buf, count, BT_DATA_OUT);
-	}
-	if(COMMAND_HEAD == buf[0]){
-		BT_DEBUG("%s bufwrite_length = %d\n",__func__, count);
-		if(log_level >= MTTY_LOG_LEVEL_DEBUG){
-			if(count <= 16){
-				hex_dump_block((unsigned char *)buf, count);
-			}
-			else{
-				hex_dump_block((unsigned char*)buf, 8);
-				hex_dump_block((unsigned char*)(buf+count-8), 8);
-			}
-	    }
-	}
-	left_legnth = count;
-	while(left_legnth > 0) {
-		write_length = sbuf_write(stty->pdata->dst,
-				 stty->pdata->channel,
-				 stty->pdata->tx_bufid,
-				 (void *)(buf + count - left_legnth),
-				 left_legnth, STTY_SBUF_WRITE_TIMEOUT_MS);
-		BT_VER("stty write bufwrite_length = %d, left_legnth = %d\n",write_length, left_legnth);
-		if (write_length <= 0) {
-			pr_err("%s sbuf_write failed: ret=%d left=%d count=%d timeout=%dms\n",
-			       __func__, write_length, left_legnth, count,
-			       STTY_SBUF_WRITE_TIMEOUT_MS);
-			return write_length < 0 ? write_length : -ETIMEDOUT;
-		}
-		if (write_length > left_legnth) {
-			pr_err("%s sbuf_write overflow: ret=%d left=%d count=%d\n",
-			       __func__, write_length, left_legnth, count);
-			return -EIO;
-		}
-		left_legnth = left_legnth - write_length;
-	}
-	return count;
-}
-#endif
+	ssize_t ret;
 
-static int stty_data_transmit(uint8_t *data, size_t count)
-{
-#if 0
-	return stty_write(NULL, data, count);
-#else
-	BT_VER("stty_data_transmit\n");
-	return stty_write(mtty, data, count);
-#endif
+	mutex_lock(&stty->tx_lock);
+	if (stty->removed || !stty->openers)
+		ret = -EIO;
+	else
+		ret = sitm_write(buf, min_t(size_t, count, INT_MAX),
+				 stty_data_transmit, stty);
+	mutex_unlock(&stty->tx_lock);
+	return ret;
 }
 
-static int stty_write_plus(struct tty_struct *tty,
-	      const unsigned char *buf, int count)
+static unsigned int stty_write_room(struct tty_struct *tty)
 {
-	BT_VER("stty_write_plus\n");
-	return sitm_write(buf, count, stty_data_transmit);
-}
+	struct stty_device *stty = tty->driver_data;
 
-static void stty_flush_chars(struct tty_struct *tty)
-{
-}
-
-static int stty_write_room(struct tty_struct *tty)
-{
-	return INT_MAX;
+	return READ_ONCE(stty->removed) ? 0 : STTY_MAX_DATA_LEN;
 }
 
 static const struct tty_operations stty_ops = {
-	.open  = stty_open,
+	.install = stty_install,
+	.cleanup = stty_cleanup,
+	.open = stty_open,
 	.close = stty_close,
-	.write = stty_write_plus,
-	.flush_chars = stty_flush_chars,
-	.write_room  = stty_write_room,
+	.write = stty_write,
+	.write_room = stty_write_room,
 };
 
-static struct tty_port *stty_port_init(void)
+static void stty_port_release(struct tty_port *port)
 {
-	struct tty_port *port = NULL;
-
-	port = kzalloc(sizeof(struct tty_port), GFP_KERNEL);
-	if (port == NULL)
-		return NULL;
-	tty_port_init(port);
-	return port;
+	kfree(container_of(port, struct stty_device, port));
 }
 
-static int stty_driver_init(struct stty_device *device)
+static const struct tty_port_operations stty_port_ops = {
+	.destruct = stty_port_release,
+};
+
+static int stty_driver_init(struct stty_device *stty)
 {
 	struct tty_driver *driver;
-	int ret = 0;
+	int ret;
 
-	mutex_init(&(device->stat_lock));
+	driver = tty_alloc_driver(STTY_DEV_MAX_NR, 0);
+	if (IS_ERR(driver))
+		return PTR_ERR(driver);
 
-	device->port = stty_port_init();
-	if (!device->port)
-		return -ENOMEM;
-
-	driver = alloc_tty_driver(STTY_DEV_MAX_NR);
-	if (!driver) {
-		kfree(device->port);
-		return -ENOMEM;
-	}
-
-	/*
-	 * Initialize the tty_driver structure
-	 * Entries in stty_driver that are NOT initialized:
-	 * proc_entry, set_termios, flush_buffer, set_ldisc, write_proc
-	 */
-	driver->owner = THIS_MODULE;
-	driver->driver_name = device->pdata->name;
-	driver->name = device->pdata->name;
-	driver->major = 0;
+	driver->driver_name = "ttyBT";
+	driver->name = "ttyBT";
 	driver->type = TTY_DRIVER_TYPE_SYSTEM;
 	driver->subtype = SYSTEM_TYPE_TTY;
 	driver->init_termios = tty_std_termios;
-	driver->driver_state = (void *)device;
-	device->driver = driver;
-	 /* initialize the tty driver */
+	driver->driver_state = stty;
 	tty_set_operations(driver, &stty_ops);
-	tty_port_link_device(device->port, driver, 0);
+	tty_port_link_device(&stty->port, driver, 0);
 	ret = tty_register_driver(driver);
 	if (ret) {
-		put_tty_driver(driver);
-		tty_port_destroy(device->port);
-		kfree(device->port);
+		tty_driver_kref_put(driver);
 		return ret;
 	}
-	return ret;
+	stty->driver = driver;
+	return 0;
 }
 
-static void stty_driver_exit(struct stty_device *device)
-{
-	struct tty_driver *driver = device->driver;
-
-	tty_unregister_driver(driver);
-	put_tty_driver(driver);
-	tty_port_destroy(device->port);
-}
-
-static int stty_parse_dt(struct stty_init_data **init, struct device *dev)
+static int stty_parse_dt(struct stty_init_data *pdata, struct device *dev)
 {
 	struct device_node *np = dev->of_node;
-	struct stty_init_data *pdata = NULL;
+	const char *name;
+	u32 value;
 	int ret;
-	uint32_t data;
 
-	pdata = devm_kzalloc(dev, sizeof(struct stty_init_data), GFP_KERNEL);
-	if (!pdata)
-		return -ENOMEM;
-
-	ret = of_property_read_string(np,
-				      "sprd,name",
-				      (const char **)&pdata->name);
+	ret = of_property_read_string(np, "sprd,name", &name);
+	if (ret || strcmp(name, "ttyBT"))
+		return -ENODEV;
+	ret = of_property_read_u32(np, "sprd,dst", &value);
+	if (ret || value >= SIPC_ID_NR)
+		return ret ?: -EINVAL;
+	pdata->dst = value;
+	ret = of_property_read_u32(np, "sprd,channel", &value);
+	if (ret || value > U8_MAX)
+		return ret ?: -EINVAL;
+	pdata->channel = value;
+	ret = of_property_read_u32(np, "sprd,tx_bufid", &pdata->tx_bufid);
 	if (ret)
-		goto error;
+		return ret;
+	return of_property_read_u32(np, "sprd,rx_bufid", &pdata->rx_bufid);
+}
 
-	ret = of_property_read_u32(np, "sprd,dst", (uint32_t *)&data);
+static int stty_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct stty_device *stty;
+	struct stty_init_data pdata;
+	int ret;
+
+	ret = stty_parse_dt(&pdata, dev);
 	if (ret)
-		goto error;
-	pdata->dst = (uint8_t)data;
+		return ret;
+	if (atomic_cmpxchg(&stty_claimed, 0, 1))
+		return -EBUSY;
 
-	ret = of_property_read_u32(np, "sprd,channel", (uint32_t *)&data);
+	stty = kzalloc(sizeof(*stty), GFP_KERNEL);
+	if (!stty) {
+		ret = -ENOMEM;
+		goto release_claim;
+	}
+	stty->pdata = pdata;
+	mutex_init(&stty->state_lock);
+	mutex_init(&stty->tx_lock);
+	tty_port_init(&stty->port);
+	stty->port.ops = &stty_port_ops;
+	platform_set_drvdata(pdev, stty);
+	ret = sbuf_register_notifier(pdata.dst, pdata.channel, pdata.rx_bufid,
+				     stty_handler, stty);
+	if (ret) {
+		if (ret == -ENODEV)
+			ret = -EPROBE_DEFER;
+		goto put_port;
+	}
+	ret = sysfs_create_group(&dev->kobj, &bluetooth_group);
 	if (ret)
-		goto error;
-	pdata->channel = (uint8_t)data;
-
-	ret = of_property_read_u32(np, "sprd,tx_bufid", (uint32_t *)&pdata->tx_bufid);
+		goto remove_notifier;
+	ret = rfkill_bluetooth_init(pdev);
 	if (ret)
-		goto error;
-
-	ret = of_property_read_u32(np, "sprd,rx_bufid", (uint32_t *)&pdata->rx_bufid);
+		goto remove_group;
+	ret = stty_driver_init(stty);
 	if (ret)
-		goto error;
-
-	*init = pdata;
+		goto remove_rfkill;
 	return 0;
-error:
-	devm_kfree(dev, pdata);
-	*init = NULL;
+
+remove_rfkill:
+	rfkill_bluetooth_remove(pdev);
+remove_group:
+	sysfs_remove_group(&dev->kobj, &bluetooth_group);
+remove_notifier:
+	sbuf_register_notifier(pdata.dst, pdata.channel, pdata.rx_bufid,
+			       NULL, NULL);
+put_port:
+	platform_set_drvdata(pdev, NULL);
+	tty_port_put(&stty->port);
+release_claim:
+	atomic_set(&stty_claimed, 0);
 	return ret;
 }
 
-static inline void stty_destroy_pdata(struct stty_init_data **init,
-	struct device *dev)
-{
-	struct stty_init_data *pdata = *init;
-
-	devm_kfree(dev, pdata);
-
-	*init = NULL;
-}
-
-
-static int  stty_probe(struct platform_device *pdev)
-{
-	struct stty_init_data *pdata = (struct stty_init_data *)pdev->
-					dev.platform_data;
-	struct stty_device *stty;
-	int rval = 0;
-
-	if (pdev->dev.of_node && !pdata) {
-		rval = stty_parse_dt(&pdata, &pdev->dev);
-		if (rval) {
-			pr_debug("failed to parse styy device tree, ret=%d\n",
-				rval);
-			return rval;
-		}
-	}
-	pr_debug("stty: after parse device tree, name=%s, dst=%u, channel=%u, tx_bufid=%u, rx_bufid=%u\n",
-		pdata->name, pdata->dst, pdata->channel, pdata->tx_bufid, pdata->rx_bufid);
-
-	stty = devm_kzalloc(&pdev->dev, sizeof(struct stty_device), GFP_KERNEL);
-	if (stty == NULL) {
-		stty_destroy_pdata(&pdata, &pdev->dev);
-		pr_debug("stty Failed to allocate device!\n");
-		return -ENOMEM;
-	}
-
-	stty->pdata = pdata;
-	rval = stty_driver_init(stty);
-	if (rval) {
-		devm_kfree(&pdev->dev, stty);
-		stty_destroy_pdata(&pdata, &pdev->dev);
-		pr_debug("stty driver init error!\n");
-		return -EINVAL;
-	}
-
-	rval = sbuf_register_notifier(pdata->dst, pdata->channel,
-					pdata->rx_bufid, stty_handler, stty);
-	if (rval) {
-		stty_driver_exit(stty);
-		kfree(stty->port);
-		devm_kfree(&pdev->dev, stty);
-		pr_debug("regitster notifier failed (%d)\n", rval);
-		return rval;
-	}
-
-	pr_debug("stty_probe init device addr: 0x%p\n", stty);
-	platform_set_drvdata(pdev, stty);
-
-	if (sysfs_create_group(&pdev->dev.kobj,
-			&bluetooth_group)) {
-		pr_err("%s failed to create bluetooth tty attributes.\n", __func__);
-	}
-
-	rfkill_bluetooth_init(pdev);
-	return 0;
-}
-
-static int  stty_remove(struct platform_device *pdev)
+static void stty_remove(struct platform_device *pdev)
 {
 	struct stty_device *stty = platform_get_drvdata(pdev);
-	int rval;
+	struct stty_init_data *pdata = &stty->pdata;
 
-	rval = sbuf_register_notifier(stty->pdata->dst, stty->pdata->channel,
-					stty->pdata->rx_bufid, NULL, NULL);
-	if (rval) {
-		pr_debug("unregitster notifier failed (%d)\n", rval);
-		return rval;
+	mutex_lock(&stty->tx_lock);
+	mutex_lock(&stty->state_lock);
+	WRITE_ONCE(stty->removed, true);
+	if (stty->openers) {
+		stty->openers = 0;
+		sitm_cleanup();
 	}
+	mutex_unlock(&stty->state_lock);
+	mutex_unlock(&stty->tx_lock);
 
-	stty_driver_exit(stty);
-	kfree(stty->port);
-	stty_destroy_pdata(&stty->pdata, &pdev->dev);
-	devm_kfree(&pdev->dev, stty);
-	platform_set_drvdata(pdev, NULL);
 	sysfs_remove_group(&pdev->dev.kobj, &bluetooth_group);
-	return 0;
+	sbuf_register_notifier(pdata->dst, pdata->channel, pdata->rx_bufid,
+			       NULL, NULL);
+	rfkill_bluetooth_remove(pdev);
+	tty_unregister_driver(stty->driver);
+	tty_port_tty_vhangup(&stty->port);
+	tty_port_tty_set(&stty->port, NULL);
+	tty_driver_kref_put(stty->driver);
+	tty_port_put(&stty->port);
+	atomic_set(&stty_claimed, 0);
 }
 
 static const struct of_device_id stty_match_table[] = {
 	{ .compatible = "sprd,wcn_internal_chip", },
 	{ },
 };
+
+MODULE_DEVICE_TABLE(of, stty_match_table);
 
 static struct platform_driver stty_driver = {
 	.driver = {
@@ -640,12 +484,20 @@ static struct platform_driver stty_driver = {
 
 static int __init stty_init(void)
 {
-	return platform_driver_register(&stty_driver);
+	int ret = bluesleep_init();
+
+	if (ret)
+		return ret;
+	ret = platform_driver_register(&stty_driver);
+	if (ret)
+		bluesleep_exit();
+	return ret;
 }
 
 static void __exit stty_exit(void)
 {
 	platform_driver_unregister(&stty_driver);
+	bluesleep_exit();
 }
 
 late_initcall(stty_init);

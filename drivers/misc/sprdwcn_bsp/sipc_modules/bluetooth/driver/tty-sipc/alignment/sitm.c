@@ -27,16 +27,17 @@ static struct packet_receive_data_t *rd;
 
 int sitm_ini(void)
 {
-	rd = kmalloc(sizeof(struct packet_receive_data_t),
-		GFP_KERNEL);
-	if(NULL == rd)
-		pr_err("no memory for packet_receive_data_t");
-	memset(rd, 0, sizeof(struct packet_receive_data_t));
-	if (kfifo_alloc(&rd->fifo,
-		HCI_HAL_SERIAL_BUFFER_SIZE, GFP_KERNEL)) {
-		pr_err("no memory for sitm ring buf");
+	int ret;
+
+	rd = kzalloc(sizeof(*rd), GFP_KERNEL);
+	if (!rd)
+		return -ENOMEM;
+	ret = kfifo_alloc(&rd->fifo, HCI_HAL_SERIAL_BUFFER_SIZE, GFP_KERNEL);
+	if (ret) {
+		kfree(rd);
+		rd = NULL;
 	}
-	return 0;
+	return ret;
 }
 
 int sitm_cleanup(void)
@@ -57,10 +58,12 @@ static int data_ready(uint8_t *buf, uint32_t count)
 	return ret;
 }
 
-void parse_frame(data_ready_cb data_ready, frame_complete_cb frame_complete)
+static int parse_frame(data_ready_cb data_ready, frame_complete_cb frame_complete,
+		       void *context)
 {
 	uint8_t byte;
 	size_t buffer_size, bytes_read;
+	int ret;
 
 	while (data_ready(&byte, 1) == 1) {
 		switch (rd->state) {
@@ -77,6 +80,7 @@ void parse_frame(data_ready_cb data_ready, frame_complete_cb frame_complete)
 			memset(rd->preamble, 0, PREAMBLE_BUFFER_SIZE);
 			rd->index = 0;
 			rd->state = PREAMBLE;
+			fallthrough;
 		case PREAMBLE:
 			rd->preamble[rd->index] = byte;
 			rd->index++;
@@ -120,7 +124,7 @@ void parse_frame(data_ready_cb data_ready, frame_complete_cb frame_complete)
 			rd->bytes_remaining--;
 			if (rd->bytes_remaining == 0) {
 				rd->state = BRAND_NEW;
-				return;
+				return 0;
 			}
 			break;
 		case FINISHED:
@@ -142,20 +146,25 @@ void parse_frame(data_ready_cb data_ready, frame_complete_cb frame_complete)
 				while (tail--)
 					rd->buffer[rd->index++] = 0;
 			}
-			frame_complete(rd->buffer,
-				rd->index);
+			ret = frame_complete(context, rd->buffer, rd->index);
 			rd->state = BRAND_NEW;
+			if (ret < 0) {
+				kfifo_reset(&rd->fifo);
+				return ret;
+			}
 		}
 	}
+	return 0;
 }
 
-int sitm_write(const uint8_t *buf, int count, frame_complete_cb frame_complete)
+int sitm_write(const uint8_t *buf, int count, frame_complete_cb frame_complete,
+	       void *context)
 {
 	int ret;
 
 	if (!rd) {
 		pr_err("hci fifo no memory\n");
-		return count;
+		return -EIO;
 	}
 
 	ret = kfifo_avail(&rd->fifo);
@@ -167,9 +176,9 @@ int sitm_write(const uint8_t *buf, int count, frame_complete_cb frame_complete)
 		count = ret;
 	}
 
-	kfifo_in(&rd->fifo, buf, count);
-	parse_frame(data_ready, frame_complete);
-	return count;
+	count = kfifo_in(&rd->fifo, buf, count);
+	ret = parse_frame(data_ready, frame_complete, context);
+	return ret ?: count;
 }
 
 

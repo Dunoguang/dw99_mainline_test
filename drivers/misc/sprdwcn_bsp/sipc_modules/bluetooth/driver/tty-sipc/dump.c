@@ -11,10 +11,20 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/vmalloc.h>
+#include <linux/mutex.h>
+#include <linux/timekeeping.h>
 #include "dump.h"
 
-extern bt_host_data_dump *data_dump;
+static bt_host_data_dump dump_data;
+static bt_host_data_dump * const data_dump = &dump_data;
+static DEFINE_MUTEX(dump_lock);
+
+void bt_host_data_reset(void)
+{
+	mutex_lock(&dump_lock);
+	memset(data_dump, 0, sizeof(*data_dump));
+	mutex_unlock(&dump_lock);
+}
 
 static void data_left_shift(unsigned char data_inout)
 {
@@ -37,30 +47,26 @@ static void data_left_shift(unsigned char data_inout)
     }
 }
 
-static void get_time(unsigned char data_inout)
+static void get_time(unsigned char direction)
 {
-    switch (data_inout) {
-        case BT_DATA_OUT:
-            do_gettimeofday(&(data_dump->txtime_t[BT_MAX_DUMP_FRAME_LEN - 1].tv));
-            rtc_time_to_tm(data_dump->txtime_t[BT_MAX_DUMP_FRAME_LEN - 1].tv.tv_sec,
-            &(data_dump->txtime_t[BT_MAX_DUMP_FRAME_LEN - 1].rtc_t));
-            break;
-        case BT_DATA_IN:
-            do_gettimeofday(&(data_dump->rxtime_t[BT_MAX_DUMP_FRAME_LEN - 1].tv));
-            rtc_time_to_tm(data_dump->rxtime_t[BT_MAX_DUMP_FRAME_LEN - 1].tv.tv_sec,
-            &(data_dump->rxtime_t[BT_MAX_DUMP_FRAME_LEN - 1].rtc_t));
-            break;
-        default:
-            break;
-    }
+	bt_host_time *last;
+
+	if (direction == BT_DATA_OUT)
+		last = &data_dump->txtime_t[BT_MAX_DUMP_FRAME_LEN - 1];
+	else
+		last = &data_dump->rxtime_t[BT_MAX_DUMP_FRAME_LEN - 1];
+
+	ktime_get_real_ts64(&last->tv);
+	rtc_time64_to_tm(last->tv.tv_sec, &last->rtc_t);
 }
 
 void bt_host_data_save(const unsigned char *buf, int count, unsigned char data_inout) {
-    if (data_dump == NULL)
+    if (count < 1)
         return;
     if ((buf[0] == HCI_COMMAND) ||
-        ((buf[0] == HCI_EVENT) && (buf[1] == HCI_COMMAND_STATUS)) ||
-        ((buf[0] == HCI_EVENT) && (buf[1] == HCI_COMMAND_COMPELET))) {
+        (count >= 2 && (buf[0] == HCI_EVENT) && (buf[1] == HCI_COMMAND_STATUS)) ||
+        (count >= 2 && (buf[0] == HCI_EVENT) && (buf[1] == HCI_COMMAND_COMPELET))) {
+        mutex_lock(&dump_lock);
         pr_debug("bt_host_data_save: data %d \n", data_inout);
         data_left_shift(data_inout);
         get_time(data_inout);
@@ -92,16 +98,19 @@ void bt_host_data_save(const unsigned char *buf, int count, unsigned char data_i
                 break;
         }
     }
+    mutex_unlock(&dump_lock);
 }
 
 void bt_host_data_printf(void) {
     unsigned char loop_count_i = 0, loop_count_j = 0;
+
+    mutex_lock(&dump_lock);
     for(; loop_count_j < BT_MAX_DUMP_FRAME_LEN; loop_count_j++) {
         printk("bt_host_data_printf txdata[%d]: ", loop_count_j + 1);
         printk("%d-%d-%d %d:%d:%d.%06ld ", 1900 + data_dump->txtime_t[loop_count_j].rtc_t.tm_year,
         1 + data_dump->txtime_t[loop_count_j].rtc_t.tm_mon, data_dump->txtime_t[loop_count_j].rtc_t.tm_mday,
         data_dump->txtime_t[loop_count_j].rtc_t.tm_hour, data_dump->txtime_t[loop_count_j].rtc_t.tm_min,
-        data_dump->txtime_t[loop_count_j].rtc_t.tm_sec, data_dump->txtime_t[loop_count_j].tv.tv_usec);
+        data_dump->txtime_t[loop_count_j].rtc_t.tm_sec, data_dump->txtime_t[loop_count_j].tv.tv_nsec / NSEC_PER_USEC);
         while(loop_count_i < BT_MAX_DUMP_DATA_LEN) {
             printk("%02X ", data_dump->tx[loop_count_j][loop_count_i++]);
         }
@@ -114,11 +123,12 @@ void bt_host_data_printf(void) {
         printk("%d-%d-%d %d:%d:%d.%06ld ", 1900 + data_dump->rxtime_t[loop_count_j].rtc_t.tm_year,
         1 + data_dump->rxtime_t[loop_count_j].rtc_t.tm_mon, data_dump->rxtime_t[loop_count_j].rtc_t.tm_mday,
         data_dump->rxtime_t[loop_count_j].rtc_t.tm_hour, data_dump->rxtime_t[loop_count_j].rtc_t.tm_min,
-        data_dump->rxtime_t[loop_count_j].rtc_t.tm_sec, data_dump->rxtime_t[loop_count_j].tv.tv_usec);
+        data_dump->rxtime_t[loop_count_j].rtc_t.tm_sec, data_dump->rxtime_t[loop_count_j].tv.tv_nsec / NSEC_PER_USEC);
         while(loop_count_i < BT_MAX_DUMP_DATA_LEN) {
             printk("%02X ", data_dump->rx[loop_count_j][loop_count_i++]);
         }
         printk("\n");
         loop_count_i = 0;
     }
+    mutex_unlock(&dump_lock);
 }

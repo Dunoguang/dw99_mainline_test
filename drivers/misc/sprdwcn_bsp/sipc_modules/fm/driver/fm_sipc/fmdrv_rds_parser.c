@@ -15,6 +15,7 @@
  */
 
 #include <linux/interrupt.h>
+#include <linux/timekeeping.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
@@ -23,7 +24,7 @@
 #include "fmdrv_rds_parser.h"
 
 //#ifdef KERNEL_VERSION_414
-#include <misc/marlin_platform.h>
+#include <linux/marlin_platform.h>
 //#else
 //#include <linux/marlin_platform.h>
 //#endif
@@ -144,12 +145,12 @@ static signed int rds_bm_set(struct rds_bitmap *thiz, unsigned char addr)
 
 /* the next ps: index = 0 */
 //static unsigned char flag_next = 1;
-void rds_parser_init(void)
+static void __maybe_unused rds_parser_init(void)
 {
 	g_rds_data_p = get_rds_data();
 }
 
-void  fmr_assert(unsigned short *a)
+static void  fmr_assert(unsigned short *a)
 {
 	if (a == NULL)
 		pr_info("%s,invalid pointer\n", __func__);
@@ -177,7 +178,7 @@ static signed int rds_event_set(unsigned short *events, signed int event_mask)
 * TA(Traffic Program) code 0A 0B 14B 15B
 */
 
-void rds_get_eon_ta(unsigned char *buf)
+static void rds_get_eon_ta(unsigned char *buf)
 {
 	unsigned char *blk_4 = buf + 3 * rds_data_unit_size;
 	unsigned char data = *(buf + rds_data_unit_size + 2);
@@ -199,7 +200,7 @@ void rds_get_eon_ta(unsigned char *buf)
 * variant code is in blockB low 4 bits
 */
 
-void rds_get_eon(unsigned char *buf)
+static void rds_get_eon(unsigned char *buf)
 {
 	unsigned char *blk_3 = buf + 2 * rds_data_unit_size;
 	unsigned char *blk_4 = buf + 3 * rds_data_unit_size;
@@ -218,7 +219,7 @@ void rds_get_eon(unsigned char *buf)
 * block3 and block4 is PTYN text character
 */
 
-void rds_get_ptyn(unsigned char *buf)
+static void __maybe_unused rds_get_ptyn(unsigned char *buf)
 {
 	unsigned char *blk_2 = buf + rds_data_unit_size;
 	unsigned char *blk_head[2];
@@ -252,7 +253,7 @@ void rds_get_ptyn(unsigned char *buf)
 * unsigned short data_16b_2;
 */
 
-void rds_get_ews(unsigned char *buf)
+static void rds_get_ews(unsigned char *buf)
 {
 	unsigned char data_5b;
 	unsigned short data_16b_1;
@@ -267,7 +268,7 @@ void rds_get_ews(unsigned char *buf)
 	/* judge if EWS event Flag was set, and send to read interface */
 }
 
-void rfd_get_rtplus(unsigned char *buf)
+static void rfd_get_rtplus(unsigned char *buf)
 {
 	/* tBTA_RDS_RTP *p_rtp_cb = &p_cb->rtp_cb; */
 	unsigned char	*blk_b = buf + rds_data_unit_size;
@@ -294,14 +295,14 @@ void rfd_get_rtplus(unsigned char *buf)
 
 /* ODA = Open Data Applications */
 
-void rds_get_oda(unsigned char *buf)
+static void rds_get_oda(unsigned char *buf)
 {
 	rfd_get_rtplus(buf);
 }
 
 /* TDC = Transparent Data Channel */
 
-void rds_get_tdc(unsigned char *buf, unsigned char version)
+static void rds_get_tdc(unsigned char *buf, unsigned char version)
 {
 	/* 2nd  block */
 	unsigned char	*blk_b	= buf + rds_data_unit_size;
@@ -328,7 +329,7 @@ void rds_get_tdc(unsigned char *buf, unsigned char version)
 
 /* CT = Programe Clock time */
 
-void rds_get_ct(unsigned char *buf)
+static void rds_get_ct(unsigned char *buf)
 {
 	unsigned char *blk_2 = buf + rds_data_unit_size;
 	unsigned char *blk_3 = buf + 2 * rds_data_unit_size;
@@ -360,7 +361,7 @@ void rds_get_ct(unsigned char *buf)
 	fmdev->rds_data.CT.local_time_offset_signbit = sense;
 }
 
-void rds_get_oda_aid(unsigned char *buf)
+static void rds_get_oda_aid(unsigned char *buf)
 {
 }
 
@@ -479,7 +480,7 @@ static void rds_rt_cmp(unsigned char addr, unsigned char subtype,
 		*len);
 }
 
-void rds_get_rt_cmp(unsigned char *buf, unsigned char grp_type)
+static void rds_get_rt_cmp(unsigned char *buf, unsigned char grp_type)
 {
 	unsigned char *blk_2 = buf + rds_data_unit_size;
 	unsigned char *blk_3 = buf + 2 * rds_data_unit_size;
@@ -609,7 +610,7 @@ out:
 * 2B: address in block2 last 4bits, Text in block4(16bits)
 */
 
-void rds_get_rt(unsigned char *buf, unsigned char grp_type)
+static void rds_get_rt(unsigned char *buf, unsigned char grp_type)
 {
 	unsigned char *blk_3 = buf + 2 * rds_data_unit_size;
 	unsigned char *blk_4 = buf + 3 * rds_data_unit_size;
@@ -675,7 +676,7 @@ void rds_get_rt(unsigned char *buf, unsigned char grp_type)
 
 /* PIN = Programme Item Number */
 
-void rds_get_pin(unsigned char *buf)
+static void rds_get_pin(unsigned char *buf)
 {
 	struct RDS_PIN {
 		unsigned char day;
@@ -698,7 +699,7 @@ void rds_get_pin(unsigned char *buf)
 * LA 0 0 0 OPC ECC
 */
 
-void rds_get_slc(unsigned char *buf)
+static void rds_get_slc(unsigned char *buf)
 {
 	unsigned char *blk_3 = buf + 2 * rds_data_unit_size;
 	unsigned char variant_code, slc_type,  paging;
@@ -793,7 +794,7 @@ static void rds_ps_cmp(unsigned char addr, unsigned char *fresh,
 * PS = Programme Service name
 * block2 last 2bit stard for address, block4 16bits meaning ps.
 */
-void rds_get_ps(unsigned char *buf)
+static void rds_get_ps(unsigned char *buf)
 {
 	unsigned char *blk_2 = buf + rds_data_unit_size; /* BlockB */
 	unsigned char *blk_4 = buf + 3 *  rds_data_unit_size; /* BlockD */
@@ -889,11 +890,11 @@ out:
 	pr_info("The PS[3] is %s\n", fmdev->rds_data.ps_data.PS[3]);
 }
 
-unsigned short rds_get_freq(void)
+static unsigned short rds_get_freq(void)
 {
 	return 0;
 }
-void rds_get_af_method(unsigned char AFH, unsigned char AFL)
+static void rds_get_af_method(unsigned char AFH, unsigned char AFL)
 {
 	static signed short pre_af_num;
 	unsigned char  indx, indx2, num;
@@ -1034,7 +1035,7 @@ void rds_get_af_method(unsigned char AFH, unsigned char AFL)
 * af information in block 3
 */
 
-void rds_get_af(unsigned char *buf)
+static void rds_get_af(unsigned char *buf)
 {
 	unsigned char *blk_3 = buf + 2 * rds_data_unit_size;
 
@@ -1045,7 +1046,7 @@ void rds_get_af(unsigned char *buf)
 }
 
 /* Group types which contain this information: 0A 0B 15B */
-void rds_get_di_ms(unsigned char *buf)
+static void rds_get_di_ms(unsigned char *buf)
 {
 }
 
@@ -1055,7 +1056,7 @@ void rds_get_di_ms(unsigned char *buf)
 * TP = Traffic Program identification; TA = Traffic Announcement
 */
 
-void rds_get_tp_ta(unsigned char *buf, unsigned char grp_type)
+static void rds_get_tp_ta(unsigned char *buf, unsigned char grp_type)
 {
 	unsigned char *blk_2 = buf + rds_data_unit_size;
 	unsigned char byte1 = *(blk_2 + 1), byte2 = *(blk_2 + 2);
@@ -1077,7 +1078,7 @@ void rds_get_tp_ta(unsigned char *buf, unsigned char grp_type)
 * #### ##$$ $$$# ####
 */
 
-void rds_get_pty(unsigned char *buf)
+static void rds_get_pty(unsigned char *buf)
 {
 	unsigned char *blk_2 = buf + rds_data_unit_size;
 	unsigned char byte1 = *(blk_2 + 1), byte2 = *(blk_2 + 2);
@@ -1094,7 +1095,7 @@ void rds_get_pty(unsigned char *buf)
 * grp_type B: block3
 */
 
-void rds_get_pi_code(unsigned char *buf, unsigned char version)
+static void rds_get_pi_code(unsigned char *buf, unsigned char version)
 {
 	unsigned char *blk_3 = buf + 2 * rds_data_unit_size;
 	/* pi_code for version A, pi_code_b for version B */
@@ -1131,7 +1132,7 @@ void rds_get_pi_code(unsigned char *buf, unsigned char version)
 * Block4: 16bits + 10bits
 * rds_get_group_type from Block2
 */
-unsigned char rds_get_group_type(unsigned char *buffer)
+static unsigned char rds_get_group_type(unsigned char *buffer)
 {
 	unsigned char *crc_blk_2 = buffer + rds_data_unit_size;
 	unsigned char blk2_byte1 = *(crc_blk_2+1);
@@ -1183,7 +1184,7 @@ void rds_parser(unsigned char *buffer)
 {
 	unsigned char grp_type;
 
-	fmdev->rds_han.rds_parse_start_time = get_seconds();
+	fmdev->rds_han.rds_parse_start_time = ktime_get_real_seconds();
 	/*dump_rx_data(buffer, len);*/
 	grp_type = rds_get_group_type(buffer);
 	pr_info("group type is : 0x%x\n", grp_type);

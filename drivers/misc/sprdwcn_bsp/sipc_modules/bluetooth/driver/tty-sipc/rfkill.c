@@ -24,9 +24,10 @@
 
 #include "rfkill.h"
 
-#include <misc/wcn_integrate_platform.h>
+#include <linux/wcn_integrate_platform.h>
 
 static struct rfkill *bt_rfk;
+static bool bluetooth_powered;
 static const char bt_name[] = "bluetooth";
 
 static int bluetooth_set_power(void *data, bool blocked)
@@ -35,10 +36,14 @@ static int bluetooth_set_power(void *data, bool blocked)
 
 	pr_info("%s: start_block: %d\n", __func__, blocked);
 
-	if (!blocked)
-	ret = start_marlin(WCN_MARLIN_BLUETOOTH);
+	if (blocked == !bluetooth_powered)
+		return 0;
+	if (blocked)
+		ret = stop_marlin(WCN_MARLIN_BLUETOOTH);
 	else
-        ret = stop_marlin(WCN_MARLIN_BLUETOOTH);
+		ret = start_marlin(WCN_MARLIN_BLUETOOTH);
+	if (!ret)
+		bluetooth_powered = !blocked;
 
 	pr_info("%s: end_block: %d, ret: %d\n", __func__, blocked, ret);
 	return ret;
@@ -80,6 +85,10 @@ int rfkill_bluetooth_remove(struct platform_device *dev)
 {
 	pr_info("-->%s\n", __func__);
 	rfkill_unregister(bt_rfk);
+	if (bluetooth_powered) {
+		stop_marlin(WCN_MARLIN_BLUETOOTH);
+		bluetooth_powered = false;
+	}
 	rfkill_destroy(bt_rfk);
 	pr_info("<--%s\n", __func__);
 	return 0;

@@ -28,7 +28,7 @@
 
 typedef struct bt_host_time {
     struct rtc_time rtc_t;
-    struct timeval tv;
+    struct timespec64 tv;
 }bt_host_time;
 
 typedef struct bt_host_data_dump {
@@ -40,5 +40,6 @@ typedef struct bt_host_data_dump {
 
 void bt_host_data_save(const unsigned char *buf, int count, unsigned char data_inout);
 void bt_host_data_printf(void);
+void bt_host_data_reset(void);
 
 #endif
