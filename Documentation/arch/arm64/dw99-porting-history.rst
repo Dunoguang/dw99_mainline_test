@@ -176,7 +176,33 @@ Watch-GKI 驱动审查
   7.3 以前只保留对应设备树节点。深度 idle 声明本地定时器停止，
   所以应恢复独立广播定时器，同时保留本地定时器。CPUFreq 在
   相同日志中还出现频率表初始化失败和 ``cpufreq-clus0`` 引用
-  计数警告，两项有独立的源码原因。相关修复正在编译验证。
+  计数警告。驱动把频率表留在局部变量后校验空的 policy 表，
+  多条路径又释放了同一个设备树引用。两个问题均已修复。
+
+本轮构建与待测
+--------------
+
+* ``c451f37ed`` 为 SharkLE 与 DW99 配齐并命名 Arm 定时器中断，
+  同时从 Watch-GKI 恢复 32768 Hz 的独立 R4P0 广播事件源。
+  ``d54e0f20e`` 修正 CPUFreq 初始化及引用所有权。
+  ``6a95329bd`` 在原生 PHY 改动供电或隔离前注销 ``musbec``，
+  避免它继续访问共享控制器。PHY 仍会接管硬件，后续内核日志仍写入
+  ramoops。``f0df312af`` 增加触控供电返回和 20 ms 等待结束的标记。
+* ``7.3.4-timerfix-gf0df312af9d6`` 的 ARM64 内核、DW99 DTB 和三个
+  厂商模块均完成本地构建。Mali、蓝牙、FM 的 294、74、53 项
+  导入符号 CRC 与该内核的符号表分别一致。修复镜像与同内核
+  模块封存为 ``dw99-timer-tests-f0df312af.zip``。本地构建仍有已存在的
+  CPUFreq 和 USB PHY 未使用声明及缺少原型警告。
+  GitHub Actions 构建 44697819826 已通过，归档内核与三个模块。
+* 优先实测 ``boot-usb-off-timer-ppi.img``。它与已测
+  ``boot-usb-off-i2c-timeout.img`` 的内核和 ramdisk 逐字节相同，
+  仅改 DTB 的 ``timer`` 节点中断定义。``boot-usb-off-timer-fix.img``
+  使用完整修复，预期出现 ``R4P0 broadcast clockevent at 32768 Hz``
+  和触控电源稳定结束的检查点。第三张 ``boot-usb-off-cpuidle-off.img``
+  沿用旧映射，只追加 ``cpuidle.off=1``。三张均保留触控并禁用
+  MUSB 与 PHY，可继续使用实测可用的原版采集器。
+* 以上镜像均完成离线校验。定时唤醒、eMMC 枚举、进入 ``/init``、
+  正式 USB 接管及实际重启有待板上复测。
 
 复现构建
 ========
