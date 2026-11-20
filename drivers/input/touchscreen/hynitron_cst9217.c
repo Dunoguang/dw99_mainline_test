@@ -263,7 +263,9 @@ static int cst9217_probe(struct i2c_client *client)
         ret = regulator_enable(ts->vdd);
         if (ret) HYN_ERR("Failed to enable regulator\n");
         
-        msleep(20); 
+        dev_dbg(&client->dev, "vddsdcore enable returned %d; waiting for settling\n", ret);
+        msleep(20);
+        dev_dbg(&client->dev, "vddsdcore settling delay completed\n");
     }
 
     // GPIO 解析
