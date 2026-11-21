@@ -294,7 +294,7 @@
 				#size-cells = <0x00>;
 				status = "okay";
 
-				och1970@0d {
+				och1970@d {
 					compatible = "magnetic,och1970";
 					reg = <0x0d>;
 					linux,open = <0x3b>;
@@ -988,7 +988,7 @@
 					linux,phandle = <0x49>;
 					phandle = <0x49>;
 
-					timer@00 {
+					timer@0 {
 						compatible = "sprd,sc2721-chg-timer";
 						reg = <0x00>;
 						interrupt-parent = <0x49>;
@@ -3387,7 +3387,7 @@
 			};
 		};
 
-		cpu@000000 {
+		cpu@0 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53\0arm,armv8";
 			reg = <0x00 0x00>;
@@ -3399,7 +3399,7 @@
 			phandle = <0x6c>;
 		};
 
-		cpu@000001 {
+		cpu@1 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53\0arm,armv8";
 			reg = <0x00 0x01>;
@@ -3411,7 +3411,7 @@
 			phandle = <0x6e>;
 		};
 
-		cpu@000002 {
+		cpu@2 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53\0arm,armv8";
 			reg = <0x00 0x02>;
@@ -3423,7 +3423,7 @@
 			phandle = <0x70>;
 		};
 
-		cpu@000003 {
+		cpu@3 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53\0arm,armv8";
 			reg = <0x00 0x03>;
@@ -3817,7 +3817,7 @@
 		};
 	};
 
-	sipc@0xe400 {
+	sipc@e400 {
 		compatible = "sprd,sipc-v1";
 		sprd,name = "sipc-pmsys";
 		sprd,dst = <0x06 0x01>;
@@ -4438,7 +4438,7 @@
 			};
 		};
 
-		lcd779167@0x779167 {
+		lcd779167@779167 {
 			work-mode = <0x01>;
 			bpp = <0x12>;
 			lane-number = <0x01>;
