@@ -500,7 +500,7 @@ int isp_offline_init_buf(struct isp_offline_desc *off_desc,
 int isp_offline_get_buf(struct isp_offline_desc *off_desc,
 	uint8_t off_type)
 {
-	enum isp_rtn rtn = ISP_RTN_SUCCESS;
+	int rtn = 0;
 	unsigned long phys_addr = 0;
 	unsigned int num = 0;
 	char name[32];
@@ -706,7 +706,7 @@ int isp_offline_put_buf(struct isp_offline_desc *off_desc,
 int isp_offline_buf_iommu_map(struct isp_offline_desc *off_desc,
 	uint8_t off_type)
 {
-	enum isp_rtn rtn = ISP_RTN_SUCCESS;
+	int rtn = 0;
 	unsigned int num = 0;
 	struct camera_frame frame = {0};
 	struct offline_buf_desc *buf_desc = NULL;
@@ -792,7 +792,7 @@ int isp_offline_buf_iommu_map(struct isp_offline_desc *off_desc,
 int isp_offline_buf_iommu_unmap(struct isp_offline_desc *off_desc,
 	uint8_t off_type)
 {
-	enum isp_rtn rtn = ISP_RTN_SUCCESS;
+	int rtn = 0;
 	unsigned int num = 0;
 	struct offline_buf_desc *buf_desc = NULL;
 	struct offline_ion_buf *ion_buf = NULL;
@@ -847,7 +847,7 @@ int isp_offline_buf_iommu_unmap(struct isp_offline_desc *off_desc,
 int isp_offline_buf_iommu_unmap_external(struct isp_offline_desc *off_desc,
 	uint8_t off_type)
 {
-	enum isp_rtn rtn = ISP_RTN_SUCCESS;
+	int rtn = 0;
 	unsigned int num = 0;
 	struct offline_buf_desc *buf_desc = NULL;
 	struct offline_ion_buf *ion_buf = NULL;
@@ -966,7 +966,7 @@ int isp_offline_set_next_frm(struct isp_module *module,
  */
 int isp_gen_buf_alloc(struct isp_buf_info *buf_info)
 {
-	enum isp_rtn rtn = ISP_RTN_SUCCESS;
+	int rtn = 0;
 	char name[16+ISP_BUF_SHORT_NAME_LEN+1];
 	int iommu_enabled = 0;
 
@@ -1072,7 +1072,7 @@ int isp_gen_buf_free(struct isp_buf_info *buf_info)
 
 int isp_gen_buf_hw_map(struct isp_buf_info *buf_info)
 {
-	enum isp_rtn rtn = ISP_RTN_SUCCESS;
+	int rtn = 0;
 	struct ion_buffer *ionbuffer = NULL;
 	struct sprd_iommu_map_data iommu_data;
 
@@ -1108,7 +1108,7 @@ _exit:
 
 int isp_gen_buf_hw_unmap(struct isp_buf_info *buf_info)
 {
-	enum isp_rtn rtn = ISP_RTN_SUCCESS;
+	int rtn = 0;
 	struct ion_buffer *ionbuffer = NULL;
 	struct sprd_iommu_unmap_data iommu_data = {0};
 

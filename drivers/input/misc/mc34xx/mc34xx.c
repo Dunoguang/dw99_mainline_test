@@ -302,8 +302,8 @@ static unsigned char mc34xx_current_placement = MC34XX_TOP_LEFT_UP; // current s
 	#define MC_INFO_PRINT(x...)		printk(x)
 	#define MC_ERR_PRINT(x...)		printk(x)
 #else
-	#define MC_INFO_PRINT(x...)
-	#define MC_ERR_PRINT(x...)
+	#define MC_INFO_PRINT(x...) do { } while (0)
+	#define MC_ERR_PRINT(x...) do { } while (0)
 #endif
 
 // Transformation matrix for chip mounting position

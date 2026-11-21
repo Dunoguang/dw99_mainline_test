@@ -1757,7 +1757,7 @@ static int get_slice_store_pitch(struct slice_pitch *pitch_ptr,
 	return rtn;
 }
 
-void isp_slice_store_addr_init(struct slice_pitch *sf_pitch,
+static void isp_slice_store_addr_init(struct slice_pitch *sf_pitch,
 	struct slice_store_info *store_info,
 	struct slice_store_path *store_frame,
 	unsigned int start_row_out,

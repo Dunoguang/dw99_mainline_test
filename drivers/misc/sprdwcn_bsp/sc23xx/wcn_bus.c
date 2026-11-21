@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <soc/sprd/wcn_bus.h>
+#include "include/bus_common.h"
 
 struct buffer_pool_t {
 	int size;

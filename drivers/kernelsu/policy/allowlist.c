@@ -461,7 +461,7 @@ static void migrate_profile(u32 version, struct app_profile *profile)
     profile->version = KSU_APP_PROFILE_VER;
 }
 
-void do_persistent_allow_list(void *unused)
+static void do_persistent_allow_list(void *unused)
 {
     u32 magic = FILE_MAGIC;
     u32 version = FILE_FORMAT_VERSION;
@@ -503,7 +503,7 @@ out:
     filp_close(fp, 0);
 }
 
-void do_ksu_load_allow_list(void *unused)
+static void do_ksu_load_allow_list(void *unused)
 {
     loff_t off = 0;
     ssize_t ret = 0;

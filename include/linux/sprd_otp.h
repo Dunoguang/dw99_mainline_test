@@ -50,4 +50,6 @@ void sprd_get_chip_uid(char *buf);
 struct device *sprd_otp_register(const char *name, void *ops, int blk_max,
 				 int blk_width);
 
+
+u32 sprd_ap_efuse_single_read(int blk);
 #endif

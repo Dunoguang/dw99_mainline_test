@@ -219,14 +219,13 @@ static void musb_prepare_sg_lastnode(struct sprd_musb_dma_channel *musb_channel,
 
 static void musb_prepare_nodes(struct sprd_musb_dma_channel *musb_channel,
 	dma_addr_t dma_addr, u32 length, struct musb_request *musb_req,
-	struct musb_ep *musb_ep, u32 node_num, u32 nodes_left)
+	struct musb_ep *musb_ep, u32 node_num)
 {
 	int i;
 	u8 last_one = 0;
 	unsigned len;
 
 	for (i = 0; i < node_num; i++) {
-		nodes_left--;
 		len = 0xfffc;
 		if ((node_num - 1) == i) {
 			len = length - (node_num
@@ -246,14 +245,13 @@ static void musb_prepare_nodes(struct sprd_musb_dma_channel *musb_channel,
 
 static void musb_prepare_first_nodes(struct sprd_musb_dma_channel *musb_channel,
 	dma_addr_t dma_addr, u32 length, dma_addr_t addr_last,
-	u32 node_num, u32 nodes_left)
+	u32 node_num)
 {
 	int i;
 	u8 last_one = 0;
 	unsigned len;
 
 	for (i = 0; i < node_num; i++) {
-		nodes_left--;
 		len = 0xfffc;
 		if ((node_num - 1) == i) {
 			len = length - (node_num
@@ -463,7 +461,7 @@ static void musb_prepare_listnodes(struct sprd_musb_dma_channel *musb_channel,
 
 					musb_prepare_nodes(musb_channel,
 					dma, length, musb_req, musb_ep,
-					node_num, nodes_left);
+					node_num);
 				} else {
 					u32 node_num1, node_num2;
 
@@ -485,13 +483,13 @@ static void musb_prepare_listnodes(struct sprd_musb_dma_channel *musb_channel,
 					len = addr - dma;
 					musb_prepare_first_nodes(musb_channel,
 						dma, len, addr_last,
-						node_num1, nodes_left);
+						node_num1);
 
 					if (addr_last) {
 						len = dma + length - addr;
 						musb_prepare_nodes(musb_channel,
 						addr, len, musb_req, musb_ep,
-						node_num2, nodes_left);
+						node_num2);
 					} else {
 						list_del(&musb_req->list);
 						list_add_tail(&musb_req->list,
@@ -507,14 +505,13 @@ static void musb_prepare_listnodes(struct sprd_musb_dma_channel *musb_channel,
 
 static void musb_host_prepare_nodes(struct sprd_musb_dma_channel *musb_channel,
 	dma_addr_t dma_addr, u32 length,
-	u32 node_num, u32 nodes_left)
+	u32 node_num)
 {
 	int i;
 	u8 last_one = 0;
 	unsigned len;
 
 	for (i = 0; i < node_num; i++) {
-		nodes_left--;
 		len = 0xfffc;
 		if ((node_num - 1) == i) {
 			len = length - (node_num
@@ -534,23 +531,19 @@ static void musb_host_listnodes(struct sprd_musb_dma_channel *musb_channel,
 {
 	dma_addr_t addr, addr_cpr, addr_last;
 	u32 i;
-	u32 nodes_left;
 	u32 length;
 	int last_one = 0;
 
-	nodes_left = LISTNODE_NUM;
 	addr = (dma_addr + len) & ADDR_FLAG;
 	addr_cpr = dma_addr & ADDR_FLAG;
 
 	if (len < 0xffff) {
 		if (addr == addr_cpr) {
-			nodes_left--;
 			musb_prepare_node(musb_channel,
 				dma_addr, len, 1, 0,
 				musb_channel->node_num);
 			musb_channel->node_num++;
 		} else {
-			nodes_left--;
 			length = (u32)(addr - dma_addr);
 			addr_last = (dma_addr + len) & 0xfffffff;
 			if (!addr_last)
@@ -560,7 +553,6 @@ static void musb_host_listnodes(struct sprd_musb_dma_channel *musb_channel,
 				musb_channel->node_num);
 			musb_channel->node_num++;
 			if (addr_last) {
-				nodes_left--;
 				length = len - (addr - dma_addr);
 				musb_prepare_node(musb_channel,
 					addr, length, 1, 0,
@@ -579,7 +571,7 @@ static void musb_host_listnodes(struct sprd_musb_dma_channel *musb_channel,
 
 			musb_host_prepare_nodes(musb_channel,
 				dma_addr, len,
-				node_num, nodes_left);
+				node_num);
 		} else {
 			u32 node_num1, node_num2;
 			u32 len2;
@@ -607,7 +599,6 @@ static void musb_host_listnodes(struct sprd_musb_dma_channel *musb_channel,
 			len2 = dma_addr + len - addr;
 
 			for (i = 0; i < node_num1; i++) {
-				nodes_left--;
 				length = 0xfffc;
 				if ((node_num1 - 1) == i) {
 					length = addr_cpr +
@@ -625,7 +616,7 @@ static void musb_host_listnodes(struct sprd_musb_dma_channel *musb_channel,
 			if (addr_last) {
 				musb_host_prepare_nodes(musb_channel,
 					addr, len2,
-					node_num2, nodes_left);
+					node_num2);
 			}
 		}
 	}

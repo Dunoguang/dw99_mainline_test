@@ -135,5 +135,8 @@ uint8_t csi_reset_controller(int32_t idx);
 uint8_t csi_reset_phy(int32_t idx);
 uint8_t csi_event_disable(uint32_t mask, uint8_t err_reg_no,
 				int32_t idx);
+
+uint8_t csi_event_enable(uint32_t mask, uint32_t err_reg_no, int32_t idx);
+
 #endif
 

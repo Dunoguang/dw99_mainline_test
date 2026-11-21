@@ -11,6 +11,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/usb/sprd-vserial.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/wait.h>
@@ -60,8 +61,6 @@
 #define SPRD_IQ_CLASS_NAME		"sprd_iq"
 #define IQ_TAG					"sprd_iq "
 
-extern ssize_t vser_iq_write(char *buf, size_t count);
-extern void kernel_vser_register_callback(void *function);
 
 enum {
 	CMD_GET_IQ_BUF_INFO = 0x0,
@@ -626,7 +625,8 @@ static void __exit sprd_iq_exit(void)
  * is not turned on.
  * iq_base/iq_size is initialized in sprd_iq_probe() on i-series SoCs.
  */
-static int __init reserved_mem_iq_setup(struct reserved_mem *rmem)
+static int __init reserved_mem_iq_setup(unsigned long fdt_node,
+					struct reserved_mem *rmem)
 {
 	pr_info(IQ_TAG "enter the rmem_iq_setup\n");
 	if (rmem == NULL)
@@ -644,7 +644,11 @@ static int __init reserved_mem_iq_setup(struct reserved_mem *rmem)
 	return 0;
 }
 
-RESERVEDMEM_OF_DECLARE(iq, "sprd,iq-mem", reserved_mem_iq_setup);
+static const struct reserved_mem_ops reserved_mem_iq_ops = {
+	.node_init = reserved_mem_iq_setup,
+};
+
+RESERVEDMEM_OF_DECLARE(iq, "sprd,iq-mem", &reserved_mem_iq_ops);
 
 module_init(sprd_iq_init);
 module_exit(sprd_iq_exit);

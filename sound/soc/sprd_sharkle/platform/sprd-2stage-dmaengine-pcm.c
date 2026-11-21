@@ -3009,7 +3009,7 @@ err:
 	return ret;
 }
 
-int32_t platform_pcm_parse_dt(struct device_node *node,
+static int32_t platform_pcm_parse_dt(struct device_node *node,
 			      struct platform_pcm_priv *priv_data)
 {
 	int32_t ret = 0;

@@ -205,12 +205,12 @@ static u32 pmic_sc2731_efuse_read(int blk_index)
 		return ret;
 
 	pmic_efuse_power_on();
-	if (IS_ERR_VALUE(pmic_efuse_wait_clear(BIT_STANDBY_BUSY)))
+	if (pmic_efuse_wait_clear(BIT_STANDBY_BUSY) < 0)
 		goto out;
 	pmic_efuse_reg_write(ANA_REG_EFUSE_BLOCK_INDEX,
 			     BITS_READ_WRITE_INDEX(blk_index));
 	pmic_efuse_reg_set(ANA_REG_EFUSE_MODE_CTRL, BIT_RD_START, BIT_RD_START);
-	if (IS_ERR_VALUE(pmic_efuse_wait_clear(BIT_NORMAL_RD_DONE)))
+	if (pmic_efuse_wait_clear(BIT_NORMAL_RD_DONE) < 0)
 		goto out;
 	val = pmic_efuse_reg_read(ANA_REG_EFUSE_DATA_RD);
 	pmic_efuse_reg_set(ANA_REG_EFUSE_MODE_CTRL, BIT_NORMAL_RD_FLAG_CLR,
@@ -236,7 +236,7 @@ static u32 pmic_sc2723_efuse_read(int blk_index)
 	pmic_efuse_reg_write(ANA_REG_EFUSE_BLOCK_INDEX,
 			     BITS_READ_WRITE_INDEX(blk_index));
 	pmic_efuse_reg_write(ANA_REG_EFUSE_MODE_CTRL, BIT_RD_START);
-	if (IS_ERR_VALUE(pmic_efuse_wait_clear(BIT_READ_BUSY)))
+	if (pmic_efuse_wait_clear(BIT_READ_BUSY) < 0)
 		goto out;
 	val = pmic_efuse_reg_read(ANA_REG_EFUSE_DATA_RD);
 

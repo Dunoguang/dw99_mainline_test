@@ -63,7 +63,6 @@ struct pptp_addr {
 #define PX_PROTO_OLAC  3
 #define PX_PROTO_OPNS  4
 #define PX_MAX_PROTO   5
-#define PX_MAX_PROTO   3
 
 struct sockaddr_pppox {
 	__kernel_sa_family_t sa_family;       /* address family, AF_PPPOX */

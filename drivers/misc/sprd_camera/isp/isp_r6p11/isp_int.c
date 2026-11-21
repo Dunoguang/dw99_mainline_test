@@ -595,7 +595,7 @@ static void isp_binning_error(void *isp_handle)
 	pr_info("fail to get stats INT\n");
 }
 
-void isp_fmcu_slw_shadow(enum isp_scl_id path_id, void *isp_handle)
+static void __maybe_unused isp_fmcu_slw_shadow(enum isp_scl_id path_id, void *isp_handle)
 {
 	unsigned int idx;
 	enum isp_slw_rtn rtn = ISP_RTN_SLW_SUCCESS;
@@ -631,7 +631,7 @@ void isp_fmcu_slw_shadow(enum isp_scl_id path_id, void *isp_handle)
 	ISP_REG_MWR(idx, ISP_FMCU_CMD_READY, BIT_0, 1);
 }
 
-void isp_fmcu_slw_config(enum isp_scl_id path_id, void *isp_handle)
+static void __maybe_unused isp_fmcu_slw_config(enum isp_scl_id path_id, void *isp_handle)
 {
 	/*
 	 * Remove it because slow motion using CFG mode now. Notice

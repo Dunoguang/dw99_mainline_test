@@ -35,6 +35,7 @@
 #include "dcam_buf.h"
 #include "cam_pw_domain.h"
 #include "sprd_sensor_drv.h"
+#include "../../isp/isp_r6p11/isp_int.h"
 #if defined(CONFIG_COMPAT)
 #include "compat_isp_drv.h"
 #endif
@@ -1474,9 +1475,10 @@ static int sprd_img_tx_done(struct camera_frame *frame, void *param)
 		return ret;
 	DCAM_TRACE_INT("sprd_img %d %d %p\n", dev->idx,
 				frame->type, dev);
-	if (node.irq_property == IRQ_RAW_CAP_DONE)
+	if (node.irq_property == IRQ_RAW_CAP_DONE) {
 		DCAM_TRACE_INT("RAW CAP tx done flag %d type %d\n",
 			node.irq_flag, node.irq_type);
+	}
 	complete(&dev->irq_com);
 
 	return ret;

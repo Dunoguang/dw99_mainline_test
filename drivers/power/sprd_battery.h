@@ -407,4 +407,8 @@ struct sprd_ext_ic_operations *sprd_get_2700_ops(void);
 struct sprd_ext_ic_operations *sprd_get_2705_ops(void);
 struct sprd_ext_ic_operations *sprd_get_2703_ops(void);
 struct sprd_ext_ic_operations *sprd_get_bq2560x_ops(void);
+
+uint32_t sprd_get_vbat_voltage(void);
+int sprdbat_get_bat_id(struct platform_device *pdev);
+int sprdbat_get_bat_id_through_IDpin(struct platform_device *pdev);
 #endif /* _CHG_DRVAPI_H_ */

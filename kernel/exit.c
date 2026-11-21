@@ -5,6 +5,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/uid_sys_stats.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/sched/autogroup.h>
@@ -41,7 +42,6 @@
 #include <linux/syscalls.h>
 #include <linux/signal.h>
 #ifdef CONFIG_UID_SYS_STATS
-extern void uid_stat_task_exit(struct task_struct *tsk);
 #endif
 #ifdef CONFIG_BOOST_SIGKILL_FREE
 #include <linux/boost_sigkill_free.h>

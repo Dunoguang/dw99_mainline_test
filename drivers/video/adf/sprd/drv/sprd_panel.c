@@ -11,6 +11,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/zyt_info.h>
 #include <linux/backlight.h>
 #include <linux/clk.h>
 #include <linux/compat.h>

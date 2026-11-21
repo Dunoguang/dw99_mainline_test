@@ -28,6 +28,7 @@
 #include <linux/audit.h>
 #include <linux/memory.h>
 #include <asm/unistd.h>
+#include "ext4.h"
 
 #define MAX_SIZE 16
 #define MAX_STR_LEN 256

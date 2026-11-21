@@ -19,8 +19,6 @@
 #include <linux/clk.h>
 #include <linux/kernel.h>
 #include <linux/mfd/syscon.h>
-#include <linux/mfd/syscon/sprd/isharkl2/isharkl2_ap_ahb_glb.h>
-#include <linux/mfd/syscon/sprd/isharkl2/isharkl2_aon_apb_glb.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/of_dma.h>
@@ -50,6 +48,20 @@
 #define SPRD_DMA_REQ_CID(base, uid)	\
 				((unsigned long)base + \
 				0x2000 + 0x4 * ((uid) - 1))
+
+/* Retain the iSharkL2 defaults when no platform register is defined. */
+#ifndef REG_AP_AHB_AHB_RST
+#define REG_AP_AHB_AHB_RST		0x0004
+#endif
+#ifndef BIT_AP_AHB_DMA_SOFT_RST
+#define BIT_AP_AHB_DMA_SOFT_RST		BIT(5)
+#endif
+#ifndef REG_AON_APB_APB_RST1
+#define REG_AON_APB_APB_RST1		0x000c
+#endif
+#ifndef BIT_AON_APB_AON_DMA_SOFT_RST
+#define BIT_AON_APB_AON_DMA_SOFT_RST	BIT(14)
+#endif
 
 /* dma channel register definition */
 struct sprd_dma_chn_reg {
@@ -253,16 +265,9 @@ static void sprd_dma_softreset(struct sprd_dma_dev *sdev)
 		return;
 	}
 
-	if (reg == REG_AP_AHB_AHB_EB) {
-		regmap_update_bits(syscon, reg, mask, mask);
-		udelay(1);
-		regmap_update_bits(syscon, reg, mask, ~mask);
-	} else {
-		regmap_update_bits(syscon, reg, mask, mask);
-		udelay(1);
-		regmap_update_bits(syscon, reg, mask, ~mask);
-	}
-
+	regmap_update_bits(syscon, reg, mask, mask);
+	udelay(1);
+	regmap_update_bits(syscon, reg, mask, ~mask);
 }
 
 static int sprd_dma_int_enable(struct sprd_dma_dev *sdev)
@@ -370,7 +375,7 @@ sprd_dma_unset_uid(struct sprd_dma_dev *sdev,
 	}
 }
 
-static void __inline sprd_dma_int_clr(struct sprd_dma_chn *mchan)
+static inline void sprd_dma_int_clr(struct sprd_dma_chn *mchan)
 {
 	volatile struct sprd_dma_chn_reg *dma_reg =
 			(struct sprd_dma_chn_reg *)mchan->dma_chn_base;
@@ -378,7 +383,7 @@ static void __inline sprd_dma_int_clr(struct sprd_dma_chn *mchan)
 	dma_reg->intc |= 0x1f << 24;
 }
 
-static void __inline sprd_dma_int_dis(struct sprd_dma_chn *mchan)
+static inline void sprd_dma_int_dis(struct sprd_dma_chn *mchan)
 {
 	volatile struct sprd_dma_chn_reg *dma_reg =
 			(struct sprd_dma_chn_reg *)mchan->dma_chn_base;
@@ -387,7 +392,7 @@ static void __inline sprd_dma_int_dis(struct sprd_dma_chn *mchan)
 	dma_reg->intc &= ~0x1f;
 }
 
-static void __inline sprd_dma_chn_enable(struct sprd_dma_chn *mchan)
+static inline void sprd_dma_chn_enable(struct sprd_dma_chn *mchan)
 {
 	volatile struct sprd_dma_chn_reg *dma_reg =
 			(struct sprd_dma_chn_reg *)mchan->dma_chn_base;
@@ -395,7 +400,7 @@ static void __inline sprd_dma_chn_enable(struct sprd_dma_chn *mchan)
 	dma_reg->cfg |= 0x1;
 }
 
-static void __inline sprd_dma_soft_request(struct sprd_dma_chn *mchan)
+static inline void sprd_dma_soft_request(struct sprd_dma_chn *mchan)
 {
 	volatile struct sprd_dma_chn_reg *dma_reg =
 			(struct sprd_dma_chn_reg *)mchan->dma_chn_base;
@@ -1306,7 +1311,7 @@ static void sprd_dma_issue_pending(struct dma_chan *chan)
 	 */
 }
 
-struct dma_async_tx_descriptor *
+static struct dma_async_tx_descriptor *
 sprd_dma_prep_dma_memcpy(struct dma_chan *chan,
 			 dma_addr_t dest, dma_addr_t src,
 			 size_t len, unsigned long flags)
@@ -1623,7 +1628,7 @@ bool sprd_dma_filter_fn(struct dma_chan *chan, void *param)
 		return false;
 }
 
-struct dma_chan *sprd_dma_simple_xlate(struct of_phandle_args *dma_spec,
+static struct dma_chan *sprd_dma_simple_xlate(struct of_phandle_args *dma_spec,
 						struct of_dma *ofdma)
 {
 	int count = dma_spec->args_count;
@@ -1932,7 +1937,7 @@ static struct platform_driver sprd_dma_driver = {
 	},
 };
 
-int __init sprd_dma_init(void)
+static int __init sprd_dma_init(void)
 {
 	sema_init(&dma_cfg_group.cfg_sema, 1);
 	dma_cfg_group.dma_cfg_cnt = 0;
@@ -1942,7 +1947,7 @@ int __init sprd_dma_init(void)
 	return platform_driver_register(&sprd_dma_driver);
 }
 
-void __exit sprd_dma_exit(void)
+static void __exit sprd_dma_exit(void)
 {
 	platform_driver_unregister(&sprd_dma_driver);
 }

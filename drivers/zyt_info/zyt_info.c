@@ -4,6 +4,7 @@
 // Author : wangming
 // Date : 2015-1-18
 /*-----------------------------------------------------------------------------*/
+#include <linux/zyt_info.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/proc_fs.h>

@@ -34,8 +34,6 @@
 extern bool susfs_is_current_ksu_domain(void);
 extern void setup_selinux(const char *domain, struct cred *cred);
 extern struct cred *ksu_cred;
-extern int susfs_get_non_sus_mnt_id_from_mnt(struct mount *orig_mnt);
-extern struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vfsmnt);
 
 #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
 DEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);
@@ -265,14 +263,14 @@ void susfs_add_sus_path(void __user **user_info) {
 		}
 		set_bit(AS_FLAGS_SUS_PATH, &fi->inode.i_mapping->flags);
 		set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
-		SUSFS_LOGI("flagged AS_FLAGS_SUS_PATH on pathname: '%s', fi->nodeid: %llu, fi->inode.i_ino: %lu, fi->inode.i_mapping->flags: 0x%lx\n", 
+		SUSFS_LOGI("flagged AS_FLAGS_SUS_PATH on pathname: '%s', fi->nodeid: %llu, fi->inode.i_ino: %llu, fi->inode.i_mapping->flags: 0x%lx\n",
 					info.target_pathname, fi->nodeid, fi->inode.i_ino, fi->inode.i_mapping->flags);
 		info.err = 0;
 		goto out_path_put_path;
 	}
 
 	set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
-	SUSFS_LOGI("flagged AS_FLAGS_SUS_PATH on pathname: '%s', ino: '%lu', inode->i_mapping->flags: 0x%lx\n",
+	SUSFS_LOGI("flagged AS_FLAGS_SUS_PATH on pathname: '%s', ino: '%llu', inode->i_mapping->flags: 0x%lx\n",
 				info.target_pathname, inode->i_ino, inode->i_mapping->flags);
 	info.err = 0;
 out_path_put_path:
@@ -345,11 +343,11 @@ static void susfs_run_sus_path_loop(void) {
 				}
 				set_bit(AS_FLAGS_SUS_PATH, &fi->inode.i_mapping->flags);
 				set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
-				SUSFS_LOGI("re-flag AS_FLAGS_SUS_PATH on path '%s', fi->inode.i_ino: '%lu', fi->inode.i_mapping->flags: 0x%lx\n",
+				SUSFS_LOGI("re-flag AS_FLAGS_SUS_PATH on path '%s', fi->inode.i_ino: '%llu', fi->inode.i_mapping->flags: 0x%lx\n",
 						cursor->target_pathname, fi->inode.i_ino, fi->inode.i_mapping->flags);
 			} else {
 				set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
-				SUSFS_LOGI("re-flag AS_FLAGS_SUS_PATH on path '%s', inode->i_ino: '%lu', inode->i_mapping->flags: 0x%lx\n",
+				SUSFS_LOGI("re-flag AS_FLAGS_SUS_PATH on path '%s', inode->i_ino: '%llu', inode->i_mapping->flags: 0x%lx\n",
 						cursor->target_pathname, inode->i_ino, inode->i_mapping->flags);
 			}
 			path_put(&path);
@@ -865,9 +863,6 @@ out_copy_to_user:
 static DEFINE_MUTEX(susfs_mutex_lock_sus_kstat);
 static DEFINE_HASHTABLE(SUS_KSTAT_HLIST, 14);
 
-extern int calculate_f_flags_wrapper(struct vfsmount *mnt);
-extern int statfs_by_dentry_wrapper(struct dentry *dentry, struct kstatfs *buf);
-
 static int susfs_mark_inode_sus_kstat(char *target_pathname, struct st_susfs_sus_kstat_hlist *new_entry, bool is_update) {
 	struct path path;
 	struct inode *inode = NULL;
@@ -911,7 +906,7 @@ static int susfs_mark_inode_sus_kstat(char *target_pathname, struct st_susfs_sus
 			goto out_path_put_path;
 
 		set_bit(AS_FLAGS_SUS_KSTAT, &fi->inode.i_mapping->flags);
-		SUSFS_LOGI("marked AS_FLAGS_SUS_KSTAT on pathname: '%s', is_fuse: %d, fi->inode.i_sb->s_dev: %u, fi->nodeid: %llu, fi->inode.i_ino: %lu, fi->inode.i_mapping->flags: 0x%lx, spoofed_mnt_id: '%d'\n",
+		SUSFS_LOGI("marked AS_FLAGS_SUS_KSTAT on pathname: '%s', is_fuse: %d, fi->inode.i_sb->s_dev: %u, fi->nodeid: %llu, fi->inode.i_ino: %llu, fi->inode.i_mapping->flags: 0x%lx, spoofed_mnt_id: '%d'\n",
 					target_pathname, new_entry->is_fuse, fi->inode.i_sb->s_dev, fi->nodeid, fi->inode.i_ino, fi->inode.i_mapping->flags, new_entry->spoofed_mnt_id);
 		goto out_path_put_path;
 	}
@@ -932,7 +927,7 @@ static int susfs_mark_inode_sus_kstat(char *target_pathname, struct st_susfs_sus
 		goto out_path_put_path;
 
 	set_bit(AS_FLAGS_SUS_KSTAT, &inode->i_mapping->flags);
-	SUSFS_LOGI("marked AS_FLAGS_SUS_KSTAT on pathname: '%s', is_fuse: %d, inode->i_sb->s_dev: %u,  inode->i_ino: %lu, inode->i_mapping->flags: 0x%lx, spoofed_mnt_id: '%d'\n",
+	SUSFS_LOGI("marked AS_FLAGS_SUS_KSTAT on pathname: '%s', is_fuse: %d, inode->i_sb->s_dev: %u,  inode->i_ino: %llu, inode->i_mapping->flags: 0x%lx, spoofed_mnt_id: '%d'\n",
 				target_pathname, new_entry->is_fuse, inode->i_sb->s_dev, inode->i_ino, inode->i_mapping->flags, new_entry->spoofed_mnt_id);
 
 out_path_put_path:
@@ -1253,7 +1248,8 @@ int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, b
 	hash_for_each_possible_rcu(SUS_KSTAT_HLIST, entry, node, target_inode->i_ino) {
 		if (entry->target_dev == inode->i_sb->s_dev)
 		{
-			SUSFS_LOGI("spoofing kstat for vfs_statfs, target_ino: %lu, target_dev: %u\n", target_inode->i_ino, target_inode->i_sb->s_dev);
+			SUSFS_LOGI("spoofing kstat for vfs_statfs, target_ino: %llu, target_dev: %u\n",
+				   target_inode->i_ino, target_inode->i_sb->s_dev);
 			memcpy(buf, &entry->spoofed_kstatfs, sizeof(struct kstatfs));
 			rcu_read_unlock();
 			return 0;

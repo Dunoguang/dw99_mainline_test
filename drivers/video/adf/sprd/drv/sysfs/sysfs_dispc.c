@@ -558,9 +558,6 @@ static const struct attribute_group dispc_group = {
 	.attrs = dispc_attrs,
 };
 
-#define BIN_ATTR_WO(_name, _size) BIN_ATTR(_name, S_IWUSR, NULL,\
-					_name##_write, _size)
-
 static ssize_t gamma_read(struct file *fp, struct kobject *kobj,
 			const struct bin_attribute *attr, char *buf,
 			loff_t off, size_t count) {

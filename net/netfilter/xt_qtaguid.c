@@ -421,7 +421,7 @@ static struct uid_tag_data *uid_tag_data_tree_search(struct rb_root *root,
  *   sets *found to true if not allocated.
  *   sets *found to false if allocated.
  */
-struct uid_tag_data *get_uid_data(uid_t uid, bool *found_res)
+static struct uid_tag_data *get_uid_data(uid_t uid, bool *found_res)
 {
 	struct uid_tag_data *utd_entry;
 

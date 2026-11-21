@@ -33,6 +33,7 @@
 
 #include "../include/sipc_priv.h"
 #include "swcn_blk.h"
+#include "sipc_debugfs.h"
 
 #ifdef pr_fmt
 #undef pr_fmt

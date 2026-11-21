@@ -6,6 +6,7 @@
  * Based on drivers/md/dm-verity-chromeos.c
  */
 
+#include "dm-verity.h"
 #include <linux/device-mapper.h>
 #include <linux/module.h>
 #include <linux/mount.h>

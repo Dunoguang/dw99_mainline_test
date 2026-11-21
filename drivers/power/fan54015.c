@@ -20,10 +20,12 @@
 #ifdef FAN54015_DEBUG
 #define SPRD_EX_DEBUG(format, arg...) pr_info("fan54015: " format, ## arg)
 #else
-#define SPRD_EX_DEBUG(format, arg...)
+#define SPRD_EX_DEBUG(...) do { } while (0)
 #endif
 #define BIT_DP_DM_SW_EN                      BIT(0)
 
+static DEFINE_MUTEX(fan54015_state_lock);
+static DEFINE_MUTEX(fan54015_io_lock);
 static struct fan54015 *fan54015_data;
 static uint32_t vbus_gpio;
 static uint32_t otg_enable_flag;
@@ -33,7 +35,10 @@ static int fan54015_write_reg(int reg, u8 val)
 	int ret;
 
 	SPRD_EX_DEBUG("#### writereg reg = %d val = %d\n", reg, val);
-	ret = i2c_smbus_write_byte_data(fan54015_data->client, reg, val);
+	mutex_lock(&fan54015_io_lock);
+	ret = fan54015_data ?
+		i2c_smbus_write_byte_data(fan54015_data->client, reg, val) : -ENODEV;
+	mutex_unlock(&fan54015_io_lock);
 
 	if (ret < 0)
 		SPRD_EX_DEBUG("%s: error = %d", __func__, ret);
@@ -41,11 +46,14 @@ static int fan54015_write_reg(int reg, u8 val)
 	return ret;
 }
 
-int fan54015_read_reg(int reg, u8 *dest)
+static int fan54015_read_reg(int reg, u8 *dest)
 {
 	int ret;
 
-	ret = i2c_smbus_read_byte_data(fan54015_data->client, reg);
+	mutex_lock(&fan54015_io_lock);
+	ret = fan54015_data ?
+		i2c_smbus_read_byte_data(fan54015_data->client, reg) : -ENODEV;
+	mutex_unlock(&fan54015_io_lock);
 	if (ret < 0) {
 		SPRD_EX_DEBUG("%s reg(0x%x), ret(%d)\n", __func__, reg, ret);
 		return ret;
@@ -61,7 +69,8 @@ static void fan54015_set_value(unsigned char reg, unsigned char reg_bit,
 {
 	unsigned char tmp = 0x0;
 
-	fan54015_read_reg(reg, &tmp);
+	if (fan54015_read_reg(reg, &tmp))
+		return;
 	tmp = (tmp & (~reg_bit)) | (val << reg_shift);
 	if ((0x04 == reg) && (FAN5405_RESET != reg_bit))
 		tmp &= 0x7f;
@@ -153,23 +162,28 @@ void fan54015_termina_vol_set(unsigned char reg_val)
 
 static void fan54015_15s_work(struct work_struct *work)
 {
+	struct fan54015 *data = container_of(to_delayed_work(work),
+					    struct fan54015, feed_watchdog_work);
+
 	fan54015_reset_timer();
-	schedule_delayed_work(&fan54015_data->feed_watchdog_work, HZ * 15);
+	schedule_delayed_work(&data->feed_watchdog_work, HZ * 15);
 }
 
 static void fan54015_vbus_det_work(struct work_struct *work)
 {
+	struct fan54015 *data = container_of(to_delayed_work(work),
+					    struct fan54015, vbus_detect_work);
 	uint32_t vbus_gpio_value;
 
 	if (vbus_gpio) {
 		vbus_gpio_value = gpio_get_value(vbus_gpio);
-		if ((!vbus_gpio_value) && (otg_enable_flag == 1)) {
+		if (!vbus_gpio_value && READ_ONCE(otg_enable_flag)) {
 			SPRD_EX_DEBUG("restart otg\n");
 			fan54015_set_value(FAN5405_REG_CONTROL1,
 				FAN5405_OPA_MODE | FAN5405_HZ_MODE,
 				FAN5405_OPA_MODE_SHIFT, 1);
 		}
-		schedule_delayed_work(&fan54015_data->vbus_detect_work,
+		schedule_delayed_work(&data->vbus_detect_work,
 			msecs_to_jiffies(1500));
 	}
 }
@@ -229,8 +243,12 @@ void fan54015_otg_enable(int enable)
 {
 	SPRD_EX_DEBUG("%s enable =%d\n", __func__, enable);
 
+	mutex_lock(&fan54015_state_lock);
+	if (!fan54015_data)
+		goto out;
+
 	if (enable) {
-		otg_enable_flag = 1;
+		WRITE_ONCE(otg_enable_flag, 1);
 		fan54015_set_value(FAN5405_REG_CONTROL1,
 			FAN5405_OPA_MODE | FAN5405_HZ_MODE,
 			FAN5405_OPA_MODE_SHIFT, enable);
@@ -239,13 +257,15 @@ void fan54015_otg_enable(int enable)
 		schedule_delayed_work(&fan54015_data->vbus_detect_work,
 				      msecs_to_jiffies(500));
 	} else {
-		otg_enable_flag = 0;
+		WRITE_ONCE(otg_enable_flag, 0);
 		cancel_delayed_work_sync(&fan54015_data->feed_watchdog_work);
 		cancel_delayed_work_sync(&fan54015_data->vbus_detect_work);
 		fan54015_set_value(FAN5405_REG_CONTROL1,
 			FAN5405_OPA_MODE | FAN5405_HZ_MODE,
 			FAN5405_OPA_MODE_SHIFT, enable);
 	}
+out:
+	mutex_unlock(&fan54015_state_lock);
 }
 
 void fan54015_stop_charging(void)
@@ -373,21 +393,13 @@ ATTRIBUTE_GROUPS(fan54015_class);
 
 static int fan54015_probe(struct i2c_client *client)
 {
-	int ret = 0;
-	int rc;
-	uint32_t temp;
+	struct device *dev = &client->dev;
+	struct fan54015 *data;
+	const struct sprd_ext_ic_operations *fan54015_ops;
+	int ret;
+	int gpio;
 	unsigned char vendor_id;
-	struct sprd_ext_ic_operations *fan54015_ops = NULL;
-	struct device_node *np = client->dev.of_node;
-
-	fan54015_data = devm_kzalloc(&client->dev,
-				     sizeof(struct fan54015), GFP_KERNEL);
-	if (!fan54015_data) {
-		SPRD_EX_DEBUG("kzalloc failed!\n");
-		return -ENOMEM;
-	}
-
-	fan54015_data->client = client;
+	u8 id;
 
 	if (!i2c_check_functionality(client->adapter,
 		I2C_FUNC_SMBUS_BYTE_DATA)) {
@@ -395,62 +407,76 @@ static int fan54015_probe(struct i2c_client *client)
 		return -ENODEV;
 	}
 
-	{
-		unsigned char data = 0;
-
-		vendor_id = fan54015_get_vendor_id();
-		if (vendor_id == VENDOR_PSC54X5A) {
-			fan54015_sw_reset();
-			if (fan54015_read_reg(3, &data)) {
-				SPRD_EX_DEBUG("%s: NO fan54015 deivce!\n", __func__);
-				return -ENXIO;
-			}
-		}else{
-			if (fan54015_read_reg(0, &data)) {
-				SPRD_EX_DEBUG("%s: NO fan54015 deivce!\n", __func__);
-				return -ENXIO;
-			}
-		}
-	}
-
-	temp = of_get_named_gpio(np, "vbus-det-gpios", 0);
-	if (gpio_is_valid(temp)) {
-		vbus_gpio = temp;
-		SPRD_EX_DEBUG("vbus_gpio_detect =%d\n", vbus_gpio);
-		rc = gpio_request(vbus_gpio, "musb vbus detect");
-		if (rc) {
-			SPRD_EX_DEBUG("already request vbus_gpio_detect gpio:%d\n",
-				vbus_gpio);
-		}
-		gpio_direction_input(vbus_gpio);
-	} else {
-		vbus_gpio = 0;
-	}
-
-	INIT_DELAYED_WORK(&fan54015_data->feed_watchdog_work,
-			  fan54015_15s_work);
-	INIT_DELAYED_WORK(&fan54015_data->vbus_detect_work,
-			  fan54015_vbus_det_work);
-
-	ret = sysfs_create_group(&client->dev.kobj,
-		fan54015_class_groups[0]);
-	if (ret)
-		pr_err("failed to create 54015 sysfs device attributes\n");
-
 	fan54015_ops = sprd_get_54015_ops();
 	if (!fan54015_ops)
 		return -EINVAL;
 
-	sprdbat_register_ext_ops(fan54015_ops);
+	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+	data->client = client;
+	INIT_DELAYED_WORK(&data->feed_watchdog_work, fan54015_15s_work);
+	INIT_DELAYED_WORK(&data->vbus_detect_work, fan54015_vbus_det_work);
 
-	SPRD_EX_DEBUG("fan54015 probe ok\n");
+	mutex_lock(&fan54015_state_lock);
+	if (fan54015_data) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	mutex_lock(&fan54015_io_lock);
+	fan54015_data = data;
+	mutex_unlock(&fan54015_io_lock);
+
+	vendor_id = fan54015_get_vendor_id();
+	if (vendor_id == VENDOR_PSC54X5A)
+		fan54015_sw_reset();
+	if (fan54015_read_reg(vendor_id == VENDOR_PSC54X5A ? 3 : 0, &id)) {
+		ret = -ENXIO;
+		goto out_clear;
+	}
+
+	gpio = of_get_named_gpio(dev->of_node, "vbus-det-gpios", 0);
+	if (gpio == -EPROBE_DEFER) {
+		ret = gpio;
+		goto out_clear;
+	}
+	if (gpio_is_valid(gpio)) {
+		ret = devm_gpio_request_one(dev, gpio, GPIOF_IN, "musb vbus detect");
+		if (ret && ret != -EBUSY)
+			goto out_clear;
+		vbus_gpio = gpio;
+	}
+
+	ret = sysfs_create_group(&dev->kobj, fan54015_class_groups[0]);
+	if (ret)
+		goto out_clear;
+
+	sprdbat_register_ext_ops(fan54015_ops);
+	goto out_unlock;
+
+out_clear:
+	vbus_gpio = 0;
+	mutex_lock(&fan54015_io_lock);
+	fan54015_data = NULL;
+	mutex_unlock(&fan54015_io_lock);
+out_unlock:
+	mutex_unlock(&fan54015_state_lock);
 	return ret;
 }
 
 static void fan54015_remove(struct i2c_client *client)
 {
-	flush_scheduled_work();
 	sysfs_remove_group(&client->dev.kobj, fan54015_class_groups[0]);
+	mutex_lock(&fan54015_state_lock);
+	WRITE_ONCE(otg_enable_flag, 0);
+	disable_delayed_work_sync(&fan54015_data->feed_watchdog_work);
+	disable_delayed_work_sync(&fan54015_data->vbus_detect_work);
+	vbus_gpio = 0;
+	mutex_lock(&fan54015_io_lock);
+	fan54015_data = NULL;
+	mutex_unlock(&fan54015_io_lock);
+	mutex_unlock(&fan54015_state_lock);
 }
 
 static void fan54015_shutdown(struct i2c_client *client)

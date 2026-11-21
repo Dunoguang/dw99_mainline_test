@@ -114,8 +114,6 @@
 struct selinux_state selinux_state;
 #ifdef CONFIG_KSU_SUSFS
 extern bool ksu_selinux_hide_running __read_mostly;
-extern int susfs_security_context_to_sid(const char *scontext, u32 scontext_len, u32 *sid, gfp_t gfp);
-extern int susfs_security_context_to_sid_force(const char *scontext, u32 scontext_len, u32 *sid);
 #endif // #ifdef CONFIG_KSU_SUSFS
 
 /* SECMARK reference count */
@@ -3644,7 +3642,7 @@ static void susfs_selinux_inode_post_setxattr(struct dentry *dentry, const char 
 					   &newsid);
 	if (rc) {
 		pr_err("SELinux:  unable to map context to SID"
-		       "for (%s, %lu), rc=%d\n",
+		       " for (%s, %llu), rc=%d\n",
 		       inode->i_sb->s_id, inode->i_ino, -rc);
 		return;
 	}

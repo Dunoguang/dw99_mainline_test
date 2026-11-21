@@ -313,7 +313,7 @@ int __init kernelsu_init(void)
     return 0;
 }
 
-void __exit kernelsu_exit(void)
+static void __exit kernelsu_exit(void)
 {
     // Phase 1: Stop all hooks first to prevent new callbacks
     ksu_hook_exit();

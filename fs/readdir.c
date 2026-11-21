@@ -489,9 +489,6 @@ static bool compat_fillonedir(struct dir_context *ctx, const char *name,
 		container_of(ctx, struct compat_readdir_callback, ctx);
 	struct compat_old_linux_dirent __user *dirent;
 	compat_ulong_t d_ino;
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	struct inode *inode;
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 
 	if (buf->result)
 		return false;

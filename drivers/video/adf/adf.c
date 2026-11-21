@@ -393,7 +393,7 @@ void adf_vsync_notify(struct adf_interface *intf, ktime_t timestamp)
 }
 EXPORT_SYMBOL(adf_vsync_notify);
 
-void adf_hotplug_notify(struct adf_interface *intf, bool connected,
+static void adf_hotplug_notify(struct adf_interface *intf, bool connected,
 		struct drm_mode_modeinfo *modelist, size_t n_modes)
 {
 	unsigned long flags;

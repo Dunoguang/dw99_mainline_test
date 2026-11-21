@@ -160,4 +160,7 @@ static inline void aud_smsg_set(struct aud_smsg *msg, uint16_t channel,
 	msg->parameter2 = value2;
 	msg->parameter3 = value3;
 }
+
+int aud_smsg_init_debugfs(void *root);
+int  aud_smsg_suspend_init(void);
 #endif

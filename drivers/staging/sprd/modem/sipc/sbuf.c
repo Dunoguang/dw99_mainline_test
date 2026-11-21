@@ -88,7 +88,7 @@ static struct task_struct *sbuf_wait_get_task(wait_queue_entry_t *pos, u32 *b_se
 {
 	struct task_struct *task;
 	struct poll_wqueues *table;
-	char name[TASK_COMM_LEN + 2];
+	char name[TASK_COMM_LEN + 1];
 	u32 len;
 
 	/* if the wait is put into list by sbuf_read, the struct of
@@ -110,8 +110,8 @@ static struct task_struct *sbuf_wait_get_task(wait_queue_entry_t *pos, u32 *b_se
 	    task->tgid > 0 &&
 	    task->tgid < PID_MAX_LIMIT &&
 	    virt_addr_valid((void *)task->comm)) {
-		memcpy(name, task->comm, sizeof(name));
-		name[TASK_COMM_LEN + 1] = 0;
+		memcpy(name, task->comm, TASK_COMM_LEN);
+		name[TASK_COMM_LEN] = '\0';
 		len = strlen(name);
 		if (len > 0 && len < TASK_COMM_LEN)
 			return task;
@@ -415,14 +415,14 @@ int sbuf_create(u8 dst, u8 channel, u32 bufnum, u32 txbufsize, u32 rxbufsize)
 	hsize = sizeof(struct sbuf_smem_header) +
 		sizeof(struct sbuf_ring_header) * bufnum;
 	sbuf->smem_size = hsize + (txbufsize + rxbufsize) * bufnum;
-	sbuf->smem_addr = smem_alloc_ex(sbuf->smem_size,
-					sdev->pdata->smem_base);
+	sbuf->smem_pool_addr = sdev->pdata->smem_base;
+	sbuf->smem_addr = smem_alloc_ex(sbuf->smem_size, sbuf->smem_pool_addr);
 	if (!sbuf->smem_addr) {
 		pr_err("Failed to allocate smem for sbuf\n");
 		kfree(sbuf);
 		return -ENOMEM;
 	}
-	sbuf->mapped_smem_addr = sbuf->smem_addr - sdev->pdata->smem_base +
+	sbuf->mapped_smem_addr = sbuf->smem_addr - sbuf->smem_pool_addr +
 		sdev->pdata->mapped_smem_base;
 
 	pr_debug("sbuf_create dst=%d, chanel=%d,bufnum=%d, smem_addr=0x%x, smem_size=0x%x, mapped_smem_addr=0x%x\n",
@@ -437,7 +437,8 @@ int sbuf_create(u8 dst, u8 channel, u32 bufnum, u32 txbufsize, u32 rxbufsize)
 						sbuf->smem_size);
 	if (!sbuf->smem_virt) {
 		pr_err("Failed to map smem for sbuf\n");
-		smem_free(sbuf->smem_addr, sbuf->smem_size);
+		smem_free_ex(sbuf->smem_addr, sbuf->smem_size,
+			     sbuf->smem_pool_addr);
 		kfree(sbuf);
 		return -EFAULT;
 	}
@@ -446,7 +447,8 @@ int sbuf_create(u8 dst, u8 channel, u32 bufnum, u32 txbufsize, u32 rxbufsize)
 	sbuf->rings = kcalloc(bufnum, sizeof(struct sbuf_ring), GFP_KERNEL);
 	if (!sbuf->rings) {
 		shmem_ram_unmap(sbuf->smem_virt);
-		smem_free(sbuf->smem_addr, sbuf->smem_size);
+		smem_free_ex(sbuf->smem_addr, sbuf->smem_size,
+			     sbuf->smem_pool_addr);
 		kfree(sbuf);
 		return -ENOMEM;
 	}
@@ -506,7 +508,8 @@ int sbuf_create(u8 dst, u8 channel, u32 bufnum, u32 txbufsize, u32 rxbufsize)
 		pr_err("Failed to create kthread: sbuf-%d-%d\n", dst, channel);
 		kfree(sbuf->rings);
 		shmem_ram_unmap(sbuf->smem_virt);
-		smem_free(sbuf->smem_addr, sbuf->smem_size);
+		smem_free_ex(sbuf->smem_addr, sbuf->smem_size,
+			     sbuf->smem_pool_addr);
 		result = PTR_ERR(sbuf->thread);
 		kfree(sbuf);
 
@@ -591,7 +594,7 @@ void sbuf_destroy(u8 dst, u8 channel)
 
 	if (sbuf->smem_virt)
 		shmem_ram_unmap(sbuf->smem_virt);
-	smem_free(sbuf->smem_addr, sbuf->smem_size);
+	smem_free_ex(sbuf->smem_addr, sbuf->smem_size, sbuf->smem_pool_addr);
 	kfree(sbuf);
 }
 EXPORT_SYMBOL(sbuf_destroy);
@@ -1101,7 +1104,7 @@ void sbuf_get_status(u8 dst, char *status_info, int size)
 				snprintf(
 					 status_info + len,
 					 size - len,
-					 "%s %d: %s, state=0x%lx, pid=%d.\n",
+					 "%s %d: %s, state=0x%x, pid=%d.\n",
 					 phead,
 					 cnt, task->comm,
 					 task->__state, task->pid);
@@ -1172,7 +1175,7 @@ static void sbuf_debug_task_show(struct seq_file *m,
 				   n,
 				   buf,
 				   cnt);
-			seq_printf(m, ": %s, state = 0x%lx, pid = %d\n",
+			seq_printf(m, ": %s, state = 0x%x, pid = %d\n",
 				   task->comm,
 				   task->__state,
 				   task->pid);

@@ -124,7 +124,7 @@ static void adf_obj_uevent_work(struct work_struct *work)
 				msecs_to_jiffies(ADF_UEVENT_RETRY_DELAY_MS));
 }
 
-int adf_obj_sysfs_init(struct adf_obj *obj, struct device *parent)
+static int adf_obj_sysfs_init(struct adf_obj *obj, struct device *parent)
 {
 	int ret = idr_alloc(&adf_minors, obj, 0, 0, GFP_KERNEL);
 	if (ret < 0) {
@@ -275,7 +275,7 @@ struct adf_obj *adf_obj_sysfs_find(int minor)
 	return idr_find(&adf_minors, minor);
 }
 
-void adf_obj_sysfs_destroy(struct adf_obj *obj)
+static void adf_obj_sysfs_destroy(struct adf_obj *obj)
 {
 	cancel_delayed_work_sync(&obj->uevent_work);
 	idr_remove(&adf_minors, obj->minor);

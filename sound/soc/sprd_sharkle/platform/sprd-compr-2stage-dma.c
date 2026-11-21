@@ -225,8 +225,6 @@ static int sprd_platform_compr_trigger(
 static void sprd_compr_dma_buf_done(void *data);
 
 
-static DEFINE_MUTEX(sprd_compr_lock);
-
 #define SPRD_IRAM_INFO_ALL_PHYS  0xffffff
 
 #if COMPR_DUMP_MEM_DEBUG
@@ -425,7 +423,7 @@ exit:
 }
 #endif
 /* yintang: to be confirmed */
-int sprd_compr_configure_dsp(struct sprd_compr_rtd *srtd)
+static int sprd_compr_configure_dsp(struct sprd_compr_rtd *srtd)
 {
 	return 0;
 }
@@ -637,7 +635,7 @@ static void sprd_compr_dma_buf_done(void *data)
 
 }
 
-struct dma_async_tx_descriptor *sprd_compr_config_dma_channel(
+static struct dma_async_tx_descriptor *sprd_compr_config_dma_channel(
 	struct dma_chan *dma_chn,
 	struct sprd_dma_cfg *dma_config,
 	struct sprd_compr_dma_cb_data *dma_cb_data,
@@ -679,7 +677,7 @@ struct dma_async_tx_descriptor *sprd_compr_config_dma_channel(
 	return dma_tx_des;
 }
 
-int compr_stream_config_dma1(struct snd_compr_stream *substream,
+static int compr_stream_config_dma1(struct snd_compr_stream *substream,
 			      uint32_t frag_size, uint32_t frag_cnt)
 {
 	struct snd_compr_runtime *runtime = substream->runtime;
@@ -825,14 +823,14 @@ ok_go_out:
 	return ret;
 }
 
-int compr_stream_hw_params1(struct snd_compr_stream *substream,
+static int compr_stream_hw_params1(struct snd_compr_stream *substream,
 			      struct snd_compr_params *params)
 {
 	return compr_stream_config_dma1(substream,
 		params->buffer.fragment_size, params->buffer.fragments);
 }
 
-int compr_stream_config_dma0(struct snd_compr_stream *substream,
+static int compr_stream_config_dma0(struct snd_compr_stream *substream,
 			      uint32_t frag_size)
 {
 	struct snd_compr_runtime *runtime = substream->runtime;
@@ -987,7 +985,7 @@ ok_go_out:
 	return ret;
 }
 
-int compr_stream_hw_params0(struct snd_compr_stream *substream,
+static int compr_stream_hw_params0(struct snd_compr_stream *substream,
 					struct snd_compr_params *params)
 {
 	sp_asoc_pr_info("srtd buffer.fragments=%d, fragment_size=%d\n",
@@ -1598,7 +1596,7 @@ static int sprd_platform_compr_pointer(struct snd_soc_component *component,
 	tstamp.pcm_io_frames = (uint64_t)info->uiCurrentDataOffset;
 	memcpy(arg, &tstamp, sizeof(struct snd_compr_tstamp64));
 	sp_asoc_pr_info(
-		"%s: copied_total: %d bit_rate: %d sample_rate: %d  pcm_io_frames: %d\n",
+		"%s: copied_total: %llu bit_rate: %d sample_rate: %d pcm_io_frames: %llu\n",
 		__func__,
 		tstamp.copied_total,
 		srtd->codec_param.codec.bit_rate,
@@ -1962,7 +1960,8 @@ static const struct snd_soc_component_driver sprd_platform_compr_drv = {
 	.pcm_new	= sprd_compress_new,
 };
 
-static int sprd_platform_compr_probe(struct platform_device *pdev)
+/* Retain the component callbacks until this platform's audio DSP is available. */
+static int __maybe_unused sprd_platform_compr_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 
@@ -1980,7 +1979,7 @@ static int sprd_platform_compr_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static void sprd_platform_compr_remove(struct platform_device *pdev)
+static void __maybe_unused sprd_platform_compr_remove(struct platform_device *pdev)
 {
 	struct sprd_compr_pdata *pdata = NULL;
 

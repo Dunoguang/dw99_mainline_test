@@ -218,7 +218,7 @@ unsigned char cmd_2dma_42bd[6] = { /*0x42, 0xbd, */ 0x28, 0x35, 0xc1, 0x00, 0x35
 
 /* in directly memory access mode */
 /* RETURN:0->pass else->fail */
-int tlsc6x_read_bytes_u16addr_sub(struct i2c_client *client, u16 addr, u8 *rxbuf, u16 len)
+static int tlsc6x_read_bytes_u16addr_sub(struct i2c_client *client, u16 addr, u8 *rxbuf, u16 len)
 {
 	int err = 0;
 	int retry = 0;
@@ -274,7 +274,7 @@ int tlsc6x_read_bytes_u16addr_sub(struct i2c_client *client, u16 addr, u8 *rxbuf
 	return err;
 }
 
-int tlsc6x_read_bytes_u16addr(struct i2c_client *client, u16 addr, u8 *rxbuf, u16 len)
+static int tlsc6x_read_bytes_u16addr(struct i2c_client *client, u16 addr, u8 *rxbuf, u16 len)
 {
 	int ret = 0;
 
@@ -286,7 +286,7 @@ int tlsc6x_read_bytes_u16addr(struct i2c_client *client, u16 addr, u8 *rxbuf, u1
 
 /* in directly memory access mode */
 /* RETURN:0->pass else->fail */
-int tlsc6x_write_bytes_u16addr_sub(struct i2c_client *client, u16 addr, u8 *txbuf, u16 len)
+static int tlsc6x_write_bytes_u16addr_sub(struct i2c_client *client, u16 addr, u8 *txbuf, u16 len)
 {
 	u8 buffer[MAX_TRX_LEN];
 	u16 offset = 0;
@@ -336,7 +336,7 @@ int tlsc6x_write_bytes_u16addr_sub(struct i2c_client *client, u16 addr, u8 *txbu
 	return err;
 }
 
-int tlsc6x_write_bytes_u16addr(struct i2c_client *client, u16 addr, u8 *txbuf, u16 len)
+static int tlsc6x_write_bytes_u16addr(struct i2c_client *client, u16 addr, u8 *txbuf, u16 len)
 {
 	int ret = 0;
 
@@ -349,7 +349,7 @@ int tlsc6x_write_bytes_u16addr(struct i2c_client *client, u16 addr, u8 *txbuf, u
 /* <0 : i2c error */
 /* 0: direct address mode */
 /* 1: protect mode */
-int tlsc6x_get_i2cmode(void)
+static int tlsc6x_get_i2cmode(void)
 {
 	u8 regData[4];
 
@@ -399,7 +399,7 @@ int tlsc6x_set_dd_mode_sub(void)
 	}
 }
 
-int tlsc6x_set_dd_mode(void)
+static int tlsc6x_set_dd_mode(void)
 {
 	int ret = 0;
 
@@ -833,7 +833,7 @@ static int find_last_valid_burn_cfg(u16 *ptcfg)
 
 }
 
-int tlsx6x_update_fcomp_cfg(u16 *ptcfg)
+static int tlsx6x_update_fcomp_cfg(u16 *ptcfg)
 {
 	if (tlsc6x_tpcfg_ver_comp_weak(ptcfg) == 0) {
 		tlsc_err("Tlsc6x:update error:version error!\n");
@@ -863,7 +863,7 @@ int tlsx6x_update_fcomp_cfg(u16 *ptcfg)
 	return 0;
 }
 
-int tlsx6x_update_fcomp_boot(unsigned char *pdata, u16 len)
+static int tlsx6x_update_fcomp_boot(unsigned char *pdata, u16 len)
 {
 	if (tlsc6x_download_ramcode(fw_fcode_burn, sizeof(fw_fcode_burn))) {
 		tlsc_err("Tlsc6x:update error:ram-code error!\n");
@@ -887,7 +887,7 @@ int tlsx6x_update_fcomp_boot(unsigned char *pdata, u16 len)
 	return 0;
 }
 
-int tlsx6x_update_ocomp_boot(unsigned char *pdata, u16 len)
+static int tlsx6x_update_ocomp_boot(unsigned char *pdata, u16 len)
 {
 	unsigned int oo_tail[4] = { 0x60298bf, 0x15cbf, 0x60301bf, 0x3d43f };
 
@@ -1345,7 +1345,7 @@ static int tlsc6x_boot_update(u8 *pdata, u16 boot_len)
 }
 
 
-int tlsc6x_update_compat_ctl(u8 *pupd, int len)
+static int tlsc6x_update_compat_ctl(u8 *pupd, int len)
 {
 	u32 k;
 	u32 n;
@@ -1395,14 +1395,14 @@ int tlsc6x_update_compat_ctl(u8 *pupd, int len)
 	return 0;
 }
 
-void tlsc6x_do_update_ifneed(void)
+static void tlsc6x_do_update_ifneed(void)
 {
 	const u8 *fupd = tlsc6x_boot_bin;
 	tlsc6x_update_compat_ctl((u8 *) fupd, (int) sizeof(tlsc6x_boot_bin));
 }
 //#endif
 
-int tlsc6x_get_running_cfg(unsigned short *ptcfg)
+static int tlsc6x_get_running_cfg(unsigned short *ptcfg)
 {
 	if (g_mccode == 0) {
 		return tlsx6x_3535get_running_cfg(ptcfg);
@@ -1410,7 +1410,7 @@ int tlsc6x_get_running_cfg(unsigned short *ptcfg)
 	return tlsx6x_3536get_running_cfg(ptcfg);
 }
 
-int tlsc6x_find_ver(void)
+static int tlsc6x_find_ver(void)
 {
 	if (g_mccode == 0) {
 		return tlsx6x_3535find_lastvaild_ver();

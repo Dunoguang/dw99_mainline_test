@@ -161,7 +161,7 @@ static ssize_t stty_write(struct tty_struct *tty,
 	struct stty_device *stty = tty->driver_data;
 	int cnt;
 
-	pr_debug("stty write count=%d\n", count);
+	pr_debug("stty write count=%zu\n", count);
 
 	cnt = sbuf_write(stty->pdata->dst,
 			 stty->pdata->channel,

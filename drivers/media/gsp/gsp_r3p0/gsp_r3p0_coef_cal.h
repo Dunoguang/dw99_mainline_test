@@ -26,7 +26,6 @@
 #define GSC_ABS(_a)			 ((_a) < 0 ? -(_a) : (_a))
 /* #define pi						3.14159265357 */
 #define GSC_FIX					24
-#define MAX(_x, _y)		   (((_x) > (_y)) ? (_x) : (_y))
 
 #define LIST_SET_ENTRY_KEY(pEntry, i_w, i_h, o_w, o_h, h_t, v_t)\
 {\

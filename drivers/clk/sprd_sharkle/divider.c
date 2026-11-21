@@ -22,7 +22,7 @@
 
 #include "clk-sprd.h"
 
-void __init of_sprd_divider_clk_setup(struct device_node *node)
+static void __init of_sprd_divider_clk_setup(struct device_node *node)
 {
 	struct clk *clk, *pclk;
 	struct clk_divider *clk_div;

@@ -15,6 +15,7 @@
  * GNU General Public License for more details.
  */
 
+#include "../include/bus_common.h"
 #include <linux/of.h>
 #include <linux/mutex.h>
 #include <linux/poll.h>

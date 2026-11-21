@@ -42,6 +42,7 @@
 #include <linux/sipc.h>
 #endif
 
+#include <soc/sprd/sysdump.h>
 #include "sysdump.h"
 
 #ifdef CONFIG_OF
@@ -132,7 +133,6 @@ static struct sysdump_config sysdump_conf = {
 static int sprd_sysdump_init;
 
 extern int sysdump_status;
-extern void sprd_set_reboot_mode(const char *cmd);
 extern void set_sysdump_enable(int on);
 
 #ifdef CONFIG_SPRD_WATCHDOG_SYS
@@ -141,7 +141,7 @@ extern void sysdump_enable_watchdog(int on);
 #define sysdump_enable_watchdog(on) do { } while (0)
 #endif
 
-void sprd_debug_check_crash_key(unsigned int code, int value)
+static void sprd_debug_check_crash_key(unsigned int code, int value)
 {
 	static bool volup_p;
 	static bool voldown_p;
@@ -256,7 +256,7 @@ static void fill_prstatus(struct elf_prstatus *prstatus,
 	prstatus->common.pr_cstime = ns_to_kernel_old_timeval(p->signal->cstime);
 }
 
-void crash_note_save_cpu(struct pt_regs *regs, int cpu)
+static void crash_note_save_cpu(struct pt_regs *regs, int cpu)
 {
 	struct elf_prstatus prstatus;
 	struct memelfnote notes;
@@ -685,7 +685,7 @@ static const struct proc_ops sysdump_proc_fops = {
 	.proc_release = single_release,
 };
 
-int sysdump_sysctl_init(void)
+static int sysdump_sysctl_init(void)
 {
 	/*get_sprd_sysdump_info_paddr(); */
 	unsigned long sprd_sysdump_info_paddr;
@@ -724,7 +724,7 @@ int sysdump_sysctl_init(void)
 	return 0;
 }
 
-void sysdump_sysctl_exit(void)
+static void sysdump_sysctl_exit(void)
 {
 	if (sysdump_sysctl_hdr)
 		unregister_sysctl_table(sysdump_sysctl_hdr);

@@ -62,7 +62,7 @@ static int mcdt_reg_update(unsigned int offset, int val, int mask)
 	return old != new;
 }
 
-void mcdt_da_set_watermark(enum MCDT_CHAN_NUM chan_num, unsigned int full,
+static void mcdt_da_set_watermark(enum MCDT_CHAN_NUM chan_num, unsigned int full,
 			     unsigned int empty)
 {
 	unsigned int reg = MCDT_DAC0_WTMK + (chan_num * 4);
@@ -73,7 +73,7 @@ void mcdt_da_set_watermark(enum MCDT_CHAN_NUM chan_num, unsigned int full,
 			BIT_DAC0_FIFO_AE_LVL(0x1FF));
 }
 
-void mcdt_ad_set_watermark(enum MCDT_CHAN_NUM chan_num, unsigned int full,
+static void mcdt_ad_set_watermark(enum MCDT_CHAN_NUM chan_num, unsigned int full,
 			     unsigned int empty)
 {
 	unsigned int reg = MCDT_ADC0_WTMK + (chan_num * 4);
@@ -84,21 +84,21 @@ void mcdt_ad_set_watermark(enum MCDT_CHAN_NUM chan_num, unsigned int full,
 			BIT_ADC0_FIFO_AE_LVL(0x1FF));
 }
 
-void mcdt_da_dma_enable(enum MCDT_CHAN_NUM chan_num, unsigned int en)
+static void mcdt_da_dma_enable(enum MCDT_CHAN_NUM chan_num, unsigned int en)
 {
 	unsigned int shift = 16 + chan_num;
 
 	mcdt_reg_update(MCDT_DMA_EN, en ? (1 << shift) : 0, 1 << shift);
 }
 
-void mcdt_ad_dma_enable(enum MCDT_CHAN_NUM chan_num, unsigned int en)
+static void mcdt_ad_dma_enable(enum MCDT_CHAN_NUM chan_num, unsigned int en)
 {
 	unsigned int shift = chan_num;
 
 	mcdt_reg_update(MCDT_DMA_EN, en ? (1 << shift) : 0, 1 << shift);
 }
 
-void mcdt_chan_fifo_int_enable(enum MCDT_CHAN_NUM chan_num,
+static void mcdt_chan_fifo_int_enable(enum MCDT_CHAN_NUM chan_num,
 				 enum MCDT_FIFO_INT int_type, unsigned int en)
 {
 	unsigned int reg = 0;
@@ -138,7 +138,7 @@ void mcdt_chan_fifo_int_enable(enum MCDT_CHAN_NUM chan_num,
 	mcdt_reg_update(reg, en ? (1<<shift) : 0, 1 << shift);
 }
 
-void mcdt_chan_fifo_int_clr(enum MCDT_CHAN_NUM chan_num,
+static void mcdt_chan_fifo_int_clr(enum MCDT_CHAN_NUM chan_num,
 			      enum MCDT_FIFO_INT int_type)
 {
 	unsigned int reg = 0;
@@ -178,7 +178,7 @@ void mcdt_chan_fifo_int_clr(enum MCDT_CHAN_NUM chan_num,
 	mcdt_reg_update(reg, 1<<shift, 1<<shift);
 }
 
-int mcdt_is_chan_fifo_int_raw(enum MCDT_CHAN_NUM chan_num,
+static int mcdt_is_chan_fifo_int_raw(enum MCDT_CHAN_NUM chan_num,
 				enum MCDT_FIFO_INT int_type)
 {
 	unsigned long reg = 0;
@@ -257,37 +257,37 @@ int mcdt_is_chan_fifo_int_sts(enum MCDT_CHAN_NUM chan_num,
 	return !!(mcdt_reg_read(reg)&(1<<shift));
 }
 
-unsigned int mcdt_is_da_empty_int(enum MCDT_CHAN_NUM chan_num)
+static unsigned int mcdt_is_da_empty_int(enum MCDT_CHAN_NUM chan_num)
 {
 	return mcdt_is_chan_fifo_int_raw(chan_num, MCDT_DAC_FIFO_AE_INT);
 }
 
-unsigned int mcdt_is_ad_full_int(enum MCDT_CHAN_NUM chan_num)
+static unsigned int mcdt_is_ad_full_int(enum MCDT_CHAN_NUM chan_num)
 {
 	return mcdt_is_chan_fifo_int_raw(chan_num, MCDT_ADC_FIFO_AF_INT);
 }
 
-void mcdt_da_int_en(enum MCDT_CHAN_NUM chan_num, unsigned int en)
+static void mcdt_da_int_en(enum MCDT_CHAN_NUM chan_num, unsigned int en)
 {
 	mcdt_chan_fifo_int_enable(chan_num, MCDT_DAC_FIFO_AE_INT, en);
 }
 
-void mcdt_ad_int_en(enum MCDT_CHAN_NUM chan_num, unsigned int en)
+static void mcdt_ad_int_en(enum MCDT_CHAN_NUM chan_num, unsigned int en)
 {
 	mcdt_chan_fifo_int_enable(chan_num, MCDT_ADC_FIFO_AF_INT, en);
 }
 
-void mcdt_clr_da_int(enum MCDT_CHAN_NUM chan_num)
+static void mcdt_clr_da_int(enum MCDT_CHAN_NUM chan_num)
 {
 	mcdt_chan_fifo_int_clr(chan_num, MCDT_DAC_FIFO_AE_INT);
 }
 
-void mcdt_clr_ad_int(enum MCDT_CHAN_NUM chan_num)
+static void mcdt_clr_ad_int(enum MCDT_CHAN_NUM chan_num)
 {
 	mcdt_chan_fifo_int_clr(chan_num, MCDT_ADC_FIFO_AF_INT);
 }
 
-int mcdt_is_chan_fifo_sts(unsigned int chan_num, enum MCDT_FIFO_STS fifo_sts)
+static int mcdt_is_chan_fifo_sts(unsigned int chan_num, enum MCDT_FIFO_STS fifo_sts)
 {
 	unsigned long reg = 0;
 	unsigned int shift = 0;
@@ -326,7 +326,7 @@ int mcdt_is_chan_fifo_sts(unsigned int chan_num, enum MCDT_FIFO_STS fifo_sts)
 	return !!(mcdt_reg_read(reg) & (1<<shift));
 }
 
-void mcdt_int_to_ap_enable(enum MCDT_CHAN_NUM chan_num, unsigned int en)
+static void mcdt_int_to_ap_enable(enum MCDT_CHAN_NUM chan_num, unsigned int en)
 {
 	unsigned int reg = MCDT_INT_MSK_CFG0;
 	unsigned int shift = 0 + chan_num;
@@ -342,67 +342,67 @@ unsigned int mcdt_is_ap_int(enum MCDT_CHAN_NUM chan_num)
 	return mcdt_reg_read(reg) & (1 << shift);
 }
 
-void mcdt_ap_dac_dma_ch0_sel(unsigned int chan_num)
+static void mcdt_ap_dac_dma_ch0_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG0, BIT_MCDT_DAC_DMA_CH0_SEL0(chan_num),
 			BIT_MCDT_DAC_DMA_CH0_SEL0(0xf));
 }
 
-void mcdt_ap_dac_dma_ch1_sel(unsigned int chan_num)
+static void mcdt_ap_dac_dma_ch1_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG0, BIT_MCDT_DAC_DMA_CH1_SEL0(chan_num),
 			BIT_MCDT_DAC_DMA_CH1_SEL0(0xf));
 }
 
-void mcdt_ap_dac_dma_ch2_sel(unsigned int chan_num)
+static void mcdt_ap_dac_dma_ch2_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG0, BIT_MCDT_DAC_DMA_CH2_SEL0(chan_num),
 			BIT_MCDT_DAC_DMA_CH2_SEL0(0xf));
 }
 
-void mcdt_ap_dac_dma_ch3_sel(unsigned int chan_num)
+static void mcdt_ap_dac_dma_ch3_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG0, BIT_MCDT_DAC_DMA_CH3_SEL0(chan_num),
 			BIT_MCDT_DAC_DMA_CH3_SEL0(0xf));
 }
 
-void mcdt_ap_dac_dma_ch4_sel(unsigned int chan_num)
+static void mcdt_ap_dac_dma_ch4_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG0, BIT_MCDT_DAC_DMA_CH4_SEL0(chan_num),
 			BIT_MCDT_DAC_DMA_CH4_SEL0(0xf));
 }
 
-void mcdt_ap_adc_dma_ch0_sel(unsigned int chan_num)
+static void mcdt_ap_adc_dma_ch0_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG1, BIT_MCDT_ADC_DMA_CH0_SEL0(chan_num),
 			BIT_MCDT_ADC_DMA_CH0_SEL0(0xf));
 }
 
-void mcdt_ap_adc_dma_ch1_sel(unsigned int chan_num)
+static void mcdt_ap_adc_dma_ch1_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG1, BIT_MCDT_ADC_DMA_CH1_SEL0(chan_num),
 			BIT_MCDT_ADC_DMA_CH1_SEL0(0xf));
 }
 
-void mcdt_ap_adc_dma_ch2_sel(unsigned int chan_num)
+static void mcdt_ap_adc_dma_ch2_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG1, BIT_MCDT_ADC_DMA_CH2_SEL0(chan_num),
 			BIT_MCDT_ADC_DMA_CH2_SEL0(0xf));
 }
 
-void mcdt_ap_adc_dma_ch3_sel(unsigned int chan_num)
+static void mcdt_ap_adc_dma_ch3_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG1, BIT_MCDT_ADC_DMA_CH3_SEL0(chan_num),
 			BIT_MCDT_ADC_DMA_CH3_SEL0(0xf));
 }
 
-void mcdt_ap_adc_dma_ch4_sel(unsigned int chan_num)
+static void mcdt_ap_adc_dma_ch4_sel(unsigned int chan_num)
 {
 	mcdt_reg_update(MCDT_DMA_CFG1, BIT_MCDT_ADC_DMA_CH4_SEL0(chan_num),
 			BIT_MCDT_ADC_DMA_CH4_SEL0(0xf));
 }
 
-void mcdt_dac_dma_chan_ack_sel(unsigned int chan_num,
+static void mcdt_dac_dma_chan_ack_sel(unsigned int chan_num,
 				 enum MCDT_DMA_ACK ack_num)
 {
 	unsigned int reg;
@@ -448,7 +448,7 @@ void mcdt_dac_dma_chan_ack_sel(unsigned int chan_num,
 	mcdt_reg_update(reg, ack_num<<shift, 0xf<<shift);
 }
 
-void mcdt_adc_dma_chan_ack_sel(unsigned int chan_num,
+static void mcdt_adc_dma_chan_ack_sel(unsigned int chan_num,
 				 enum MCDT_DMA_ACK ack_num)
 {
 	unsigned int reg;
@@ -508,7 +508,7 @@ void mcdt_ad_fifo_clr(unsigned int chan_num)
 	mcdt_reg_update(MCDT_FIFO_CLR, 1<<shift, 1<<shift);
 }
 
-unsigned int mcdt_is_da_fifo_real_full(enum MCDT_CHAN_NUM chan_num)
+static unsigned int mcdt_is_da_fifo_real_full(enum MCDT_CHAN_NUM chan_num)
 {
 	return mcdt_is_chan_fifo_sts(chan_num, MCDT_DAC_FIFO_REAL_FULL);
 }
@@ -533,7 +533,7 @@ unsigned int mcdt_is_ad_fifo_real_full(enum MCDT_CHAN_NUM chan_num)
 	return mcdt_is_chan_fifo_sts(chan_num, MCDT_ADC_FIFO_REAL_FULL);
 }
 
-unsigned int mcdt_is_ad_fifo_real_empty(enum MCDT_CHAN_NUM chan_num)
+static unsigned int mcdt_is_ad_fifo_real_empty(enum MCDT_CHAN_NUM chan_num)
 {
 	return mcdt_is_chan_fifo_sts(chan_num, MCDT_ADC_FIFO_REAL_EMPTY);
 }
@@ -548,7 +548,7 @@ unsigned int mcdt_is_ad_fifo_empty(enum MCDT_CHAN_NUM chan_num)
 	return mcdt_is_chan_fifo_sts(chan_num, MCDT_ADC_FIFO_AE);
 }
 
-unsigned int mcdt_wait_dac_tx_fifo_valid(enum MCDT_CHAN_NUM chan_num)
+static unsigned int mcdt_wait_dac_tx_fifo_valid(enum MCDT_CHAN_NUM chan_num)
 {
 	while (mcdt_is_da_fifo_real_full(chan_num))
 		usleep_range(10, 15);
@@ -556,7 +556,7 @@ unsigned int mcdt_wait_dac_tx_fifo_valid(enum MCDT_CHAN_NUM chan_num)
 	return 0;
 }
 
-unsigned int mcdt_wait_adc_rx_fifo_valid(enum MCDT_CHAN_NUM chan_num)
+static unsigned int mcdt_wait_adc_rx_fifo_valid(enum MCDT_CHAN_NUM chan_num)
 {
 	while (mcdt_is_ad_fifo_real_empty(chan_num))
 		usleep_range(10, 15);
@@ -566,7 +566,7 @@ unsigned int mcdt_wait_adc_rx_fifo_valid(enum MCDT_CHAN_NUM chan_num)
 
 static unsigned int VAL_FLG;
 
-unsigned int mcdt_dac_phy_write(enum MCDT_CHAN_NUM chan_num, unsigned int val,
+static unsigned int mcdt_dac_phy_write(enum MCDT_CHAN_NUM chan_num, unsigned int val,
 				unsigned int *err_code)
 {
 	unsigned int ret = 0;
@@ -593,7 +593,7 @@ unsigned int mcdt_dac_phy_write(enum MCDT_CHAN_NUM chan_num, unsigned int val,
 	return ret;
 }
 
-unsigned int mcdt_adc_phy_read(enum MCDT_CHAN_NUM chan_num,
+static unsigned int mcdt_adc_phy_read(enum MCDT_CHAN_NUM chan_num,
 			       unsigned int *err_code)
 {
 	volatile unsigned int read = 0;
@@ -1158,7 +1158,7 @@ static const struct file_operations mcdt_debug_info_fops = {
 	.llseek = seq_lseek,
 	.release = single_release,
 };
-int mcdt_init_debugfs_info(void *root)
+static int mcdt_init_debugfs_info(void *root)
 {
 	if (!root)
 		return -ENXIO;
@@ -1191,7 +1191,7 @@ static const struct file_operations sblock_debug_reg_fops = {
 	.release = single_release,
 };
 
-int mcdt_init_debugfs_reg(void *root)
+static int mcdt_init_debugfs_reg(void *root)
 {
 	if (!root)
 		return -ENXIO;

@@ -18,6 +18,7 @@
 /* #define DEBUG */
 /* #define VERBOSE_DEBUG */
 
+#include <linux/usb/android-accessory.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/poll.h>
@@ -1300,8 +1301,9 @@ static void acc_free(struct usb_function *f)
 /*NO-OP: no function specific resource allocation in mtp_alloc*/
 }
 
-int acc_ctrlrequest_configfs(struct usb_function *f,
-			const struct usb_ctrlrequest *ctrl) {
+static int acc_ctrlrequest_configfs(struct usb_function *f,
+				    const struct usb_ctrlrequest *ctrl)
+{
 	if (f->config != NULL && f->config->cdev != NULL)
 		return acc_ctrlrequest(f->config->cdev, ctrl);
 	else

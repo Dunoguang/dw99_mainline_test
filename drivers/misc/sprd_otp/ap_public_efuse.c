@@ -143,8 +143,6 @@ struct sprd_public_ap_efuse {
 
 static unsigned long efuse_hwlock_flag;
 static struct sprd_public_ap_efuse *ap_efuse;
-static DEFINE_MUTEX(efuse_mtx);
-
 static int ap_efuse_lock(void)
 {
 	int ret;

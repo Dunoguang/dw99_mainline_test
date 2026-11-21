@@ -1,6 +1,8 @@
 #ifndef _SPRD_IOMMU_API_H_
 #define _SPRD_IOMMU_API_H_
 
+#include <linux/sprd_iommu.h>
+
 #include "../inc/sprd_defs.h"
 #include "../osal/sprd_osal.h"
 #include "../com/sprd_com.h"
@@ -19,12 +21,12 @@ extern struct sprd_iommu_func_tbl iommuex_func_tbl;
 * The structure includes a list for Iommu channel .
 *********************************************************/
 enum sprd_iommu_ch_type {
-	PF_CH_READ = 0x100,/*prefetch channel only support read*/
-	PF_CH_WRITE,/* prefetch channel only support write*/
-	FM_CH_RW,/*ullmode channel support write/read in one channel*/
-	EX_CH_READ,/*channel only support read, only ISP use now*/
-	EX_CH_WRITE,/*channel only support read, only ISP use now*/
-	CH_TYPE_INVALID, /*unsupported channel type*/
+	PF_CH_READ = SPRD_IOMMU_PF_CH_READ,
+	PF_CH_WRITE = SPRD_IOMMU_PF_CH_WRITE,
+	FM_CH_RW = SPRD_IOMMU_FM_CH_RW,
+	EX_CH_READ = SPRD_IOMMU_EX_CH_READ,
+	EX_CH_WRITE = SPRD_IOMMU_EX_CH_WRITE,
+	CH_TYPE_INVALID = SPRD_IOMMU_CH_TYPE_INVALID,
 };
 
 enum sprd_iommu_type {

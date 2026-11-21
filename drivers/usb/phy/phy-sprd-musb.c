@@ -90,14 +90,6 @@ static inline void __reset_core(void __iomem *addr)
 	writel_relaxed(reg, addr + REG_AP_AHB_AHB_RST + 0x2000);
 }
 
-static int sprd_hsphy_reset(struct usb_phy *x)
-{
-	struct sprd_hsphy *phy = container_of(x, struct sprd_hsphy, phy);
-
-	__reset_core(PHY_REG_BASE);
-	return 0;
-}
-
 static int sprd_hostphy_set(struct usb_phy *x, int on)
 {
 	struct sprd_hsphy *phy = container_of(x, struct sprd_hsphy, phy);
@@ -124,22 +116,6 @@ static int sprd_hostphy_set(struct usb_phy *x, int on)
 		writel_relaxed(reg1, PHY_REG_BASE + REG_AP_AHB_OTG_CTRL0);
 	}
 	return 0;
-}
-
-static void sprd_hsphy_emphasis_set(struct usb_phy *x, bool enabled)
-{
-	struct sprd_hsphy *phy = container_of(x, struct sprd_hsphy, phy);
-	u32 reg;
-
-	if (!phy)
-		return;
-	reg = readl_relaxed(PHY_REG_BASE + REG_AP_AHB_OTG_CTRL0);
-	reg &= ~BIT_AP_AHB_USB20_TUNEHSAMP(3);
-	if (enabled) {
-		reg |= BIT_AP_AHB_USB20_TUNEHSAMP(2);
-		writel_relaxed(reg, PHY_REG_BASE + REG_AP_AHB_OTG_CTRL0);
-	} else
-		writel_relaxed(reg, PHY_REG_BASE + REG_AP_AHB_OTG_CTRL0);
 }
 
 static int sprd_hsphy_init(struct usb_phy *x)
@@ -273,15 +249,6 @@ static void sprd_hsphy_shutdown(struct usb_phy *x)
 
 	atomic_set(&phy->inited, 0);
 	atomic_set(&phy->reset, 0);
-}
-
-static int sprd_hsphy_post_init(struct usb_phy *x)
-{
-	struct sprd_hsphy *phy = container_of(x, struct sprd_hsphy, phy);
-
-	if (regulator_is_enabled(phy->vdd))
-		regulator_disable(phy->vdd);
-	return 0;
 }
 
 static ssize_t phy_tune_show(struct device *dev, struct device_attribute *attr,

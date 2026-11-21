@@ -206,7 +206,7 @@ static int vbc_eb_clear(void)
 }
 
 /* set/clear force used by pm notifier. */
-int xtlbuf1_eb_set_force(void)
+static int xtlbuf1_eb_set_force(void)
 {
 	pr_info("%s\n", __func__);
 	spin_lock(&xtlbuf1_eb_lock);
@@ -216,7 +216,7 @@ int xtlbuf1_eb_set_force(void)
 	return 0;
 }
 
-int xtlbuf1_eb_clr_force(void)
+static int xtlbuf1_eb_clr_force(void)
 {
 	pr_info("%s\n", __func__);
 	spin_lock(&xtlbuf1_eb_lock);

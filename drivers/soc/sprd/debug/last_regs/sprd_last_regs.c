@@ -37,7 +37,7 @@ const struct file_operations last_regs_info_proc_fops = {
 	.release = single_release,
 };
 
-__init int sprd_debug_last_regs_init(void)
+static __init int sprd_debug_last_regs_init(void)
 {
 	int size = sizeof(struct sprd_debug_regs_access);
 	unsigned int ncores =  num_possible_cpus();

@@ -522,7 +522,7 @@ static void lis3dh_acc_irq2_work_func(struct work_struct *work)
 	pr_debug("%s: IRQ2 triggered\n", LIS3DH_ACC_DEV_NAME);
 }
 
-int lis3dh_acc_update_g_range(struct lis3dh_acc_data *acc, u8 new_g_range)
+static int lis3dh_acc_update_g_range(struct lis3dh_acc_data *acc, u8 new_g_range)
 {
 	int err;
 
@@ -592,7 +592,7 @@ error:
 	return err;
 }
 
-int lis3dh_acc_update_odr(struct lis3dh_acc_data *acc, int poll_interval_ms)
+static int lis3dh_acc_update_odr(struct lis3dh_acc_data *acc, int poll_interval_ms)
 {
 	int err = -1;
 	int i;

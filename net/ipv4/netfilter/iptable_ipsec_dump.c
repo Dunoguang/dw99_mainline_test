@@ -230,7 +230,7 @@ static const struct proc_ops xfrm_dec_tcpdump_fops = {
 	.proc_release = single_release,
 };
 
-int __net_init nf_vowifi_dec_init(struct net *net)
+static int __net_init nf_vowifi_dec_init(struct net *net)
 {
 #ifdef CONFIG_PROC_FS
 	pr_info("create control for dump decoding ipsec pkt.\n");
@@ -242,7 +242,7 @@ int __net_init nf_vowifi_dec_init(struct net *net)
 	return 0;
 }
 
-void nf_vowifi_dec_exit(struct net *net)
+static void nf_vowifi_dec_exit(struct net *net)
 {
 #ifdef CONFIG_PROC_FS
 	pr_info("exit from control for dump decoding ipsec pkt.\n");

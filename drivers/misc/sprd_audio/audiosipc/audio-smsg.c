@@ -76,7 +76,7 @@ int aud_smsg_register_dump_func(AGDSP_DUMP_FUNC handler, void *priv_data)
 }
 EXPORT_SYMBOL(aud_smsg_register_dump_func);
 
-int aud_smsg_irq_handler(void *ptr, void *dev_id)
+static int aud_smsg_irq_handler(void *ptr, void *dev_id)
 {
 	struct aud_smsg_ipc *ipc = (struct aud_smsg_ipc *)dev_id;
 	struct aud_smsg *msg;
@@ -301,7 +301,7 @@ static int aud_smsg_all_ch_notify(struct aud_smsg_ipc *ipc,
 	return 0;
 }
 
-int aud_smsg_wakeup_all_ch(struct aud_smsg_ipc *ipc)
+static int aud_smsg_wakeup_all_ch(struct aud_smsg_ipc *ipc)
 {
 	int i = 0;
 

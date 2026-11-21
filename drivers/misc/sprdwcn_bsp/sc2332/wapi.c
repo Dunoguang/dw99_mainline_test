@@ -236,7 +236,7 @@ static void sms4_run(unsigned int *key_store, unsigned char *plaintext,
 	}
 }
 
-void wapi_crypto_sms4(unsigned char *iv, unsigned char *key,
+static void wapi_crypto_sms4(unsigned char *iv, unsigned char *key,
 		      unsigned char *input, unsigned int length,
 		      unsigned char *mic, unsigned char *output)
 {
@@ -269,7 +269,7 @@ void wapi_crypto_sms4(unsigned char *iv, unsigned char *key,
 	}
 }
 
-void wapi_crypto_sms4_mic(unsigned char *iv, unsigned char *key,
+static void wapi_crypto_sms4_mic(unsigned char *iv, unsigned char *key,
 			  unsigned char *header,
 			  unsigned int headerlength, unsigned char *input,
 			  unsigned int datalength, unsigned char *mic)

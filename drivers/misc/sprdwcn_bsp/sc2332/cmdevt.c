@@ -1584,7 +1584,7 @@ unsigned short sprdwl_rx_rsp_process(struct sprdwl_priv *priv, u8 *msg)
 }
 
 /* Events */
-void sprdwl_event_station(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_station(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	struct sprdwl_event_new_station *sta =
 	    (struct sprdwl_event_new_station *)data;
@@ -1593,7 +1593,7 @@ void sprdwl_event_station(struct sprdwl_vif *vif, u8 *data, u16 len)
 			     sta->mac, sta->ie, sta->ie_len);
 }
 
-void sprdwl_event_scan_done(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_scan_done(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	struct sprdwl_event_scan_done *p =
 	    (struct sprdwl_event_scan_done *)data;
@@ -1630,7 +1630,7 @@ void sprdwl_event_scan_done(struct sprdwl_vif *vif, u8 *data, u16 len)
 	bss_count = 0;
 }
 
-void sprdwl_event_connect(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_connect(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	u8 *bssid = NULL, *req_ie = NULL, *resp_ie = NULL, *bea_ie = NULL;
 	u8 *pos = data;
@@ -1701,7 +1701,7 @@ out:
 				 resp_ie_len, status_code);
 }
 
-void sprdwl_event_disconnect(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_disconnect(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	u16 reason_code;
 
@@ -1709,7 +1709,7 @@ void sprdwl_event_disconnect(struct sprdwl_vif *vif, u8 *data, u16 len)
 	sprdwl_report_disconnection(vif, reason_code);
 }
 
-void sprdwl_event_mic_failure(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_mic_failure(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	struct sprdwl_event_mic_failure *mic_failure =
 	    (struct sprdwl_event_mic_failure *)data;
@@ -1718,13 +1718,13 @@ void sprdwl_event_mic_failure(struct sprdwl_vif *vif, u8 *data, u16 len)
 				  mic_failure->key_id);
 }
 
-void sprdwl_event_remain_on_channel_expired(struct sprdwl_vif *vif,
+static void sprdwl_event_remain_on_channel_expired(struct sprdwl_vif *vif,
 					    u8 *data, u16 len)
 {
 	sprdwl_report_remain_on_channel_expired(vif);
 }
 
-void sprdwl_event_mlme_tx_status(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_mlme_tx_status(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	struct sprdwl_event_mgmt_tx_status *tx_status =
 	    (struct sprdwl_event_mgmt_tx_status *)data;
@@ -1780,7 +1780,7 @@ void sprdwl_event_frame(struct sprdwl_vif *vif, u8 *data, u16 len, int flag)
 	}
 }
 
-void sprdwl_event_gscan_frame(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_gscan_frame(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	u32 report_event;
 	u8 *pos = data;
@@ -1823,7 +1823,7 @@ void sprdwl_event_gscan_frame(struct sprdwl_vif *vif, u8 *data, u16 len)
 		sprdwl_buffer_full_event(vif);
 }
 
-void sprdwl_event_cqm(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_cqm(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	struct sprdwl_event_cqm *p;
 	u8 rssi_event;
@@ -1851,7 +1851,7 @@ void sprdwl_event_cqm(struct sprdwl_vif *vif, u8 *data, u16 len)
 	sprdwl_report_cqm(vif, rssi_event);
 }
 
-void sprdwl_event_tdls(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_tdls(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	unsigned char peer[ETH_ALEN];
 	u8 oper;
@@ -1869,7 +1869,7 @@ void sprdwl_event_tdls(struct sprdwl_vif *vif, u8 *data, u16 len)
 	sprdwl_report_tdls(vif, peer, oper, reason_code);
 }
 
-void sprdwl_event_wmm_report(struct sprdwl_vif *vif, u8 *data, u16 len)
+static void sprdwl_event_wmm_report(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	vif->priv->if_ops->set_qos(vif->mode, data[0]);
 }

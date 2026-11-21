@@ -2181,11 +2181,8 @@ static void __exit i2c_exit(void)
 	debugfs_remove_recursive(i2c_debugfs_root);
 #ifdef CONFIG_I2C_COMPAT
 	class_compat_unregister(i2c_adapter_compat_class);
-class_err:
-	bus_unregister(&i2c_bus_type);
-#else
-	bus_unregister(&i2c_bus_type);
 #endif
+	bus_unregister(&i2c_bus_type);
 	tracepoint_synchronize_unregister();
 }
 

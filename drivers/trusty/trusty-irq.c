@@ -156,7 +156,7 @@ static int trusty_irq_call_notify(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-irqreturn_t trusty_irq_handler(int irq, void *data)
+static irqreturn_t trusty_irq_handler(int irq, void *data)
 {
 	struct trusty_irq *trusty_irq = data;
 	struct trusty_irq_state *is = trusty_irq->is;
@@ -566,11 +566,8 @@ static int trusty_irq_probe(struct platform_device *pdev)
 
 	return 0;
 
-err_on_each_cpu:
-	cpuhp_remove_state_nocalls(is->cpuhp_state);
-	trusty_irq_is = NULL;
-	on_each_cpu(trusty_irq_cpu_down, is, 1);
 err_register_hotcpu_notifier:
+	trusty_irq_is = NULL;
 	spin_lock_irqsave(&is->normal_irqs_lock, irq_flags);
 	trusty_irq_disable_irqset(is, &is->normal_irqs);
 	spin_unlock_irqrestore(&is->normal_irqs_lock, irq_flags);
@@ -587,7 +584,6 @@ err_alloc_is:
 
 static void trusty_irq_remove(struct platform_device *pdev)
 {
-	int ret;
 	unsigned long irq_flags;
 	struct trusty_irq_state *is = platform_get_drvdata(pdev);
 

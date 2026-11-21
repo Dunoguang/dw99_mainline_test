@@ -790,7 +790,6 @@ static int dfm_startup(struct snd_pcm_substream *substream,
 {
 	int ret;
 	int vbc_idx;
-	int i;
 	static const unsigned int dfm_all_rates[] = {
 		32000, 44100, 48000, 8000
 	};

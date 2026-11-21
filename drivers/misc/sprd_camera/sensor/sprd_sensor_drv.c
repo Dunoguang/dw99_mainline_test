@@ -609,7 +609,7 @@ void sprd_sensor_unregister_driver(void)
 	i2c_del_driver(&sprd_sub3_sensor_driver);
 }
 
-int select_sensor_mclk(uint8_t clk_set, char **clk_src_name, uint8_t *clk_div)
+static int select_sensor_mclk(uint8_t clk_set, char **clk_src_name, uint8_t *clk_div)
 {
 	unsigned char i = 0;
 	unsigned char j = 0;

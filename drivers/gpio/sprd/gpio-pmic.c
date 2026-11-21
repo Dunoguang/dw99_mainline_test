@@ -256,7 +256,7 @@ static int sprd_pmic_eic_irq_set_type(struct irq_data *data,
 	return 0;
 }
 
-void sprd_gpio_irq_bus_lock(struct irq_data *d)
+static void sprd_gpio_irq_bus_lock(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct sprd_gpio_chip *sprd_gpio = to_sprd_gpio(gc);
@@ -264,7 +264,7 @@ void sprd_gpio_irq_bus_lock(struct irq_data *d)
 	mutex_lock(&sprd_gpio->spi_lock);
 }
 
-void sprd_gpio_irq_bus_unlock(struct irq_data *d)
+static void sprd_gpio_irq_bus_unlock(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct sprd_gpio_chip *sprd_gpio = to_sprd_gpio(gc);
@@ -293,7 +293,7 @@ void sprd_gpio_irq_bus_unlock(struct irq_data *d)
 	mutex_unlock(&sprd_gpio->spi_lock);
 }
 
-void sprd_eic_irq_bus_lock(struct irq_data *d)
+static void sprd_eic_irq_bus_lock(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct sprd_gpio_chip *sprd_gpio = to_sprd_gpio(gc);
@@ -301,7 +301,7 @@ void sprd_eic_irq_bus_lock(struct irq_data *d)
 	mutex_lock(&sprd_gpio->spi_lock);
 }
 
-void sprd_eic_irq_bus_unlock(struct irq_data *d)
+static void sprd_eic_irq_bus_unlock(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct sprd_gpio_chip *sprd_gpio = to_sprd_gpio(gc);

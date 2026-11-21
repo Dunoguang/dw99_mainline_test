@@ -9,6 +9,12 @@
 #include <linux/susfs_def.h>
 #include <linux/statfs.h>
 
+struct dentry;
+struct filename;
+struct inode;
+struct kstat;
+struct seq_file;
+
 #define SUSFS_VERSION "v2.4.0"
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
 #define SUSFS_VARIANT "NON-GKI"
@@ -202,6 +208,7 @@ void susfs_add_sus_path(void __user **user_info);
 void susfs_add_sus_path_loop(void __user **user_info);
 void susfs_set_sus_path_uid_filter(void __user **user_info);
 void susfs_parse_sus_path_app_strings(void);
+bool susfs_is_inode_sus_path(struct inode *inode);
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 
 /* sus_mount */
@@ -213,6 +220,20 @@ void susfs_set_hide_sus_mnts_for_non_su_procs(void __user **user_info);
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 void susfs_add_sus_kstat(void __user **user_info);
 void susfs_update_sus_kstat(void __user **user_info);
+bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
+void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode,
+					   struct kstat *stat, u32 result_mask);
+void susfs_sus_kstat_spoof_show_map_vma(struct inode *inode, dev_t *out_dev,
+				       unsigned long *out_ino);
+int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf,
+				    bool *is_fuse);
+void susfs_sus_kstat_spoof_inotify_fdinfo(unsigned long *out_target_ino,
+					dev_t *out_target_dev);
+void susfs_sus_kstat_spoof_proc_fd_seq_show(int *out_target_mnt_id,
+					  unsigned long *out_target_ino,
+					  dev_t target_dev);
+int statfs_by_dentry_wrapper(struct dentry *dentry, struct kstatfs *buf);
+int calculate_f_flags_wrapper(struct vfsmount *mnt);
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 
 /* spoof_uname */
@@ -229,11 +250,21 @@ void susfs_enable_log(void __user **user_info);
 /* spoof_cmdline_or_bootconfig */
 #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
 void susfs_set_cmdline_or_bootconfig(void __user **user_info);
+void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);
 #endif // #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
 
 /* open_redirect */
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 void susfs_add_open_redirect(void __user **user_info);
+struct filename *susfs_open_redirect_spoof_do_sys_openat(struct inode *inode);
+int susfs_open_redirect_spoof_vfs_readlink(struct inode *inode,
+					 char __user *buffer, int buflen);
+int susfs_open_redirect_spoof_do_proc_readlink(struct inode *inode,
+					     char *tmp_buf, int buflen);
+int susfs_open_redirect_spoof_show_map_vma_srcu(struct inode *inode,
+					      unsigned long *out_ino,
+					      dev_t *out_dev,
+					      char **out_spoofed_name);
 #endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 
 /* sus_map */
@@ -245,7 +276,15 @@ void susfs_add_sus_map(void __user **user_info);
 #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
 void susfs_set_priority_uid_filter(void __user **user_info);
 void susfs_parse_priority_app_strings(void);
+bool susfs_is_priority_uid_filtered(uid_t uid);
 #endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+
+int susfs_add_sus_type(const char *secctx, u32 type_value);
+bool susfs_is_sus_type_rcu(u32 type_value);
+int susfs_add_sus_avd_allowed_by_type(u32 s_type, u32 t_type, u32 c_type,
+				     u32 orig_avd_allowed);
+void susfs_spoof_avd_allowed_rcu(u32 s_type, u32 t_type, u32 c_type,
+				u32 *avd_allowed);
 
 void susfs_set_avc_log_spoofing(void __user **user_info);
 

@@ -362,7 +362,7 @@ static int sprd_gpio_req_enable(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
-void sprd_gpio_disable(struct pinctrl_dev *pctldev,
+static void sprd_gpio_disable(struct pinctrl_dev *pctldev,
 		       struct pinctrl_gpio_range *range,
 		       unsigned offset)
 {
@@ -772,7 +772,7 @@ static void sprd_pinctrl_remove(struct platform_device *pdev)
 	pinctrl_unregister(sprd_pctl->pctl);
 }
 
-void sprd_pinctrl_shutdown(struct platform_device *pdev)
+static void sprd_pinctrl_shutdown(struct platform_device *pdev)
 {
 	struct pinctrl *pinctl = devm_pinctrl_get(&pdev->dev);
 	struct pinctrl_state *state;

@@ -1026,7 +1026,7 @@ out:
 	return ret;
 }
 
-ssize_t adf_file_read(struct file *filp, char __user *buffer,
+static ssize_t adf_file_read(struct file *filp, char __user *buffer,
 		 size_t count, loff_t *offset)
 {
 	struct adf_file *fpriv = filp->private_data;
@@ -1040,7 +1040,7 @@ ssize_t adf_file_read(struct file *filp, char __user *buffer,
 	return adf_file_copy_to_user(fpriv, buffer, count);
 }
 
-unsigned int adf_file_poll(struct file *filp, struct poll_table_struct *wait)
+static unsigned int adf_file_poll(struct file *filp, struct poll_table_struct *wait)
 {
 	struct adf_file *fpriv = filp->private_data;
 	unsigned int mask = 0;

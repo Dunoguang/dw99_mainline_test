@@ -13,6 +13,7 @@
  *
  */
 
+#include <linux/uid_sys_stats.h>
 #include <linux/atomic.h>
 #include <linux/cpufreq_times.h>
 #include <linux/err.h>

@@ -17,7 +17,7 @@
 
 static struct sprdbat_drivier_data *bat_drv_data;
 
-void sprdchg_fan54015_set_vindpm(int vin)
+static void sprdchg_fan54015_set_vindpm(int vin)
 {
 	unsigned char reg_val = 0x0;
 
@@ -35,7 +35,7 @@ void sprdchg_fan54015_set_vindpm(int vin)
 	fan54015_set_vindpm(reg_val);
 }
 
-void sprdchg_fan54015_termina_cur_set(uint32_t cur)
+static void sprdchg_fan54015_termina_cur_set(uint32_t cur)
 {
 	unsigned char reg_val = 0x0;
 
@@ -51,7 +51,7 @@ void sprdchg_fan54015_termina_cur_set(uint32_t cur)
 	fan54015_termina_cur_set(reg_val);
 }
 
-void sprdchg_fan54015_termina_vol_set(uint32_t vol)
+static void sprdchg_fan54015_termina_vol_set(uint32_t vol)
 {
 	unsigned char reg_val = 0x0;
 
@@ -67,7 +67,7 @@ void sprdchg_fan54015_termina_vol_set(uint32_t vol)
 	fan54015_termina_vol_set(reg_val);
 }
 
-void sprdchg_fan54015_set_safety_vol(int vol)
+static void sprdchg_fan54015_set_safety_vol(int vol)
 {
 	unsigned char reg_val = 0x0;
 
@@ -82,7 +82,7 @@ void sprdchg_fan54015_set_safety_vol(int vol)
 	fan54015_set_safety_vol(reg_val);
 }
 
-void sprdchg_fan54015_set_safety_cur(int cur)
+static void sprdchg_fan54015_set_safety_cur(int cur)
 {
 	unsigned char reg_val = 0x7;
 
@@ -90,7 +90,7 @@ void sprdchg_fan54015_set_safety_cur(int cur)
 	fan54015_set_safety_cur(reg_val);
 }
 
-unsigned char sprdchg_fan54015_cur2reg(uint32_t cur)
+static unsigned char sprdchg_fan54015_cur2reg(uint32_t cur)
 {
 	unsigned char reg_val;
 
@@ -113,7 +113,7 @@ unsigned char sprdchg_fan54015_cur2reg(uint32_t cur)
 	return reg_val;
 }
 
-unsigned int sprdchg_fan54015_reg2cur(unsigned char reg_val)
+static unsigned int sprdchg_fan54015_reg2cur(unsigned char reg_val)
 {
 	unsigned int cur = 0;
 
@@ -148,7 +148,7 @@ unsigned int sprdchg_fan54015_reg2cur(unsigned char reg_val)
 	return cur;
 }
 
-unsigned char sprdchg_psc5415a_cur2reg(uint32_t cur)
+static unsigned char sprdchg_psc5415a_cur2reg(uint32_t cur)
 {
 	unsigned char reg_val;
 
@@ -172,7 +172,7 @@ unsigned char sprdchg_psc5415a_cur2reg(uint32_t cur)
 
 }
 
-unsigned char sprdchg_psc5425a_cur2reg(uint32_t cur)
+static unsigned char sprdchg_psc5425a_cur2reg(uint32_t cur)
 {
 	unsigned char reg_val;
 
@@ -195,7 +195,7 @@ unsigned char sprdchg_psc5425a_cur2reg(uint32_t cur)
 	return reg_val;
 }
 
-unsigned int sprdchg_psc5415a_reg2cur(unsigned char reg_val)
+static unsigned int sprdchg_psc5415a_reg2cur(unsigned char reg_val)
 {
 	unsigned int cur = 0;
 
@@ -231,7 +231,7 @@ unsigned int sprdchg_psc5415a_reg2cur(unsigned char reg_val)
 	return cur;
 }
 
-unsigned int sprdchg_psc5425a_reg2cur(unsigned char reg_val)
+static unsigned int sprdchg_psc5425a_reg2cur(unsigned char reg_val)
 {
 	unsigned int cur = 0;
 
@@ -266,12 +266,12 @@ unsigned int sprdchg_psc5425a_reg2cur(unsigned char reg_val)
 	return cur;
 }
 
-unsigned int sprdchg_tq24157_reg2cur(unsigned char reg_val)
+static unsigned int sprdchg_tq24157_reg2cur(unsigned char reg_val)
 {
 	return (550 + reg_val * 100);
 }
 
-unsigned char sprdchg_tq24157_cur2reg(uint32_t cur)
+static unsigned char sprdchg_tq24157_cur2reg(uint32_t cur)
 {
 	unsigned char reg_val;
 
@@ -288,22 +288,22 @@ unsigned char sprdchg_tq24157_cur2reg(uint32_t cur)
 }
 
 
-void sprdchg_fan54015_reset_timer(void)
+static void sprdchg_fan54015_reset_timer(void)
 {
 	fan54015_reset_timer();
 }
 
-void sprdchg_fan54015_otg_enable(int enable)
+static void sprdchg_fan54015_otg_enable(int enable)
 {
 	fan54015_otg_enable(enable);
 }
 
-void sprdchg_fan54015_stop_charging(unsigned int flag)
+static void sprdchg_fan54015_stop_charging(unsigned int flag)
 {
 	fan54015_stop_charging();
 }
 
-int sprdchg_fan54015_get_charge_status(void)
+static int sprdchg_fan54015_get_charge_status(void)
 {
 	unsigned char chg_status = fan54015_get_chg_status();
 
@@ -323,7 +323,7 @@ int sprdchg_fan54015_get_charge_status(void)
 	}
 }
 
-int sprdchg_fan54015_get_charge_fault(void)
+static int sprdchg_fan54015_get_charge_fault(void)
 {
 	unsigned char fault_val = 0;
 	int ret = 0;
@@ -349,7 +349,7 @@ int sprdchg_fan54015_get_charge_fault(void)
 	return ret;
 }
 
-void sprdchg_fan54015_set_cur(uint32_t cur)
+static void sprdchg_fan54015_set_cur(uint32_t cur)
 {
 	unsigned char reg_val = 0, vendor_id = VENDOR_FAN54015;
 	unsigned char vendor_id2 = 0;
@@ -385,12 +385,12 @@ void sprdchg_fan54015_set_cur(uint32_t cur)
 	fan54015_set_chg_current(reg_val);
 }
 
-void sprdchg_fan54015_enable_chg(void)
+static void sprdchg_fan54015_enable_chg(void)
 {
 	fan54015_enable_chg();
 }
 
-unsigned int sprdchg_fan54015_get_chgcur(void)
+static unsigned int sprdchg_fan54015_get_chgcur(void)
 {
 	unsigned char reg_val = 0, vendor_id = VENDOR_FAN54015;
 	unsigned int cur = 550;
@@ -441,7 +441,7 @@ void sprdchg_fan54015_adjust_cur(int adjust)
 	fan54015_enable_chg();
 }
 
-int sprdchg_fan54015_get_chgcur_step(int cur, int increase)
+static int sprdchg_fan54015_get_chgcur_step(int cur, int increase)
 {
 	unsigned char reg_val = fan54015_get_chg_current();
 	unsigned char vendor_id = VENDOR_FAN54015;
@@ -488,7 +488,7 @@ int sprdchg_fan54015_get_chgcur_step(int cur, int increase)
 		return (cur - new_cur);
 }
 
-void sprdchg_fan54015_init(struct sprdbat_drivier_data *bdata)
+static void sprdchg_fan54015_init(struct sprdbat_drivier_data *bdata)
 {
 	unsigned char vendor_id;
 	if (NULL == bdata)

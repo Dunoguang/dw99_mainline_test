@@ -25,12 +25,12 @@ int gsp_layer_to_type(struct gsp_layer *layer)
 	return layer->type;
 }
 
-u32 gsp_layer_to_uv_offset(struct gsp_layer *layer)
+static u32 gsp_layer_to_uv_offset(struct gsp_layer *layer)
 {
 	return layer->mem_data.uv_offset;
 }
 
-u32 gsp_layer_to_v_offset(struct gsp_layer *layer)
+static u32 gsp_layer_to_v_offset(struct gsp_layer *layer)
 {
 	return layer->mem_data.v_offset;
 }
@@ -40,17 +40,17 @@ int gsp_layer_to_share_fd(struct gsp_layer *layer)
 	return layer->mem_data.share_fd;
 }
 
-struct gsp_buf *gsp_layer_to_buf(struct gsp_layer *layer)
+static struct gsp_buf *gsp_layer_to_buf(struct gsp_layer *layer)
 {
 	return &layer->mem_data.buf;
 }
 
-struct gsp_buf_map *gsp_layer_to_buf_map(struct gsp_layer *layer)
+static struct gsp_buf_map *gsp_layer_to_buf_map(struct gsp_layer *layer)
 {
 	return &layer->mem_data.map;
 }
 
-struct gsp_addr_data *gsp_layer_to_addr(struct gsp_layer *layer)
+static struct gsp_addr_data *gsp_layer_to_addr(struct gsp_layer *layer)
 {
 	return &layer->src_addr;
 }
@@ -60,12 +60,12 @@ int gsp_layer_to_wait_fd(struct gsp_layer *layer)
 	return layer->wait_fd;
 }
 
-int gsp_layer_to_sig_fd(struct gsp_layer *layer)
+static int gsp_layer_to_sig_fd(struct gsp_layer *layer)
 {
 	return layer->sig_fd;
 }
 
-int gsp_layer_is_enable(struct gsp_layer *layer)
+static int gsp_layer_is_enable(struct gsp_layer *layer)
 {
 	return layer->enable;
 }
@@ -88,28 +88,9 @@ void gsp_layer_set_filled(struct gsp_layer *layer)
 	layer->filled = 1;
 }
 
-int gsp_layer_buf_verify(struct gsp_buf *buf)
+static int gsp_layer_buf_verify(struct gsp_buf *buf)
 {
 	return (buf->size == 0) || (IS_ERR_OR_NULL(buf->dmabuf)) ? 1 : 0;
-}
-
-int gsp_layer_buf_map_verify(struct gsp_buf_map *map)
-{
-	int ret = -1;
-
-	ret =  (IS_ERR_OR_NULL(map->attachment))
-		|| (IS_ERR_OR_NULL(map->table));
-
-	return ret == 0 ? 0 : -1;
-}
-
-int gsp_layer_addr_is_unset(struct gsp_layer *layer)
-{
-	struct gsp_addr_data *addr = NULL;
-
-	addr = gsp_layer_to_addr(layer);
-
-	return addr->addr_y == 0 ? 1 : 0;
 }
 
 int gsp_layer_need_iommu(struct gsp_layer *layer)
@@ -122,7 +103,7 @@ int gsp_layer_need_iommu(struct gsp_layer *layer)
 		&& buf->is_iova;
 }
 
-void gsp_layer_addr_set(struct gsp_layer *layer, u32 iova_addr)
+static void gsp_layer_addr_set(struct gsp_layer *layer, u32 iova_addr)
 {
 	struct gsp_addr_data *addr = NULL;
 	u32 offset = 0;
@@ -141,7 +122,7 @@ void gsp_layer_addr_set(struct gsp_layer *layer, u32 iova_addr)
 
 }
 
-void gsp_layer_addr_put(struct gsp_layer *layer)
+static void gsp_layer_addr_put(struct gsp_layer *layer)
 {
 	struct gsp_addr_data *addr = NULL;
 
@@ -226,7 +207,7 @@ void gsp_layer_put_dmabuf(struct gsp_layer *layer)
 	GSP_DEBUG("gsp layer put dmabuf\n");
 }
 
-void gsp_layer_dmabuf_unmap(struct gsp_layer *layer)
+static void gsp_layer_dmabuf_unmap(struct gsp_layer *layer)
 {
 	struct gsp_buf *buf = NULL;
 	struct gsp_buf_map *map = NULL;
@@ -248,7 +229,7 @@ void gsp_layer_dmabuf_unmap(struct gsp_layer *layer)
 	GSP_DEBUG("gsp layer dmabuf unmap\n");
 }
 
-int gsp_layer_dmabuf_map(struct gsp_layer *layer,
+static int gsp_layer_dmabuf_map(struct gsp_layer *layer,
 			 struct device *dev)
 {
 	int ret = -1;

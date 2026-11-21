@@ -11,6 +11,7 @@
  *
  */
 
+#include <linux/mmc/sprd.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/highmem.h>

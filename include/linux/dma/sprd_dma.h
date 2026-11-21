@@ -66,7 +66,6 @@
 /* DMA glb offset and eb */
 #ifndef BIT_AON_APB_AON_DMA_EB
 #define BIT_AON_APB_AON_DMA_EB		BIT(22)
-#define BIT_AON_APB_AON_DMA_SOFT_RST	BIT(6)
 #endif
 #ifndef REG_AON_APB_AON_DMA_INT_EN
 #define REG_AON_APB_AON_DMA_INT_EN	0x11C
@@ -303,4 +302,9 @@ enum addr_type {
 #define DMA_IIS_TX	DMA_IIS0_TX
 
 int sprd_dma_check_register(struct dma_chan *c);
+
+struct dma_async_tx_descriptor *sprd_prep_dma_sg(struct dma_chan *chan,
+		 struct scatterlist *dst_sg, unsigned int dst_nents,
+		 struct scatterlist *src_sg, unsigned int src_nents,
+		 unsigned long flags);
 #endif

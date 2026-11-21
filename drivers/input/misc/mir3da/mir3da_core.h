@@ -250,7 +250,6 @@ int mir3da_set_filter_param(struct mir3da_filter_param_s* param);
 extern char bxstk;
 extern char bystk;
 extern char bzstk;
-extern  int squareRoot(int val);
 #endif
 
 enum {

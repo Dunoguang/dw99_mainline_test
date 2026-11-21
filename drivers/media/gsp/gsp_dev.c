@@ -177,7 +177,7 @@ static struct of_device_id gsp_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, gsp_dt_ids);
 
-int gsp_dev_name_cmp(struct gsp_dev *gsp)
+static int gsp_dev_name_cmp(struct gsp_dev *gsp)
 {
 	return strncmp(gsp->name, GSP_DEVICE_NAME, sizeof(gsp->name));
 }
@@ -192,7 +192,7 @@ int gsp_dev_verify(struct gsp_dev *gsp)
 	return gsp_dev_name_cmp(gsp);
 }
 
-void gsp_dev_set(struct gsp_dev *gsp, struct platform_device *pdev)
+static void gsp_dev_set(struct gsp_dev *gsp, struct platform_device *pdev)
 {
 	if (gsp_dev_verify(gsp)
 	    || IS_ERR_OR_NULL(pdev)) {
@@ -229,12 +229,12 @@ struct device *gsp_dev_to_device(struct gsp_dev *gsp)
 	return gsp->dev;
 }
 
-int gsp_dev_to_core_cnt(struct gsp_dev *gsp)
+static int gsp_dev_to_core_cnt(struct gsp_dev *gsp)
 {
 	return gsp->core_cnt;
 }
 
-int gsp_dev_to_io_cnt(struct gsp_dev *gsp)
+static int gsp_dev_to_io_cnt(struct gsp_dev *gsp)
 {
 	return gsp->io_cnt;
 }
@@ -267,7 +267,7 @@ int gsp_dev_is_idle(struct gsp_dev *gsp)
 	return ret;
 }
 
-int gsp_dev_is_suspend(struct gsp_dev *gsp)
+static int gsp_dev_is_suspend(struct gsp_dev *gsp)
 {
 	int ret = 0;
 	struct gsp_core *core = NULL;
@@ -281,7 +281,7 @@ int gsp_dev_is_suspend(struct gsp_dev *gsp)
 	return ret;
 }
 
-int gsp_dev_is_suspending(struct gsp_dev *gsp)
+static int gsp_dev_is_suspending(struct gsp_dev *gsp)
 {
 	int ret = 0;
 	struct gsp_core *core = NULL;
@@ -296,7 +296,7 @@ int gsp_dev_is_suspending(struct gsp_dev *gsp)
 
 }
 
-struct gsp_core_ops *gsp_dev_to_core_ops(struct gsp_dev *gsp)
+static struct gsp_core_ops *gsp_dev_to_core_ops(struct gsp_dev *gsp)
 {
 	const struct of_device_id *id = NULL;
 	struct gsp_core_ops *ops = NULL;
@@ -322,7 +322,7 @@ struct gsp_interface *gsp_dev_to_interface(struct gsp_dev *gsp)
 	return gsp->interface;
 }
 
-int gsp_dev_prepare(struct gsp_dev *gsp)
+static int gsp_dev_prepare(struct gsp_dev *gsp)
 {
 	int ret = -1;
 
@@ -343,7 +343,7 @@ int gsp_dev_prepare(struct gsp_dev *gsp)
 	return ret;
 }
 
-void gsp_dev_unprepare(struct gsp_dev *gsp)
+static void gsp_dev_unprepare(struct gsp_dev *gsp)
 {
 	int ret = -1;
 
@@ -362,7 +362,7 @@ void gsp_dev_unprepare(struct gsp_dev *gsp)
 		GSP_ERR("gsp interface unprepare failed\n");
 }
 
-int gsp_dev_init(struct gsp_dev *gsp)
+static int gsp_dev_init(struct gsp_dev *gsp)
 {
 	int ret = -1;
 	struct gsp_core *core = NULL;
@@ -409,7 +409,7 @@ exit:
 	return ret;
 }
 
-int gsp_dev_alloc(struct device *dev, struct gsp_dev **gsp)
+static int gsp_dev_alloc(struct device *dev, struct gsp_dev **gsp)
 {
 	int ret = -1;
 	int i = 0;
@@ -478,7 +478,7 @@ int gsp_dev_alloc(struct device *dev, struct gsp_dev **gsp)
 	return ret;
 }
 
-int gsp_dev_alloc_and_init(struct device *dev, struct gsp_dev **gsp)
+static int gsp_dev_alloc_and_init(struct device *dev, struct gsp_dev **gsp)
 {
 	int ret = -1;
 
@@ -501,7 +501,7 @@ int gsp_dev_alloc_and_init(struct device *dev, struct gsp_dev **gsp)
 	return ret;
 }
 
-int gsp_dev_get_capability(struct gsp_dev *gsp,
+static int gsp_dev_get_capability(struct gsp_dev *gsp,
 		       struct gsp_capability **capa)
 {
 	struct gsp_core *core = NULL;
@@ -536,7 +536,7 @@ int gsp_dev_get_capability(struct gsp_dev *gsp,
 	return 0;
 }
 
-void gsp_dev_start_work(struct gsp_dev *gsp)
+static void gsp_dev_start_work(struct gsp_dev *gsp)
 {
 	struct gsp_core *core = NULL;
 
@@ -549,7 +549,7 @@ void gsp_dev_start_work(struct gsp_dev *gsp)
 	}
 }
 
-int gsp_dev_resume_wait(struct gsp_dev *gsp)
+static int gsp_dev_resume_wait(struct gsp_dev *gsp)
 {
 	struct gsp_core *core = NULL;
 	long time = 0;
@@ -586,7 +586,7 @@ int gsp_dev_resume_wait(struct gsp_dev *gsp)
 }
 
 
-int gsp_dev_open(struct inode *node, struct file *file)
+static int gsp_dev_open(struct inode *node, struct file *file)
 {
 	struct gsp_dev *gsp = NULL;
 	struct misc_dev *misc = NULL;
@@ -609,14 +609,14 @@ int gsp_dev_open(struct inode *node, struct file *file)
 	return 0;
 }
 
-ssize_t gsp_dev_read(struct file *file, char __user *data,
+static ssize_t gsp_dev_read(struct file *file, char __user *data,
 		     size_t cnt, loff_t *off)
 {
 	/* to add print core information */
 	return 1;
 }
 
-ssize_t gsp_dev_write(struct file *file, const char __user *data,
+static ssize_t gsp_dev_write(struct file *file, const char __user *data,
 		      size_t cnt, loff_t *off)
 {
 	/* to add reset gsp device interface */
@@ -834,7 +834,7 @@ static void gsp_dev_deinit(struct gsp_dev *gsp)
 	gsp_dev_sysfs_destroy(gsp);
 }
 
-void gsp_dev_free_and_deinit(struct gsp_dev *gsp)
+static void gsp_dev_free_and_deinit(struct gsp_dev *gsp)
 {
 	if (IS_ERR_OR_NULL(gsp)) {
 		GSP_ERR("dev free and deinit params error\n");

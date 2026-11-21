@@ -362,6 +362,9 @@ static ssize_t dual_role_store_property(struct device *dev,
 	bool result = false;
 
 	dup_buf = kstrdupcase(buf, GFP_KERNEL, false);
+	if (!dup_buf)
+		return -ENOMEM;
+
 	switch (off) {
 	case DUAL_ROLE_PROP_MODE:
 		total = DUAL_ROLE_PROP_MODE_TOTAL;
@@ -377,9 +380,10 @@ static ssize_t dual_role_store_property(struct device *dev,
 		break;
 	case DUAL_ROLE_PROP_VCONN_SUPPLY:
 		ret = kstrtobool(dup_buf, &result);
+		if (ret)
+			goto error;
 		value = result;
-		if (!ret)
-			goto setprop;
+		goto setprop;
 	default:
 		ret = -EINVAL;
 		goto error;
@@ -448,7 +452,7 @@ static const struct attribute_group *dual_role_attr_groups[] = {
 	NULL,
 };
 
-void dual_role_init_attrs(struct device_type *dev_type)
+static void dual_role_init_attrs(struct device_type *dev_type)
 {
 	int i;
 
@@ -458,7 +462,7 @@ void dual_role_init_attrs(struct device_type *dev_type)
 		__dual_role_attrs[i] = &dual_role_attrs[i].attr;
 }
 
-int dual_role_uevent(const struct device *dev, struct kobj_uevent_env *env)
+static int dual_role_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
 	struct dual_role_phy_instance *dual_role = dev_get_drvdata(dev);
 	int ret = 0, j;

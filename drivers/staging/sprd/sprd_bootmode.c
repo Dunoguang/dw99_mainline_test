@@ -10,6 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <soc/sprd/bootmode.h>
 #include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/init.h>

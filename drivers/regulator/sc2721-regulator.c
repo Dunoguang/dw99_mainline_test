@@ -43,7 +43,7 @@ static inline int regu_adi_write(unsigned long reg, unsigned long or_val,
 #ifdef REGU_DEBUG
 #define debug(format, arg...) pr_info("regu: @@@%s: " format, __func__, ##arg)
 #else
-#define debug(format, arg...)
+#define debug(...) do { } while (0)
 #endif
 
 #ifndef	ANA_REG_OR

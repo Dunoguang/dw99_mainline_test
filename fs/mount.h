@@ -287,3 +287,9 @@ static inline void clear_write_hold(struct mount *m)
 }
 
 struct mnt_namespace *mnt_ns_from_dentry(struct dentry *dentry);
+
+#ifdef CONFIG_KSU_SUSFS
+int susfs_get_non_sus_mnt_id_from_mnt(struct mount *orig_mnt);
+u64 susfs_get_non_sus_mnt_id_unique_from_mnt(struct mount *orig_mnt);
+struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vfsmnt);
+#endif

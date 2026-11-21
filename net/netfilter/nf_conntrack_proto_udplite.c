@@ -35,40 +35,6 @@ static unsigned int udplite_timeouts[UDPLITE_CT_MAX] = {
 	[UDPLITE_CT_REPLIED]	= 180*HZ,
 };
 
-static bool udplite_pkt_to_tuple(const struct sk_buff *skb,
-				 unsigned int dataoff,
-				 struct net *net,
-				 struct nf_conntrack_tuple *tuple)
-{
-	const struct udphdr *hp;
-	struct udphdr _hdr;
-
-	hp = skb_header_pointer(skb, dataoff, sizeof(_hdr), &_hdr);
-	if (hp == NULL)
-		return false;
-
-	tuple->src.u.udp.port = hp->source;
-	tuple->dst.u.udp.port = hp->dest;
-	return true;
-}
-
-static bool udplite_invert_tuple(struct nf_conntrack_tuple *tuple,
-				 const struct nf_conntrack_tuple *orig)
-{
-	tuple->src.u.udp.port = orig->dst.u.udp.port;
-	tuple->dst.u.udp.port = orig->src.u.udp.port;
-	return true;
-}
-
-/* Print out the per-protocol part of the tuple. */
-static void udplite_print_tuple(struct seq_file *s,
-				const struct nf_conntrack_tuple *tuple)
-{
-	seq_printf(s, "sport=%hu dport=%hu ",
-		   ntohs(tuple->src.u.udp.port),
-		   ntohs(tuple->dst.u.udp.port));
-}
-
 /* Returns verdict for packet, and may modify conntracktype */
 static int udplite_packet(struct nf_conn *ct,
 			  const struct sk_buff *skb,
@@ -90,8 +56,6 @@ static int udplite_packet(struct nf_conn *ct,
 	}
 	return NF_ACCEPT;
 }
-
-/* Called when a new connection for this protocol found. */
 
 /* ==== 7.2 adaptation: static registration, no per-net ==== */
 const struct nf_conntrack_l4proto nf_conntrack_l4proto_udplite = {

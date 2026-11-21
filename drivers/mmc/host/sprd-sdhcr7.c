@@ -11,6 +11,7 @@
  *
  */
 
+#include <linux/mmc/sprd.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/highmem.h>
@@ -599,11 +600,12 @@ static void sprd_send_cmd(struct sprd_sdhc_host *host, struct mmc_command *cmd)
 		else if (host->version >= SPRD_SDHC_BIT_SPEC_400)
 			sprd_sdhc_set_32_blk_cnt(host, data->blocks);
 		if (if_mult) {
-			if (!host->mrq->sbc && SPRD_SDHC_FLAG_ENABLE_ACMD12)
+			if (!host->mrq->sbc && SPRD_SDHC_FLAG_ENABLE_ACMD12) {
 				auto_cmd = host->auto_cmd_mode;
-			else if (host->mrq->sbc && SPRD_SDHC_FLAG_ENABLE_ACMD23)
+			} else if (host->mrq->sbc && SPRD_SDHC_FLAG_ENABLE_ACMD23) {
 				auto_cmd = host->auto_cmd_mode;
 				sprd_sdhc_set_autocmd23(host);
+			}
 		}
 		if (host->flags & SPRD_USE_ADMA) {
 			sprd_admd_mode(host, data);
@@ -1329,7 +1331,7 @@ static int sprd_sdhc_get_cd(struct mmc_host *mmc)
 	}
 
 	gpio_cd = mmc_gpio_get_cd(host->mmc);
-	if (IS_ERR_VALUE(gpio_cd))
+	if (gpio_cd < 0)
 		gpio_cd = 1;
 	mmiowb();
 	spin_unlock_irqrestore(&host->lock, flags);
@@ -1737,7 +1739,6 @@ static int sprd_get_ext_resource(struct sprd_sdhc_host *host)
 static void sprd_set_mmc_struct(struct sprd_sdhc_host *host,
 				struct mmc_host *mmc)
 {
-	struct device_node *np = host->pdev->dev.of_node;
 	u32 host_caps;
 
 	mmc = host->mmc;

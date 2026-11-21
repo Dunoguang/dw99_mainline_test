@@ -22,7 +22,7 @@
 #define CREATE_TRACE_POINTS
 #include "gsp_trace.h"
 
-void gsp_workqueue_load(struct gsp_kcfg *kcfg,
+static void gsp_workqueue_load(struct gsp_kcfg *kcfg,
 			struct gsp_workqueue *wq)
 {
 	if (IS_ERR_OR_NULL(kcfg)
@@ -64,7 +64,7 @@ int gsp_workqueue_is_filled(struct gsp_workqueue *wq)
 	return !ret;
 }
 
-struct gsp_core *gsp_workqueue_to_core(struct gsp_workqueue *wq)
+static struct gsp_core *gsp_workqueue_to_core(struct gsp_workqueue *wq)
 {
 	return wq->attached_core;
 }
@@ -93,7 +93,7 @@ void gsp_workqueue_filled_invalidate(struct gsp_workqueue *wq)
 
 }
 
-void gsp_workqueue_free(struct gsp_workqueue *wq)
+static void gsp_workqueue_free(struct gsp_workqueue *wq)
 {
 	struct list_head tmp_head;
 	struct list_head *tmp;

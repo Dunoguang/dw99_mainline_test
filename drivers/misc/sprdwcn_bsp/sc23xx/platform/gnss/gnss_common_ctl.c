@@ -227,7 +227,7 @@ int gnss_boot_wait(void)
 	return ret;
 }
 #else
-int gnss_file_judge(char *buff, int gnss_type)
+static int gnss_file_judge(char *buff, int gnss_type)
 {
 	unsigned int gnssfile_flag;
 	int file_type, ret = 0;
@@ -382,7 +382,7 @@ static int gnss_status_get(void)
 	return magic_value;
 }
 
-void gnss_dump_mem_ctrl_co(void)
+static void gnss_dump_mem_ctrl_co(void)
 {
 	char flag = 0; /* 0: default, all, 1: only data, pmu, aon */
 	unsigned int temp_status = 0;
@@ -453,8 +453,9 @@ static ssize_t gnss_dump_store(struct device *dev,
 		if (temp == 0)
 			ret = GNSS_DUMP_DATA_SUCCESS;
 #endif
-	} else
-		count = -EINVAL;
+	} else {
+		return -EINVAL;
+	}
 
 	return ret;
 }

@@ -456,17 +456,6 @@ static int sprd_rtc_set_time(struct device *dev,
 	return sprd_rtc_set_sec(secs);
 }
 
-static int sprd_rtc_set_mmss(struct device *dev, unsigned long secs)
-{
-	if (secs < secs_start_year_to_1970) {
-		dev_err(dev, "Can't set mmss, need the right time\n");
-		return -1;
-	}
-
-	secs -= secs_start_year_to_1970;
-	return sprd_rtc_set_sec(secs);
-}
-
 /*
  * check current time
  */
@@ -540,19 +529,6 @@ static irqreturn_t rtc_interrupt_handler(int irq, void *dev_id)
 	wake_lock_timeout(&rtc_irq_wake_lock, 2*HZ);
 	sprd_rtc_write(ANA_RTC_INT_CLR, RTC_INT_ALM_MSK);
 	return IRQ_HANDLED;
-}
-
-static int sprd_rtc_open(struct device *dev)
-{
-	int irq_en_reg;
-
-	/* enable rtc alarm interrupt */
-	irq_en_reg = sprd_rtc_read(ANA_RTC_INT_EN);
-	irq_en_reg |= RTC_ALARM_BIT | RTC_AUX_ALARM_BIT;
-	sprd_rtc_write(ANA_RTC_INT_EN, irq_en_reg);
-
-	dev_info(dev, "RTC open is calling\n");
-	return 0;
 }
 
 static int sprd_rtc_ioctl(struct device *dev, unsigned int cmd,

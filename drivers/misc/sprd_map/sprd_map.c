@@ -86,26 +86,7 @@ static long map_user_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 }
 
 #if IS_ENABLED(CONFIG_COMPAT)
-static int compat_get_map_user_data(
-			       struct compat_pmem_info __user *data32,
-			       struct pmem_info  __user *data)
-{
-	compat_size_t s;
-	compat_uint_t u;
-	compat_ulong_t l;
-	int err;
-
-	err = get_user(l, &data32->phy_addr);
-	err |= put_user(l, &data->phy_addr);
-	err |= get_user(u, &data32->phys_offset);
-	err |= put_user(u, &data->phys_offset);
-	err |= get_user(s, &data32->size);
-	err |= put_user(s, &data->size);
-
-	return err;
-}
-
-long compat_map_user_ioctl(struct file *filp, unsigned int cmd,
+static long compat_map_user_ioctl(struct file *filp, unsigned int cmd,
 		     unsigned long arg)
 {
 	long ret;
@@ -152,7 +133,7 @@ static struct miscdevice map_user_dev = {
 	.fops = &map_user_fops,
 };
 
-int map_user_probe(struct platform_device *pdev)
+static int map_user_probe(struct platform_device *pdev)
 {
 	int ret;
 

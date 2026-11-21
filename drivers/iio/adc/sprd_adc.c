@@ -744,7 +744,7 @@ static int sprd_adc_set_current(int enable, int isen)
  * returns: adc value
  */
 
-static int sprd_get_adc_rawdata_by_isen(unsigned int channel, int scale,
+static int __maybe_unused sprd_get_adc_rawdata_by_isen(unsigned int channel, int scale,
 					int sample_num, int isen)
 {
 	struct adc_sample_data adc;
@@ -1561,15 +1561,8 @@ static int sprd_pmic_adc_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static void sprd_pmic_adc_remove(struct platform_device *pdev)
-{
-	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
-
-}
-
 static struct platform_driver sprd_adc_driver = {
 	.probe = sprd_pmic_adc_probe,
-	.remove = sprd_pmic_adc_remove,
 	.driver = {
 		   .name = SPRD_MODULE_NAME,
 		   .of_match_table = of_match_ptr(pmic_adc_of_match),

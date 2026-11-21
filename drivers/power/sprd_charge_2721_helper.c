@@ -11,6 +11,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/zyt_info.h>
 #include <linux/reboot.h>
 #include <linux/string.h>
 #include <linux/gpio.h>
@@ -132,7 +133,7 @@ int sprdchg_init(struct sprd_battery_platform_data *pdata)
 	return 0;
 }
 
-int cmpint(const void *a, const void *b)
+static int cmpint(const void *a, const void *b)
 {
 	return *(int *)a - *(int *)b;
 }

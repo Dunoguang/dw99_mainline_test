@@ -314,22 +314,22 @@ static const struct sprd_wdt_data sprd_wdt_data_v2 = {
 	.wdt_stop = sprd_wdt_stop_v2,
 };
 
-void sprd_wdt_enable(void)
+static void sprd_wdt_enable(void)
 {
 	sprd_wdt.wdt_ops->wdt_enable();
 }
 
-void sprd_wdt_kick(void)
+static void sprd_wdt_kick(void)
 {
 	sprd_wdt.wdt_ops->wdt_kick();
 }
 
-void sprd_wdt_start(void)
+static void sprd_wdt_start(void)
 {
 	sprd_wdt.wdt_ops->wdt_start();
 }
 
-void sprd_wdt_stop(void)
+static void sprd_wdt_stop(void)
 {
 	sprd_wdt.wdt_ops->wdt_stop();
 }
@@ -376,7 +376,7 @@ static void sprd_wdt_feeder_init(void)
 		reset_timeout, pmic_timeout, feed_period);
 }
 
-int param_set_enabled(const char *val, const struct kernel_param *kp)
+static int param_set_enabled(const char *val, const struct kernel_param *kp)
 {
 	int ret;
 

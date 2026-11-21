@@ -49,7 +49,7 @@ struct imsbr_msghdr {
 	 *     "unknown"
 	 */
 	char imsbr_cmd[IMSBR_CMD_MAXSZ];
-	char imsbr_payload[0];
+	char imsbr_payload[];
 };
 
 #define IMSBR_MSG_MAXLEN \

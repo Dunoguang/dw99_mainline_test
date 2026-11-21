@@ -691,6 +691,8 @@ void sblock_put(u8 dst, u8 channel, struct sblock *blk);
  * @return: POLLIN or POLLOUT
  */
 int sblock_poll_wait(u8 dst, u8 channel, struct file *filp, poll_table *wait);
+int swcnblk_poll_wait(u8 dst, u8 channel, struct file *filp,
+		      struct poll_table_struct *wait);
 
 /**
  * sblock_query  -- sblock query status

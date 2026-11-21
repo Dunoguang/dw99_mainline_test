@@ -1944,27 +1944,30 @@ static int sprdwl_cfg80211_mgmt_tx(struct wiphy *wiphy,
 	return ret;
 }
 
-static void sprdwl_cfg80211_mgmt_frame_register(struct wiphy *wiphy,
-						struct wireless_dev *wdev,
-						u16 frame_type, bool reg)
+static void sprdwl_cfg80211_update_mgmt_regs(struct wiphy *wiphy,
+					   struct wireless_dev *wdev,
+					   struct mgmt_frame_regs *upd)
 {
 	struct sprdwl_vif *vif = container_of(wdev, struct sprdwl_vif, wdev);
-	u16 mgmt_type;
+	unsigned long changed = vif->mgmt_reg ^ upd->interface_stypes;
+	unsigned int subtype;
 
 	if (vif->mode == SPRDWL_MODE_NONE)
 		return;
 
-	mgmt_type = (frame_type & IEEE80211_FCTL_STYPE) >> 4;
-	if ((reg && test_and_set_bit(mgmt_type, &vif->mgmt_reg)) ||
-	    (!reg && !test_and_clear_bit(mgmt_type, &vif->mgmt_reg))) {
-		netdev_dbg(wdev->netdev, "%s  mgmt %d has %sreg\n", __func__,
-			    frame_type, reg ? "" : "un");
-		return;
+	for_each_set_bit(subtype, &changed, 16) {
+		u16 frame_type = subtype << 4;
+		bool enable = upd->interface_stypes & BIT(subtype);
+		int ret;
+
+		ret = sprdwl_register_frame(vif->priv, vif->mode, frame_type,
+					    enable);
+		if (ret)
+			wiphy_dbg(wiphy, "frame registration %#x failed: %d\n",
+				  frame_type, ret);
+		else
+			__assign_bit(subtype, &vif->mgmt_reg, enable);
 	}
-
-	netdev_info(wdev->netdev, "frame_type %d, reg %d\n", frame_type, reg);
-
-	sprdwl_register_frame(vif->priv, vif->mode, frame_type, reg ? 1 : 0);
 }
 
 void sprdwl_report_remain_on_channel_expired(struct sprdwl_vif *vif)
@@ -2188,7 +2191,7 @@ void sprdwl_report_tdls(struct sprdwl_vif *vif, const u8 *peer,
 }
 
 /* Roaming related stuff */
-int sprdwl_cfg80211_set_cqm_rssi_config(struct wiphy *wiphy,
+static int sprdwl_cfg80211_set_cqm_rssi_config(struct wiphy *wiphy,
 					struct net_device *ndev,
 					s32 rssi_thold, u32 rssi_hyst)
 {
@@ -2207,7 +2210,7 @@ void sprdwl_report_cqm(struct sprdwl_vif *vif, u8 rssi_event)
 	cfg80211_cqm_rssi_notify(vif->ndev, rssi_event, 0, GFP_KERNEL);
 }
 
-int sprdwl_cfg80211_update_ft_ies(struct wiphy *wiphy, struct net_device *ndev,
+static int sprdwl_cfg80211_update_ft_ies(struct wiphy *wiphy, struct net_device *ndev,
 				  struct cfg80211_update_ft_ies_params *ftie)
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
@@ -2302,7 +2305,7 @@ static int sprdwl_cfg80211_set_mac_acl(struct wiphy *wiphy,
 					    SPRDWL_SUBCMD_ADD, num, mac_addr);
 }
 
-int sprdwl_cfg80211_set_power_mgmt(struct wiphy *wiphy, struct net_device *ndev,
+static int sprdwl_cfg80211_set_power_mgmt(struct wiphy *wiphy, struct net_device *ndev,
 				   bool enabled, int timeout)
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
@@ -2337,6 +2340,7 @@ static struct cfg80211_ops sprdwl_cfg80211_ops = {
 	.remain_on_channel = sprdwl_cfg80211_remain_on_channel,
 	.cancel_remain_on_channel = sprdwl_cfg80211_cancel_remain_on_channel,
 	.mgmt_tx = sprdwl_cfg80211_mgmt_tx,
+	.update_mgmt_frame_registrations = sprdwl_cfg80211_update_mgmt_regs,
 	.set_power_mgmt = sprdwl_cfg80211_set_power_mgmt,
 	.set_cqm_rssi_config = sprdwl_cfg80211_set_cqm_rssi_config,
 	.sched_scan_start = sprdwl_cfg80211_sched_scan_start,

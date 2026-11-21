@@ -29,7 +29,6 @@
 #define TRUE			1
 #define FALSE			0
 #define SCI_MEMSET		memset
-#define MAX(_x, _y)		(((_x) > (_y)) ? (_x) : (_y))
 
 /* Structure Definitions */
 

@@ -12,4 +12,9 @@ int buf_list_free(int chn, struct mbuf_t *head,
 struct mchn_ops_t *chn_ops(int channel);
 int module_ops_register(struct sprdwcn_bus_ops *ops);
 void module_ops_unregister(void);
+
+int mdbg_assert_read(int channel, struct mbuf_t *head, struct mbuf_t *tail, int num);
+int mdbg_loopcheck_read(int channel, struct mbuf_t *head, struct mbuf_t *tail, int num);
+int mdbg_at_cmd_read(int channel, struct mbuf_t *head, struct mbuf_t *tail, int num);
+
 #endif

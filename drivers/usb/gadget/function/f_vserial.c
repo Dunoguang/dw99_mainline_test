@@ -17,6 +17,7 @@
  *
  */
 
+#include <linux/usb/sprd-vserial.h>
 #include <linux/configfs.h>
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -47,7 +48,6 @@
 #define LOOP_TEST		0x03
 
 #ifdef CONFIG_SPRD_IQ
-extern int in_iqmode(void);
 void (*bulk_in_complete_function)(char *buffer, int length) = NULL;
 #endif
 

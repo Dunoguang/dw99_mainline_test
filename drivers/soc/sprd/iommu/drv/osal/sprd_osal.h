@@ -11,5 +11,8 @@ void sprd_memcpy(void *dstaddr, void *srcaddr, u32 size);
 void *sprd_aligned_malloc(u32 size, u32 align);
 void sprd_aligned_free(void *addr);
 
+
+void sprd_sleep(u32 mstime);
+
 #endif
 

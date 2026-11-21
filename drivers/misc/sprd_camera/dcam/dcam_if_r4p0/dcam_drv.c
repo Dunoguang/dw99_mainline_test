@@ -1760,7 +1760,7 @@ void sprd_dcam_enable_int(enum dcam_id idx)
 			DCAM_IRQ_LINE_MASK, DCAM_INIT_MASK_REG);
 }
 
-void sprd_dcam_disable_int(enum dcam_id idx)
+static void sprd_dcam_disable_int(enum dcam_id idx)
 {
 	DCAM_TRACE("Dcam%d,INT 0x%x\n", idx, DCAM_IRQ_LINE_MASK);
 	sprd_dcam_glb_reg_mwr(idx, DCAM0_CONTROL, BIT_2, 0, DCAM_CONTROL_REG);

@@ -70,7 +70,6 @@ static inline int of_get_gpio_flags(struct device_node *np, int index,
 #define SCI_ADC_GET_VALUE_COUNT (10)
 
 #define ABS(x) (((x) < (0)) ? (-(x)) : (x))
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
 
 #define headset_reg_read(reg, val) \
 	sci_adi_read(CODEC_REG((reg)), val)
@@ -811,7 +810,7 @@ static int headset_adc_compare(int x1, int x2)
 	x2 = ((x2 == 0) ? 1 : (x2*100));
 
 	delta = ABS(x1-x2);
-	max = MAX(x1, x2);
+	max = max(x1, x2);
 
 	if (delta < ((max*10)/100))
 		return 1;
@@ -1543,6 +1542,7 @@ static void headset_detect_all_work_func(struct work_struct *work)
 			if (pdata->gpio_switch != 0)
 				gpio_direction_output(pdata->gpio_switch, 1);
 			/* Repeated detection 5 times when 3P is detected */
+			fallthrough;
 		case HEADSET_NO_MIC:
 			pr_info("headset_type = %d (HEADSET_NO_MIC)\n",
 				headset_type);

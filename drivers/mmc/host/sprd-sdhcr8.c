@@ -1423,7 +1423,7 @@ static int sprd_sdhc_get_cd(struct mmc_host *mmc)
 		return 1;
 	}
 
-	if (IS_ERR_VALUE(gpio_cd))
+	if (gpio_cd < 0)
 		gpio_cd = 1;
 	mmiowb();
 	spin_unlock_irqrestore(&host->lock, flags);
@@ -1838,7 +1838,6 @@ static int sprd_get_ext_resource(struct sprd_sdhc_host *host)
 static void sprd_set_mmc_struct(struct sprd_sdhc_host *host,
 				struct mmc_host *mmc)
 {
-	struct device_node *np = host->pdev->dev.of_node;
 	u32 host_caps;
 
 	mmc = host->mmc;

@@ -25,6 +25,7 @@
  *
 
  ******************************************************************************/
+#include <linux/zyt_info.h>
 #include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/irq.h>

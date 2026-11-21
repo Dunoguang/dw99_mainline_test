@@ -129,7 +129,7 @@ static void draw_sector(unsigned int *alpha, int width, int height,
 	}
 }
 
-void  sprd_corner_draw(unsigned int *corner, int radius, int width)
+static void  sprd_corner_draw(unsigned int *corner, int radius, int width)
 {
 	int i, j;
 
@@ -140,7 +140,7 @@ void  sprd_corner_draw(unsigned int *corner, int radius, int width)
 	}
 }
 
-void sprd_corner_x_mirrored(unsigned int *dst, unsigned int *src,
+static void sprd_corner_x_mirrored(unsigned int *dst, unsigned int *src,
 		int width, int radius)
 {
 	int i, j;

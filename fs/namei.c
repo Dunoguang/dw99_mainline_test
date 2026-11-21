@@ -1823,9 +1823,6 @@ static struct dentry *lookup_one_qstr_excl(const struct qstr *name,
 		return ERR_PTR(-ENOENT);
 
 	dentry = d_alloc(base, name);
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-retry:
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 	if (unlikely(!dentry))
 		return ERR_PTR(-ENOMEM);
 

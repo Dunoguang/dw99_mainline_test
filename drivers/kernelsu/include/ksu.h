@@ -1,6 +1,7 @@
 #ifndef __KSU_H_KSU
 #define __KSU_H_KSU
 
+#include <linux/init.h>
 #include <linux/version.h>
 #include <linux/types.h>
 #include <linux/cred.h>
@@ -31,5 +32,7 @@ extern struct sidtab *backup_sidtab;
 #define KSU_FULL_VERSION_STRING 255
 
 void setup_ksu_cred(void);
+
+int __init kernelsu_init(void);
 
 #endif

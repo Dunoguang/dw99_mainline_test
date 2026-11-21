@@ -144,4 +144,11 @@ extern int tlsc6x_proc_cfg_update(u8 *dir, int behave);
 #endif
 extern void tlsc6x_tpd_reset_force(void);
 extern int tlsc6x_fif_write(char *fname, u8 *pdata, u16 len);
+
+int tlsc6x_set_nor_mode(void);
+int tlsc6x_download_ramcode(u8 *pcode, u16 len);
+int tlsc6x_read_burn_space(u8 *pdes, u16 adr, u16 len);
+int tlsc6x_write_burn_space(u8 *psrc, u16 adr, u16 len);
+int tlsc6x_update_f_combboot(u8 *pdata, u16 len);
+int tlsc6x_load_ext_binlib(u8 *pdata, u16 len);
 #endif

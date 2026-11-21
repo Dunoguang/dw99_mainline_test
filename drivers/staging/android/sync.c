@@ -467,45 +467,6 @@ static bool android_fence_enable_signaling(struct fence *fence)
 }
 
 
-static int android_fence_fill_driver_data(struct fence *fence,
-					  void *data, int size)
-{
-	struct sync_pt *pt = container_of(fence, struct sync_pt, base);
-	struct sync_timeline *parent = sync_pt_parent(pt);
-
-	if (!parent->ops->fill_driver_data)
-		return 0;
-	return parent->ops->fill_driver_data(pt, data, size);
-}
-
-static void android_fence_value_str(struct fence *fence,
-				    char *str, int size)
-{
-	struct sync_pt *pt = container_of(fence, struct sync_pt, base);
-	struct sync_timeline *parent = sync_pt_parent(pt);
-
-	if (!parent->ops->pt_value_str) {
-		if (size)
-			*str = 0;
-		return;
-	}
-	parent->ops->pt_value_str(pt, str, size);
-}
-
-static void android_fence_timeline_value_str(struct fence *fence,
-					     char *str, int size)
-{
-	struct sync_pt *pt = container_of(fence, struct sync_pt, base);
-	struct sync_timeline *parent = sync_pt_parent(pt);
-
-	if (!parent->ops->timeline_value_str) {
-		if (size)
-			*str = 0;
-		return;
-	}
-	parent->ops->timeline_value_str(parent, str, size);
-}
-
 static const struct fence_ops android_fence_ops = {
 	.get_driver_name = android_fence_get_driver_name,
 	.get_timeline_name = android_fence_get_timeline_name,
@@ -616,7 +577,6 @@ err_put_fd:
 static int sync_fill_pt_info(struct fence *fence, void *data, int size)
 {
 	struct sync_pt_info *info = data;
-	int ret;
 
 	if (size < sizeof(struct sync_pt_info))
 		return -ENOMEM;

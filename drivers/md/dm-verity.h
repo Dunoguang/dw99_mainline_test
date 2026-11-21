@@ -145,4 +145,7 @@ extern int dm_verity_get_mode(struct dm_target *ti);
 extern int dm_verity_get_root_digest(struct dm_target *ti, u8 **root_digest,
 				     unsigned int *digest_size);
 
+
+void dm_verity_avb_error_handler(void);
+
 #endif /* DM_VERITY_H */

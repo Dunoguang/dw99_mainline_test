@@ -38,6 +38,7 @@
 #include <linux/usb.h>
 #include <linux/thermal.h>
 #include "sprd_charge_helper.h"
+#include <linux/usb/sprd_usb.h>
 
 #define CHARGE_HIGHORLOW_RESTART
 #define SPRDBAT_DEBUG(format, arg...) pr_info("sprdbat: " format, ## arg)
@@ -102,7 +103,7 @@ static void sprdbat_clear_buff(int *buf, int count, int value)
 		buf[i] = value;
 }
 
-void sprdbat_chgcurrent_adjust(int state)
+static void sprdbat_chgcurrent_adjust(int state)
 {
 	int state_cur;
 

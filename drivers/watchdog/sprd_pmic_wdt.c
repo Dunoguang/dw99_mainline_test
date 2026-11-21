@@ -35,6 +35,7 @@ extern struct atomic_notifier_head panic_notifier_list;
 #include <linux/sched.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <soc/sprd/sysdump.h>
 #include "../base/regmap/internal.h"
 
 #define WDG_INT_EN_BIT			BIT(0)
@@ -95,7 +96,6 @@ int sysdump_status; /* used by sysdump.c */
 
 void set_sysdump_enable(int on);
 #ifdef CONFIG_SPRD_DMC_DRV
-extern void sprd_ddr_force_light_sleep(void);
 #endif
 
 /* Force reboot into recovery mode if the reboot is caused by a kernel panic */

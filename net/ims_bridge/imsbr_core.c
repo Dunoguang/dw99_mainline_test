@@ -416,11 +416,13 @@ static void imsbr_cp_reset(struct imsbr_msghdr *msg, unsigned long unused)
 static void imsbr_echo_ping(struct imsbr_msghdr *msg, unsigned long unused)
 {
 	struct sblock blk;
-	char *echostr;
-	int echolen;
+	char *echostr = msg->imsbr_payload;
+	size_t echolen = strnlen(echostr, msg->imsbr_paylen);
 
-	echostr = msg->imsbr_payload;
-	echolen = min_t(int, strlen(echostr) + 1, IMSBR_MSG_MAXLEN);
+	if (echolen == msg->imsbr_paylen)
+		return;
+
+	echolen++;
 
 	if (!imsbr_build_cmd("echo-pong", &blk, echostr, echolen))
 		imsbr_sblock_send(&imsbr_ctrl, &blk, echolen);
@@ -428,7 +430,7 @@ static void imsbr_echo_ping(struct imsbr_msghdr *msg, unsigned long unused)
 
 static void imsbr_echo_pong(struct imsbr_msghdr *msg, unsigned long unused)
 {
-	pr_info("pong from cp: %s\n", msg->imsbr_payload);
+	pr_info("pong from cp: %.*s\n", msg->imsbr_paylen, msg->imsbr_payload);
 }
 
 static bool imsbr_msg_invalid(struct imsbr_msghdr *msghdr, int msglen)
@@ -454,12 +456,17 @@ void imsbr_process_msg(struct imsbr_sipc *sipc, struct sblock *blk,
 	struct imsbr_msghdr *msghdr;
 	struct imsbr_msglist *list;
 	char msgbuff[IMSBR_CTRL_BLKSZ];
-	int msglen, blklen;
+	size_t blklen = blk->length;
+	int msglen;
 	char *cmd;
 	int i;
 
-	/* blk->length had been checked in imsbr_kthread */
-	blklen = blk->length;
+	if (blklen < sizeof(*msghdr) || blklen > sizeof(msgbuff)) {
+		if (freeit)
+			imsbr_sblock_release(sipc, blk);
+		return;
+	}
+
 	unalign_memcpy(msgbuff, blk->addr, blklen);
 	msghdr = (struct imsbr_msghdr *)msgbuff;
 	msglen = blklen - sizeof(struct imsbr_msghdr);
@@ -471,6 +478,9 @@ void imsbr_process_msg(struct imsbr_sipc *sipc, struct sblock *blk,
 		return;
 
 	cmd = msghdr->imsbr_cmd;
+	if (!memchr(cmd, '\0', sizeof(msghdr->imsbr_cmd)))
+		return;
+
 	pr_info("msghdr cmd=%s len=%d\n", cmd, msglen);
 
 	for (i = 0; i < ARRAY_SIZE(imsbr_msglists); i++) {

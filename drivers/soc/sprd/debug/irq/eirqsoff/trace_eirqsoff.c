@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/debugfs.h>
 #include "../../sprd_debugfs.h"
+#include "trace_eirqsoff.h"
 
 #define DEFAULT_WARNING_INTERVAL (30*NSEC_PER_MSEC)
 

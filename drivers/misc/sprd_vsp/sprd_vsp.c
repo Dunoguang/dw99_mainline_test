@@ -221,7 +221,7 @@ static void vsp_set_ddr_qos_all(void)
 }
 #endif
 
-void clr_vsp_interrupt_mask(void)
+static void clr_vsp_interrupt_mask(void)
 {
 	int cmd = 0;
 

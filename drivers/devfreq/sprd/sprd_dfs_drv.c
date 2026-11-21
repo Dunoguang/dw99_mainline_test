@@ -159,7 +159,7 @@ static unsigned int dfs_min_freq(struct dmcfreq_data *data)
 	return DFS_MIN_FREQ;
 }
 
-int dfs_msg_recv(struct smsg *msg, int timeout)
+static int dfs_msg_recv(struct smsg *msg, int timeout)
 {
 	int err = 0;
 
@@ -176,7 +176,7 @@ int dfs_msg_recv(struct smsg *msg, int timeout)
 		return -EINVAL;
 }
 
-int dfs_msg_send(struct smsg *msg, unsigned int realcmd, int timeout,
+static int dfs_msg_send(struct smsg *msg, unsigned int realcmd, int timeout,
 		 unsigned int realfreq)
 {
 	int err = 0;
@@ -274,7 +274,7 @@ static int inq_dfs_msg(unsigned int *data, unsigned int value, unsigned int cmd)
 }
 
 
-int dfs_para_update(unsigned int value, unsigned int cmd)
+static int dfs_para_update(unsigned int value, unsigned int cmd)
 {
 	int err = 0;
 	struct smsg msg;

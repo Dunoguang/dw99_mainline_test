@@ -410,7 +410,7 @@ static const char *vbc_mux_debug_str[SPRD_VBC_MUX_MAX] = {
 };
 
 /* fm st adder */
-void vbc_fm_adder(u32 mode, u32 chan)
+static void vbc_fm_adder(u32 mode, u32 chan)
 {
 	unsigned int bit = BIT_RF_ST_FM_SEL;
 
@@ -431,7 +431,7 @@ void vbc_fm_adder(u32 mode, u32 chan)
 	}
 }
 
-void vbc_st_adder(u32 mode, u32 chan)
+static void vbc_st_adder(u32 mode, u32 chan)
 {
 	unsigned int bit = BIT_RF_ST_FM_SEL;
 
@@ -2521,9 +2521,7 @@ static void vbc_eq_reg_apply(struct snd_soc_component *codec, void *data,
 		/* up grade */
 		vbc_da_eq_fade_in(data);
 		pr_info("vbc_da_eq_fade_in out\n");
-	} else
-		/*ignore adc eq6 */
-		;
+	}
 	pr_info("%s returned\n", __func__);
 }
 

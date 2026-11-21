@@ -33,7 +33,7 @@ static int gsp_sync_cmp(u32 a, u32 b)
 	return ((s32) a - (s32) b) < 0 ? -1 : 1;
 }
 
-struct sync_pt *gsp_sync_pt_create(struct gsp_sync_timeline *obj, u32 value)
+static struct sync_pt *gsp_sync_pt_create(struct gsp_sync_timeline *obj, u32 value)
 {
 	struct gsp_sync_pt *pt;
 
@@ -155,7 +155,7 @@ struct gsp_sync_timeline *gsp_sync_timeline_create(const char *name)
 	return obj;
 }
 
-void gsp_sync_timeline_inc(struct gsp_sync_timeline *obj, u32 inc)
+static void gsp_sync_timeline_inc(struct gsp_sync_timeline *obj, u32 inc)
 {
 	int r = -1;
 
@@ -213,7 +213,7 @@ err:
 	return err;
 }
 
-int gsp_sync_sig_fd_copy_to_user(struct sync_fence *fence,
+static int gsp_sync_sig_fd_copy_to_user(struct sync_fence *fence,
 				 int32_t __user *ufd)
 {
 	int fd = get_unused_fd_flags(0);
@@ -238,7 +238,7 @@ err:
 	return -1;
 }
 
-int gsp_sync_wait_fence_collect(struct sync_fence **wait_fen_arr,
+static int gsp_sync_wait_fence_collect(struct sync_fence **wait_fen_arr,
 				uint32_t *count, int fd)
 {
 	struct sync_fence *fence = NULL;

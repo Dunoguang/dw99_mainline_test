@@ -313,6 +313,18 @@ int security_context_to_sid_default(const char *scontext, u32 scontext_len,
 int security_context_to_sid_force(const char *scontext, u32 scontext_len,
 				  u32 *sid);
 
+#ifdef CONFIG_KSU_SUSFS
+int susfs_security_context_to_sid(const char *scontext, u32 scontext_len,
+				  u32 *sid, gfp_t gfp);
+int susfs_security_context_str_to_sid(const char *scontext, u32 *sid, gfp_t gfp);
+int susfs_security_context_to_sid_default(const char *scontext, u32 scontext_len,
+					  u32 *sid, u32 def_sid, gfp_t gfp_flags);
+int susfs_security_context_to_sid_force(const char *scontext, u32 scontext_len,
+					u32 *sid);
+void susfs_security_compute_av_user(u32 ssid, u32 tsid, u16 tclass,
+				    struct av_decision *avd);
+#endif
+
 int security_port_sid(u8 protocol, u16 port, u32 *out_sid);
 
 int security_ib_pkey_sid(u64 subnet_prefix, u16 pkey_num, u32 *out_sid);

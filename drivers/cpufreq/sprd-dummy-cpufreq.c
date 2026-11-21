@@ -33,12 +33,6 @@ struct private_data {
 	unsigned int cur_freq;
 };
 
-static struct freq_attr *cpufreq_dummy_attr[] = {
-	&cpufreq_freq_attr_scaling_available_freqs,
-	NULL,   /* Extra space for boost-attr if required */
-	NULL,
-};
-
 static int cpufreq_dummy_set_target(struct cpufreq_policy *policy,
 		unsigned int index)
 {
@@ -152,7 +146,7 @@ static void cpufreq_dummy_ready(struct cpufreq_policy *policy)
 {
 	;
 }
-unsigned int cpufreq_dummy_get(unsigned int cpu)
+static unsigned int cpufreq_dummy_get(unsigned int cpu)
 {
 	unsigned int freq;
 	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
@@ -199,17 +193,6 @@ static struct platform_driver sprd_dummy_cpufreq_platdrv = {
 };
 
 module_platform_driver(sprd_dummy_cpufreq_platdrv);
-
-static struct platform_device sprd_dummy_cpufreq_pdev = {
-	.name = "dummy-cpufreq",
-};
-
-static int  __init sprd_dummy_cpufreq_init_pdev(void)
-{
-	return 0;
-}
-
-device_initcall(sprd_dummy_cpufreq_init_pdev);
 
 MODULE_ALIAS("platform:sprd_dummy_driver");
 MODULE_DESCRIPTION("sprd dummy cpufreq driver");

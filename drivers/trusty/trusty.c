@@ -372,7 +372,7 @@ static int trusty_remove_child(struct device *dev, void *data)
 	return 0;
 }
 
-ssize_t trusty_version_show(struct device *dev, struct device_attribute *attr,
+static ssize_t trusty_version_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
 	struct trusty_state *s = platform_get_drvdata(to_platform_device(dev));

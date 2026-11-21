@@ -13,6 +13,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/smart_reclaim.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -36,7 +37,7 @@ static long sshrinker_madvise_dontneed(struct vm_area_struct *vma,
 	return 0;
 }
 
-const char *get_path_ext(const char *path)
+static const char *get_path_ext(const char *path)
 {
 	const char *dot = NULL;
 

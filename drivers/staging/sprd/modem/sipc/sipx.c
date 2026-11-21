@@ -35,6 +35,7 @@
 #include "sipx.h"
 #include "../include/sipc_priv.h"
 #include <linux/of_device.h>
+#include "sipc_debugfs.h"
 
 /* debug{ */
 #include <linux/delay.h>

@@ -592,7 +592,17 @@ static int sprdwl_vendor_get_llstat_handler(struct wiphy *wiphy,
 	iface_st->info.mode = vif->mode;
 	memcpy(iface_st->info.mac_addr, vif->ndev->dev_addr,
 	       ETH_ALEN);
-	iface_st->info.state = vif->sm_state;
+	switch (READ_ONCE(vif->sm_state)) {
+	case SPRDWL_CONNECTING:
+		iface_st->info.state = WIFI_ASSOCIATING;
+		break;
+	case SPRDWL_CONNECTED:
+		iface_st->info.state = WIFI_ASSOCIATED;
+		break;
+	default:
+		iface_st->info.state = WIFI_DISCONNECTED;
+		break;
+	}
 	memcpy(iface_st->info.ssid, vif->ssid,
 	       IEEE80211_MAX_SSID_LEN);
 	memcpy(iface_st->info.bssid, vif->bssid, ETH_ALEN);

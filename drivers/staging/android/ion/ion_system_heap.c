@@ -138,7 +138,7 @@ static struct page_info *alloc_largest_available(struct ion_system_heap *heap,
 	return NULL;
 }
 
-void set_sg_info(struct page_info *info, struct scatterlist *sg)
+static void set_sg_info(struct page_info *info, struct scatterlist *sg)
 {
 	sg_set_page(sg, info->page, (1 << info->order) * PAGE_SIZE, 0);
 	list_del(&info->list);

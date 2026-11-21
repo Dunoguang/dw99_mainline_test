@@ -450,6 +450,7 @@ static uint32_t dispc_img_ctrl(u32 format, u32 blending, u32 compression)
 	case DRM_FORMAT_RGBX8888:
 		/* rb switch */
 		reg_val |= BIT(15);
+		fallthrough;
 	case DRM_FORMAT_BGRA8888:
 		/* ABGR */
 		reg_val |= (SPRD_DATA_TYPE_RGB888 << 4);
@@ -457,6 +458,7 @@ static uint32_t dispc_img_ctrl(u32 format, u32 blending, u32 compression)
 	case DRM_FORMAT_BGR888:
 		/* rb switch */
 		reg_val |= BIT(15);
+		fallthrough;
 	case DRM_FORMAT_RGB888:
 		if (compression) {
 			/* AFBC bit [7:4] 1011 AFBC RGB888*/
@@ -468,6 +470,7 @@ static uint32_t dispc_img_ctrl(u32 format, u32 blending, u32 compression)
 	case DRM_FORMAT_BGR565:
 		/* rb switch */
 		reg_val |= BIT(15);
+		fallthrough;
 	case DRM_FORMAT_RGB565:
 		/* rgb565 */
 		reg_val |= (SPRD_DATA_TYPE_RGB565 << 4);

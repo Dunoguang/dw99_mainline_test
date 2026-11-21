@@ -137,13 +137,12 @@ static ssize_t hporch_store(struct device *dev,
 	len = str_to_u32_array(buf, 0, val);
 
 	switch (len) {
-	/* Fall through */
 	case 3:
 		panel->rgb_timing.hsync = val[2];
-	/* Fall through */
+		fallthrough;
 	case 2:
 		panel->rgb_timing.hbp = val[1];
-	/* Fall through */
+		fallthrough;
 	case 1:
 		panel->rgb_timing.hfp = val[0];
 	/* Fall through */
@@ -182,13 +181,12 @@ static ssize_t vporch_store(struct device *dev,
 	len = str_to_u32_array(buf, 0, val);
 
 	switch (len) {
-	/* Fall through */
 	case 3:
 		panel->rgb_timing.vsync = val[2];
-	/* Fall through */
+		fallthrough;
 	case 2:
 		panel->rgb_timing.vbp = val[1];
-	/* Fall through */
+		fallthrough;
 	case 1:
 		panel->rgb_timing.vfp = val[0];
 	/* Fall through */

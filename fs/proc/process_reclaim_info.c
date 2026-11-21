@@ -29,7 +29,7 @@ static int __init process_reclaim_result_cache_create(void)
 	return process_reclaim_result_cache == NULL;
 }
 
-struct reclaim_result *process_reclaim_result_cache_alloc(gfp_t gfp)
+static struct reclaim_result *process_reclaim_result_cache_alloc(gfp_t gfp)
 {
 	struct reclaim_result *result = NULL;
 
@@ -38,7 +38,7 @@ struct reclaim_result *process_reclaim_result_cache_alloc(gfp_t gfp)
 	return result;
 }
 
-void process_reclaim_result_cache_free(struct reclaim_result *result)
+static void process_reclaim_result_cache_free(struct reclaim_result *result)
 {
 	if (process_reclaim_result_cache)
 		kmem_cache_free(process_reclaim_result_cache, result);

@@ -73,7 +73,7 @@ static void dcam_aem_mode_setting(enum dcam_id idx, unsigned int mode)
 	}
 }
 
-int dcam_k_raw_aem_block(struct isp_io_param *param, enum dcam_id idx)
+static int dcam_k_raw_aem_block(struct isp_io_param *param, enum dcam_id idx)
 {
 	int ret = 0;
 	unsigned int  val = 0;
@@ -117,7 +117,7 @@ int dcam_k_raw_aem_block(struct isp_io_param *param, enum dcam_id idx)
 	return ret;
 }
 
-int32_t dcam_k_raw_aem_offset(struct isp_io_param *param, enum dcam_id idx)
+static int32_t dcam_k_raw_aem_offset(struct isp_io_param *param, enum dcam_id idx)
 {
 	int32_t ret = 0;
 	uint32_t val = 0;
@@ -140,7 +140,7 @@ int32_t dcam_k_raw_aem_offset(struct isp_io_param *param, enum dcam_id idx)
 	return ret;
 }
 
-int32_t dcam_k_raw_aem_shift(struct isp_io_param *param, enum dcam_id idx)
+static int32_t dcam_k_raw_aem_shift(struct isp_io_param *param, enum dcam_id idx)
 {
 	int32_t ret = 0;
 	struct sprd_aem_avgshf shift;
@@ -163,7 +163,7 @@ int32_t dcam_k_raw_aem_shift(struct isp_io_param *param, enum dcam_id idx)
 	return ret;
 }
 
-int dcam_k_raw_aem_mode(struct isp_io_param *param, enum dcam_id idx)
+static int dcam_k_raw_aem_mode(struct isp_io_param *param, enum dcam_id idx)
 {
 	int ret = 0;
 	unsigned int  mode = 0;
@@ -181,7 +181,7 @@ int dcam_k_raw_aem_mode(struct isp_io_param *param, enum dcam_id idx)
 	return ret;
 }
 
-int dcam_k_raw_aem_blk_size(struct isp_io_param *param, enum dcam_id idx)
+static int dcam_k_raw_aem_blk_size(struct isp_io_param *param, enum dcam_id idx)
 {
 	int ret = 0;
 	struct sprd_aem_blk_size size;
@@ -204,7 +204,7 @@ int dcam_k_raw_aem_blk_size(struct isp_io_param *param, enum dcam_id idx)
 	return ret;
 }
 
-int dcam_k_raw_aem_skip_num(struct isp_io_param *param, enum dcam_id idx)
+static int dcam_k_raw_aem_skip_num(struct isp_io_param *param, enum dcam_id idx)
 {
 	int ret = 0;
 	unsigned int  skip_num = 0;

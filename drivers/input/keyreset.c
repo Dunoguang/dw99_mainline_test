@@ -116,7 +116,7 @@ error:
 	return ret;
 }
 
-void keyreset_remove(struct platform_device *pdev)
+static void keyreset_remove(struct platform_device *pdev)
 {
 	struct keyreset_state *state = platform_get_drvdata(pdev);
 	platform_device_put(state->pdev_child);

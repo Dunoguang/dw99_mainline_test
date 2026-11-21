@@ -18,6 +18,7 @@
 #include <linux/kernel.h>
 #include <video/sprd_sensor_k.h>
 #include "../sprd_sensor_drv.h"
+#include "sensor_power.h"
 
 
 int sensor_power_on(uint32_t *fd_handle,

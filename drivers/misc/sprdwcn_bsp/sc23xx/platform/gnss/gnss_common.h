@@ -52,12 +52,12 @@
 
 int gnss_write_data(void);
 int gnss_backup_data(void);
-void gnss_file_path_set(char *buf);
 #else
 #define GNSS_FLAG_ADDRESS_INFILE    0xFFFFC
 #define GNSS_FLAG_GLO               0x4E4C4700
 #define GNSS_FLAG_BD                0x44420000
 #endif
+void gnss_file_path_set(char *buf);
 bool gnss_delay_ctl(void);
 
 #endif

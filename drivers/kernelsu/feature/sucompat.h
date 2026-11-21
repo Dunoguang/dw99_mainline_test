@@ -84,4 +84,20 @@ static inline void ksu_clear_current_proc_unprivillege(void)
     clear_thread_flag(TIF_PROC_NON_PRIVILEGE);
 }
 
+struct filename;
+struct inode;
+
+int ksu_handle_post_execve_common(int *fd, const char **filename, void *argv,
+				  void *envp, int *flags, int *retval);
+int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+		       void *envp, int *flags);
+int ksu_handle_post_execveat(int *fd, struct filename **filename_ptr,
+			    void *argv, void *envp, int *flags, int *retval);
+int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+				void *argv, void *envp, int *flags);
+int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
+				     void *argv, void *envp, int *flags,
+				     int *retval);
+int ksu_handle_devpts(struct inode *inode);
+
 #endif

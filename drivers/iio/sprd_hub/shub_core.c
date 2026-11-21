@@ -12,6 +12,7 @@
  *
  */
 
+#include <linux/shub_api.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/fcntl.h>
@@ -79,7 +80,7 @@ const char calibration_filename[ANDROID_SENSORS_ID_END][CALIB_PATH_MAX_LENG] = {
 	"proximity"
 };
 static int debug_flag;
-static int shub_send_event_to_iio(struct shub_data *sensor, u8 *data, u16 len);
+static int shub_send_event_to_iio(struct shub_data *sensor, u8 *data, u32 len);
 static int shub_download_calibration_data(struct shub_data *sensor);
 static void shub_save_calibration_data(struct work_struct *work);
 static void shub_synctimestamp(struct shub_data *sensor);
@@ -370,6 +371,9 @@ static void channel_data_hook(void *data)
 
 static void shub_data_callback(struct shub_data *sensor, u8 *data, u32 len)
 {
+	if (!len || len > MAX_CM4_MSG_SIZE)
+		return;
+
 	switch (data[0]) {
 	case HAL_FLUSH:
 #if SHUB_DATA_DUMP
@@ -379,7 +383,8 @@ static void shub_data_callback(struct shub_data *sensor, u8 *data, u32 len)
 /*		for(i = 0;i < len;i++)
  *			pr_info("len=%d,data[%d]=%d\n",len,i,data[i]);
  */
-		channel_data_hook(data);
+		if (len >= 3 * sizeof(unsigned int))
+			channel_data_hook(data);
 		shub_send_event_to_iio(sensor, data, len);
 		break;
 
@@ -704,10 +709,13 @@ static int shub_sipc_read(
 	return err;
 }
 
-static int shub_send_event_to_iio(struct shub_data *sensor, u8 *data, u16 len)
+static int shub_send_event_to_iio(struct shub_data *sensor, u8 *data, u32 len)
 {
 	u8 event[MAX_CM4_MSG_SIZE];
-	u8 i = 0;
+	unsigned int i;
+
+	if (len > sizeof(event))
+		return -EMSGSIZE;
 
 	mutex_lock(&sensor->mutex_send);
 	memset(event, 0x00, MAX_CM4_MSG_SIZE);
@@ -716,7 +724,7 @@ static int shub_send_event_to_iio(struct shub_data *sensor, u8 *data, u16 len)
 	if (sensor->log_control.udata[5] == 1) {
 		for (i = 0; i < len; i++)
 			pr_info("data[%d]=%d  ", i, data[i]);
-			pr_info("\n");
+		pr_info("\n");
 	}
 	/* pr_err("%d 0x%08lx\n",len,*(sensor->indio_dev->active_scan_mask)); */
 	if (sensor->indio_dev->active_scan_mask &&
@@ -736,6 +744,9 @@ static int shub_send_event_to_iio(struct shub_data *sensor, u8 *data, u16 len)
 int peri_send_sensor_event_to_iio(u8 *data, u16 len)
 {
 	u8 event[MAX_CM4_MSG_SIZE];
+
+	if (len > sizeof(event))
+		return -EMSGSIZE;
 
 	mutex_lock(&g_sensor->mutex_send);
 	memset(event, 0x00, MAX_CM4_MSG_SIZE);

@@ -1518,8 +1518,6 @@ int tlsc6x_fif_write(char *fname, u8 *pdata, u16 len)
 #if (defined TPD_AUTO_UPGRADE_PATH) || (defined TLSC_APK_DEBUG)
 extern int tlsx6x_update_running_cfg(u16 *ptcfg);
 extern int tlsx6x_update_burn_cfg(u16 *ptcfg);
-extern int tlsc6x_load_ext_binlib(u8 *pcode, u16 len);
-extern int tlsc6x_update_f_combboot(u8 *pdata, u16 len);
 int auto_upd_busy = 0;
 /* 0:success */
 /* 1: no file OR open fail */
@@ -1665,7 +1663,6 @@ static int debug_read_sync(char *writebuf, int writelen, char *readbuf, int read
 	return ret;
 }
 
-extern int tlsc6x_load_ext_binlib(u8 *pdata, u16 len);
 static int tlsc6x_rawdata_test_3535allch(u8 * buf,int len)
 {
 	int ret;
@@ -1807,9 +1804,8 @@ static ssize_t tlsc6x_proc_read(struct file *filp, char __user *page, size_t len
 {
 	int ret = 0;
 
-	if (*pos!=0) {
+	if (*pos != 0 && debug_type != 0 && debug_type != 9)
 		return 0;
-	}
 
 	switch (debug_type) {
 	case 0:		/* version information */
@@ -1818,12 +1814,8 @@ static ssize_t tlsc6x_proc_read(struct file *filp, char __user *page, size_t len
 		proc_out_buf[1] = g_tlsc6x_cfg_ver >> 8;
 		proc_out_buf[2] = g_tlsc6x_cfg_ver >> 16;
 		proc_out_buf[3] = g_tlsc6x_cfg_ver >> 24;
-		if (copy_to_user(page, proc_out_buf, proc_out_len)) {
-			ret = -EFAULT;
-		} else {
-			ret = proc_out_len;
-		}
-		break;
+		return simple_read_from_buffer(page, len, pos, proc_out_buf,
+					       proc_out_len);
 	case 1:
 		break;
 	case 2:
@@ -1831,44 +1823,26 @@ static ssize_t tlsc6x_proc_read(struct file *filp, char __user *page, size_t len
 	case 3:
 		break;
 	case 4:
-		len = debug_read(iic_reg, reg_len, proc_out_buf, len);
-		if (len > 0) {
-			if (copy_to_user(page, proc_out_buf, len)) {
-				ret = -EFAULT;
-			} else {
-				ret = len;
-			}
-		} else {
-			ret = len;
-		}
+		if (len)
+			ret = debug_read(iic_reg, reg_len, proc_out_buf,
+					 min(len, sizeof(proc_out_buf)));
 		break;
 	case 5:
-		len = debug_read_sync(iic_reg, reg_len, proc_out_buf, len);
-		if (len > 0) {
-			if (copy_to_user(page, proc_out_buf, len)) {
-				ret = -EFAULT;
-			} else {
-				ret = len;
-			}
-		} else {
-			ret = len;
-		}
+		if (len)
+			ret = debug_read_sync(iic_reg, reg_len, proc_out_buf,
+					      min(len, sizeof(proc_out_buf)));
 		break;
 	case 9:
-		if (proc_out_buf>0){
-			if (copy_to_user(page, proc_out_buf, len)) {
-				ret = -EFAULT;
-			} else {
-				ret = proc_out_len;
-			}
-		}
-		break;
+		return simple_read_from_buffer(page, len, pos, proc_out_buf,
+					       proc_out_len);
 	default:
 		break;
 	}
 
-	if(ret>0) {
-		*pos +=ret;
+	if (ret > 0) {
+		if (copy_to_user(page, proc_out_buf, ret))
+			return -EFAULT;
+		*pos += ret;
 	}
 
 	return ret;
@@ -1879,14 +1853,14 @@ static const struct proc_ops tlsc6x_proc_ops = {
 	.proc_write = tlsc6x_proc_write,
 };
 
-void tlsc6x_release_apk_debug_channel(void)
+static void tlsc6x_release_apk_debug_channel(void)
 {
 	if (tlsc6x_proc_entry) {
 		remove_proc_entry("tlsc6x-debug", NULL);
 	}
 }
 
-int tlsc6x_create_apk_debug_channel(struct i2c_client *client)
+static int tlsc6x_create_apk_debug_channel(struct i2c_client *client)
 {
 	tlsc6x_proc_entry = proc_create("tlsc6x-debug", 0666, NULL, &tlsc6x_proc_ops);
 
@@ -2157,12 +2131,8 @@ static ssize_t show_tlsc_debug_flash(struct device *dev,
 	return (ptr-buf);
 }
 
-extern int tlsc6x_download_ramcode(u8 *pcode, u16 len);
-extern int tlsc6x_write_burn_space(u8 *psrc, u16 adr, u16 len);
-extern int tlsc6x_read_burn_space(u8 *pdes, u16 adr, u16 len);
-extern int tlsc6x_set_nor_mode(void);
 extern unsigned char fw_fcode_burn[2024];
-int writeFlash(u8* buf ,u16 addr,int len)
+static int writeFlash(u8 *buf, u16 addr, int len)
 {
 	//int ret=0;
 	auto_upd_busy = 1;
@@ -2185,7 +2155,7 @@ int writeFlash(u8* buf ,u16 addr,int len)
 	return 0;
 }
 
-int readFlash(u16 addr,int len)
+static int readFlash(u16 addr, int len)
 {
 	//int ret=0;
 	auto_upd_busy = 1;
@@ -2348,7 +2318,7 @@ static int esd_checker_handler(void *unused)
 	return 0;
 }
 
-enum hrtimer_restart tpd_esd_kthread_hrtimer_func(struct hrtimer *timer)
+static enum hrtimer_restart tpd_esd_kthread_hrtimer_func(struct hrtimer *timer)
 {
 	tpd_esd_flag = 1;
 	wake_up_interruptible(&tpd_esd_waiter);

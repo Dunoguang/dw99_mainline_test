@@ -75,7 +75,7 @@ struct clk_ops sprd_divider_ops = {
 	.set_rate = sprd_clk_divider_set_rate,
 };
 
-void __init of_sprd_composite_clk_setup(struct device_node *node)
+static void __init of_sprd_composite_clk_setup(struct device_node *node)
 {
 	struct clk *clk;
 	struct clk_mux *mux = NULL;

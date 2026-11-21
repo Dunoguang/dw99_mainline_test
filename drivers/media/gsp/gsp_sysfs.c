@@ -18,6 +18,7 @@
 #include "gsp_debug.h"
 #include "gsp_dev.h"
 #include "gsp_workqueue.h"
+#include "gsp_sysfs.h"
 
 /*
  * store all gsp cores to match core

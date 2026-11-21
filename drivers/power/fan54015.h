@@ -255,4 +255,6 @@ extern int fan54015_unregister_notifier(struct notifier_block *nb);
 extern int usb_get_id_state(void);
 extern int usb_get_vbus_state(void);
 #endif
+
+void sprdchg_fan54015_adjust_cur(int adjust);
 #endif

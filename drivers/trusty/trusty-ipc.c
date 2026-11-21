@@ -739,7 +739,7 @@ static int dn_wait_for_reply(struct tipc_dn_chan *dn, int timeout)
 	return ret;
 }
 
-struct tipc_msg_buf *dn_handle_msg(void *data, struct tipc_msg_buf *rxbuf)
+static struct tipc_msg_buf *dn_handle_msg(void *data, struct tipc_msg_buf *rxbuf)
 {
 	struct tipc_dn_chan *dn = data;
 	struct tipc_msg_buf *newbuf = rxbuf;

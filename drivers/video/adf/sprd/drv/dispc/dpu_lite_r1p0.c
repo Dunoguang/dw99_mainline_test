@@ -285,7 +285,7 @@ static u32 dpu_isr(struct dispc_context *ctx)
 		/*write back feature*/
 		if (vsync_count == max_vsync_count && wb_en)
 			dpu_write_back(ctx, true);
-			vsync_count++;
+		vsync_count++;
 	}
 
 	/* dpu stop done isr */
@@ -615,12 +615,14 @@ static uint32_t dpu_img_ctrl(u32 format, u32 blending, u32 compression)
 	case DRM_FORMAT_BGR888:
 		/* rb switch */
 		reg_val |= BIT(15);
+		fallthrough;
 	case DRM_FORMAT_RGB888:
 		pr_err("sharkle not support rgb888 format\n");
 		break;
 	case DRM_FORMAT_BGR565:
 		/* rb switch */
 		reg_val |= BIT(15);
+		fallthrough;
 	case DRM_FORMAT_RGB565:
 		/* rgb565 */
 		reg_val |= (DPU_LAYER_FORMAT_RGB565 << 4);

@@ -112,3 +112,5 @@ int isp_k_cfg_arbiter(struct isp_io_param *param,
 		struct isp_k_block *isp_k_param, enum isp_id idx);
 int isp_k_cfg_store(struct isp_io_param *param,
 			enum isp_id idx, unsigned int is_raw_cap);
+
+int isp_k_cfg_yrandom(struct isp_io_param *param, enum isp_id idx);

@@ -50,4 +50,6 @@ int aud_send_cmd_no_param(uint16_t channel, uint32_t cmd,
 			  uint32_t value2, int32_t value3, int32_t timeout);
 uint32_t aud_ipc_dump(void *buf, uint32_t buf_bytes);
 
+
+void snd_vbc_sipc_deinit(void);
 #endif /* __AUDIO_SIPC_H */

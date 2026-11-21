@@ -178,7 +178,7 @@ void mmupf_ram_clkdiv(ulong io_base_addr ,  u32 clk_div)
 }
 
 
-u32 mmupf_get_ch_base(u8 ch_num)
+static u32 mmupf_get_ch_base(u8 ch_num)
 {
 	u32 channel_base = 0;
 

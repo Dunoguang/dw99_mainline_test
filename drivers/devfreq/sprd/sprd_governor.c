@@ -64,7 +64,7 @@ struct userspace_data {
 	unsigned int set_freq;
 	unsigned int set_count;
 	bool devfreq_enable;
-	char scene_num[0];
+	char scene_num[];
 };
 
 static struct devfreq *g_devfreq;
@@ -85,7 +85,7 @@ static DECLARE_DELAYED_WORK(freq_boost_work, devfreq_boost_callback);
 * @freq: MHz
 * if ddr frequency is set through this function, DVS is disabled
 */
-int dfs_set_freq(int freq)
+static int dfs_set_freq(int freq)
 {
 	struct userspace_data *user_data;
 	int err;

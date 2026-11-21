@@ -961,7 +961,7 @@ static const struct attribute_group mir3da_attr_group = {
 	.attrs  = mir3da_attributes,
 };
 
-int i2c_smbus_read(PLAT_HANDLE handle, u8 addr, u8 *data)
+static int i2c_smbus_read(PLAT_HANDLE handle, u8 addr, u8 *data)
 {
 	int                 res = 0;
 	struct i2c_client   *client = (struct i2c_client*)handle;
@@ -974,7 +974,7 @@ int i2c_smbus_read(PLAT_HANDLE handle, u8 addr, u8 *data)
 	return res;
 }
 
-int i2c_smbus_read_block(PLAT_HANDLE handle, u8 addr, u8 count, u8 *data)
+static int i2c_smbus_read_block(PLAT_HANDLE handle, u8 addr, u8 count, u8 *data)
 {
 	int                 res = 0;
 	struct i2c_client   *client = (struct i2c_client*)handle;
@@ -984,7 +984,7 @@ int i2c_smbus_read_block(PLAT_HANDLE handle, u8 addr, u8 count, u8 *data)
 	return res;
 }
 
-int i2c_smbus_write(PLAT_HANDLE handle, u8 addr, u8 data)
+static int i2c_smbus_write(PLAT_HANDLE handle, u8 addr, u8 data)
 {
 	int                 res = 0;
 	struct i2c_client   *client = (struct i2c_client*)handle;
@@ -994,7 +994,7 @@ int i2c_smbus_write(PLAT_HANDLE handle, u8 addr, u8 data)
 	return res;
 }
 
-void msdelay(int ms)
+static void msdelay(int ms)
 {
 	mdelay(ms);
 }

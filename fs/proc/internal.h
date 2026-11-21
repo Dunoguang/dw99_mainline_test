@@ -413,12 +413,6 @@ extern const struct file_operations proc_clear_refs_operations;
 extern const struct file_operations proc_reclaim_operations;
 #endif
 
-#ifdef CONFIG_SMART_RECLAIM
-extern void smart_soft_shrink(struct mm_struct *);
-#else
-static inline void smart_soft_shrink(struct mm_struct *mm) { }
-#endif
-
 extern const struct file_operations proc_pagemap_operations;
 #ifdef CONFIG_CPU_FREQ_TIMES
 extern int proc_time_in_state_show(struct seq_file *m,

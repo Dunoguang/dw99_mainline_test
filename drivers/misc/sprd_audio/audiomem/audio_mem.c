@@ -69,7 +69,7 @@ static struct smem_pool audio_mem_pool;
 static struct smem_map_list mem_mp;
 static struct platform_audio_mem_priv *g_priv_data;
 
-int audio_smem_init(uint32_t addr, uint32_t size)
+static int audio_smem_init(uint32_t addr, uint32_t size)
 {
 	struct smem_pool *spool = &audio_mem_pool;
 	struct smem_map_list *smem = &mem_mp;

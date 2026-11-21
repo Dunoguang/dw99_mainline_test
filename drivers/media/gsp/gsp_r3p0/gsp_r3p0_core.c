@@ -681,7 +681,7 @@ int gsp_r3p0_core_alloc(struct gsp_core **core, struct device_node *node)
 }
 
 
-void gsp_r3p0_core_irq_enable(struct gsp_core *core)
+static void gsp_r3p0_core_irq_enable(struct gsp_core *core)
 {
 	struct R3P0_GSP_INT_REG gsp_int_value;
 	struct R3P0_GSP_INT_REG gsp_int_mask;
@@ -702,7 +702,7 @@ void gsp_r3p0_core_irq_enable(struct gsp_core *core)
 			gsp_int_value.value, gsp_int_mask.value);
 }
 
-void gsp_r3p0_core_irq_disable(struct gsp_core *core)
+static void gsp_r3p0_core_irq_disable(struct gsp_core *core)
 {
 	struct R3P0_GSP_INT_REG gsp_int_value;
 	struct R3P0_GSP_INT_REG gsp_int_mask;
@@ -723,7 +723,7 @@ void gsp_r3p0_core_irq_disable(struct gsp_core *core)
 			gsp_int_value.value, gsp_int_mask.value);
 }
 
-irqreturn_t gsp_r3p0_core_irq_handler(int irq, void *data)
+static irqreturn_t gsp_r3p0_core_irq_handler(int irq, void *data)
 {
 	struct gsp_core *core = NULL;
 
@@ -812,7 +812,7 @@ void gsp_r3p0_core_disable(struct gsp_core *c)
 	clk_disable_unprepare(core->gsp_clk);
 }
 
-int gsp_r3p0_core_parse_clk(struct gsp_r3p0_core *core)
+static int gsp_r3p0_core_parse_clk(struct gsp_r3p0_core *core)
 {
 	int status = 0;
 
@@ -859,7 +859,7 @@ int gsp_r3p0_core_parse_clk(struct gsp_r3p0_core *core)
 	return status;
 }
 
-int gsp_r3p0_core_parse_irq(struct gsp_core *core)
+static int gsp_r3p0_core_parse_irq(struct gsp_core *core)
 {
 	int ret = -1;
 	struct device *dev = NULL;
@@ -904,7 +904,7 @@ int gsp_r3p0_core_parse_dt(struct gsp_core *core)
 }
 
 
-void gsp_r3p0_core_misc_reg_set(struct gsp_core *core, struct gsp_r3p0_cfg *cfg)
+static void gsp_r3p0_core_misc_reg_set(struct gsp_core *core, struct gsp_r3p0_cfg *cfg)
 {
 	void __iomem *base = NULL;
 	struct R3P0_DES_SCL_SIZE_REG des_scl_size_value;
@@ -1007,7 +1007,7 @@ void gsp_r3p0_core_misc_reg_set(struct gsp_core *core, struct gsp_r3p0_cfg *cfg)
 		gsp_mod1_cfg_value.value, gsp_mod1_cfg_mask.value);
 }
 
-void gsp_r3p0_core_l0_reg_set(void __iomem *base,
+static void gsp_r3p0_core_l0_reg_set(void __iomem *base,
 			   struct gsp_r3p0_img_layer *layer)
 {
 	struct R3P0_LAYER0_Y_ADDR_REG layer0_y_addr_value;
@@ -1229,7 +1229,7 @@ void gsp_r3p0_core_l0_reg_set(void __iomem *base,
 
 }
 
-void gsp_r3p0_core_l1_reg_set(void __iomem *base,
+static void gsp_r3p0_core_l1_reg_set(void __iomem *base,
 			   struct gsp_r3p0_osd_layer *layer)
 {
 	struct R3P0_LAYER1_R_ADDR_REG layer1_r_addr_value;
@@ -1388,7 +1388,7 @@ void gsp_r3p0_core_l1_reg_set(void __iomem *base,
 
 }
 
-void gsp_r3p0_core_l2_reg_set(void __iomem *base,
+static void gsp_r3p0_core_l2_reg_set(void __iomem *base,
 			   struct gsp_r3p0_osd_layer *layer)
 {
 	struct R3P0_LAYER2_R_ADDR_REG layer2_r_addr_value;
@@ -1547,7 +1547,7 @@ void gsp_r3p0_core_l2_reg_set(void __iomem *base,
 
 }
 
-void gsp_r3p0_core_l3_reg_set(void __iomem *base,
+static void gsp_r3p0_core_l3_reg_set(void __iomem *base,
 			   struct gsp_r3p0_osd_layer *layer)
 {
 	struct R3P0_LAYER3_R_ADDR_REG layer3_r_addr_value;
@@ -1706,7 +1706,7 @@ void gsp_r3p0_core_l3_reg_set(void __iomem *base,
 
 }
 
-void gsp_r3p0_core_ld1_reg_set(void __iomem *base,
+static void gsp_r3p0_core_ld1_reg_set(void __iomem *base,
 			   struct gsp_r3p0_des_layer *layer)
 {
 	struct R3P0_DES_Y_ADDR1_REG des_y_addr_value;
@@ -1830,7 +1830,7 @@ void gsp_r3p0_core_ld1_reg_set(void __iomem *base,
 
 }
 
-void gsp_r3p0_core_ld2_reg_set(void __iomem *base,
+static void gsp_r3p0_core_ld2_reg_set(void __iomem *base,
 			   struct gsp_r3p0_des_layer *layer)
 {
 	struct R3P0_DES_Y_ADDR2_REG des_y_addr_value;
@@ -1980,7 +1980,7 @@ static void gsp_r3p0_coef_gen_and_cfg(struct gsp_r3p0_core *core,
 	}
 }
 
-void gsp_r3p0_core_run(struct gsp_core *core)
+static void gsp_r3p0_core_run(struct gsp_core *core)
 {
 	struct R3P0_GSP_MOD1_CFG_REG gsp_mod1_cfg_value;
 	struct R3P0_GSP_MOD1_CFG_REG gsp_mod1_cfg_mask;
@@ -1993,7 +1993,7 @@ void gsp_r3p0_core_run(struct gsp_core *core)
 		gsp_mod1_cfg_value.value, gsp_mod1_cfg_mask.value);
 }
 
-int gsp_r3p0_core_run_precheck(struct gsp_core *c)
+static int gsp_r3p0_core_run_precheck(struct gsp_core *c)
 {
 	struct gsp_r3p0_core *core = (struct gsp_r3p0_core *)c;
 	struct WHALE2_AHB_EB_REG whale2_ahb_reg;

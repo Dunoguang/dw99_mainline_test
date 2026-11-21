@@ -418,7 +418,7 @@ static void sprd_kpled_remove(struct platform_device *dev)
 	struct sprd_kpled *led = platform_get_drvdata(dev);
 
 	led_classdev_unregister(&led->cdev);
-	flush_scheduled_work();
+	cancel_work_sync(&led->work);
 	led->value = LED_OFF;
 	led->enabled = 1;
 	sprd_kpled_disable(led);

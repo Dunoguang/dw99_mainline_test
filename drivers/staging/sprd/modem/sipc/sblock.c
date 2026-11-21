@@ -30,6 +30,7 @@
 
 #include "../include/sipc_priv.h"
 #include "sblock.h"
+#include "sipc_debugfs.h"
 
 #define VOLA_SBLOCK_RING volatile struct sblock_ring_header
 

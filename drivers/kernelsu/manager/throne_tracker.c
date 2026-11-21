@@ -89,7 +89,9 @@ struct my_dir_context {
 #define MY_ACTOR_CTX_ARG void *ctx_void
 #endif
 
-FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name, int namelen, loff_t off, u64 ino, unsigned int d_type)
+static FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name,
+				    int namelen, loff_t off, u64 ino,
+				    unsigned int d_type)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
     // then pull it out of the void
@@ -152,7 +154,7 @@ FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name, int namelen, lo
 #define S_MAGIC_COMPAT(x) ((x)->f_path.dentry->d_inode->i_sb->s_magic)
 #endif
 
-void search_manager(const char *path, int depth, struct list_head *uid_data)
+static void search_manager(const char *path, int depth, struct list_head *uid_data)
 {
     int i;
     unsigned long data_app_magic = 0;
@@ -256,7 +258,7 @@ struct track_throne_struct {
     unsigned int flags;
 };
 
-void do_track_throne(void *data)
+static void do_track_throne(void *data)
 {
     struct track_throne_struct *tts = (struct track_throne_struct *)data;
     unsigned int flags = tts->flags;

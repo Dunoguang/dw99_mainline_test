@@ -33,7 +33,7 @@
 #define for_each_kcfg_from_kl_safe(kcfg, tmp, kl) \
 	list_for_each_entry_safe((kcfg), (tmp), &(kl)->head, link)
 
-struct gsp_core *gsp_kcfg_to_core(struct gsp_kcfg *kcfg)
+static struct gsp_core *gsp_kcfg_to_core(struct gsp_kcfg *kcfg)
 {
 	return kcfg->bind_core;
 }
@@ -58,7 +58,7 @@ void gsp_kcfg_set_pulled(struct gsp_kcfg *kcfg)
 	kcfg->pulled = true;
 }
 
-bool gsp_kcfg_need_iommu(struct gsp_kcfg *kcfg)
+static bool gsp_kcfg_need_iommu(struct gsp_kcfg *kcfg)
 {
 	return kcfg->need_iommu;
 }
@@ -94,7 +94,7 @@ int gsp_kcfg_verify(struct gsp_kcfg *kcfg)
 	return ret;
 }
 
-int gsp_kcfg_get_dmabuf(struct gsp_kcfg *kcfg)
+static int gsp_kcfg_get_dmabuf(struct gsp_kcfg *kcfg)
 {
 	int ret = 0;
 	struct gsp_layer *layer = NULL;
@@ -153,7 +153,7 @@ void gsp_kcfg_init(struct gsp_kcfg *kcfg,
 	init_completion(&kcfg->complete);
 }
 
-void gsp_kcfg_reinit(struct gsp_kcfg *kcfg)
+static void gsp_kcfg_reinit(struct gsp_kcfg *kcfg)
 {
 	if (gsp_kcfg_verify(kcfg)) {
 		GSP_ERR("kcfg init params error\n");
@@ -170,7 +170,7 @@ void gsp_kcfg_reinit(struct gsp_kcfg *kcfg)
 	reinit_completion(&kcfg->complete);
 }
 
-struct gsp_kcfg *gsp_kcfg_acquire(struct gsp_workqueue *wq)
+static struct gsp_kcfg *gsp_kcfg_acquire(struct gsp_workqueue *wq)
 {
 	struct gsp_kcfg *kcfg = NULL;
 
@@ -184,13 +184,13 @@ struct gsp_kcfg *gsp_kcfg_acquire(struct gsp_workqueue *wq)
 	return kcfg;
 }
 
-void gsp_kcfg_list_add(struct gsp_kcfg *kcfg,
+static void gsp_kcfg_list_add(struct gsp_kcfg *kcfg,
 		       struct gsp_kcfg_list *kl)
 {
 	list_add_tail(&kcfg->link, &kl->head);
 }
 
-void gsp_kcfg_list_del(struct gsp_kcfg *kcfg)
+static void gsp_kcfg_list_del(struct gsp_kcfg *kcfg)
 {
 	list_del_init(&kcfg->link);
 }
@@ -245,7 +245,7 @@ repeat:
 	return 0;
 }
 
-int gsp_kcfg_fence_process(struct gsp_kcfg *kcfg, int __user *ufd)
+static int gsp_kcfg_fence_process(struct gsp_kcfg *kcfg, int __user *ufd)
 {
 	int ret = -1;
 	struct gsp_layer *layer = NULL;
@@ -335,7 +335,7 @@ exit:
 	return ret;
 }
 
-int __user *
+static int __user *
 gsp_kcfg_ufd_intercept(struct gsp_kcfg *kcfg, void __user *arg, int index)
 {
 	int __user *ufd = NULL;
@@ -403,7 +403,7 @@ exit:
 	return ret;
 }
 
-struct gsp_workqueue *
+static struct gsp_workqueue *
 gsp_kcfg_to_workqueue(struct gsp_kcfg *kcfg)
 {
 	if (gsp_kcfg_verify(kcfg)) {
@@ -412,17 +412,6 @@ gsp_kcfg_to_workqueue(struct gsp_kcfg *kcfg)
 	}
 
 	return kcfg->bind_core->wq;
-}
-
-struct gsp_core *const
-gsp_kcfg_to_bind_core(struct gsp_kcfg *kcfg)
-{
-	if (gsp_kcfg_verify(kcfg)) {
-		GSP_ERR("kcfg to bind core params error\n");
-		return NULL;
-	}
-
-	return kcfg->bind_core;
 }
 
 static int gsp_kcfg_push(struct gsp_kcfg *kcfg)
@@ -454,7 +443,7 @@ void gsp_kcfg_put(struct gsp_kcfg *kcfg)
 		gsp_workqueue_put(kcfg, wq);
 }
 
-void gsp_kcfg_cancel(struct gsp_kcfg *kcfg)
+static void gsp_kcfg_cancel(struct gsp_kcfg *kcfg)
 {
 	struct gsp_workqueue *wq = NULL;
 
@@ -501,7 +490,7 @@ void gsp_kcfg_complete(struct gsp_kcfg *kcfg)
 		GSP_WARN("no need to notify others by completion at async\n");
 }
 
-int gsp_kcfg_wait_for_completion(struct gsp_kcfg *kcfg)
+static int gsp_kcfg_wait_for_completion(struct gsp_kcfg *kcfg)
 {
 	int ret = 0;
 	int err = 0;

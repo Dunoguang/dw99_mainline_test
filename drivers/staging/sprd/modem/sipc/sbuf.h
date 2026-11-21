@@ -95,6 +95,7 @@ struct sbuf_mgr {
 	void			*smem_virt;
 	u32			smem_addr;
 	u32			smem_size;
+	u32			smem_pool_addr;
 	u32			mapped_smem_addr;
 	u32			ringnr;
 	struct sbuf_ring	*rings;

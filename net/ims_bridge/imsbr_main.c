@@ -58,7 +58,7 @@ err_core:
 	return -ENOMEM;
 }
 
-void __exit imsbr_exit(void)
+static void __exit imsbr_exit(void)
 {
 	pr_info("bye!\n");
 

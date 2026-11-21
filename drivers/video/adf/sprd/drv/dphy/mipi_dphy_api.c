@@ -200,16 +200,15 @@ int mipi_dphy_data_ulps_en(struct sprd_dphy *dphy, int enable)
 
 		dphy_hal_datalane_ulps_exit(dphy, 1);
 		switch (lanes) {
-		/* Fall through */
 		case 4:
 			mask |= BIT(3);
-		/* Fall through */
+			fallthrough;
 		case 3:
 			mask |= BIT(2);
-		/* Fall through */
+			fallthrough;
 		case 2:
 			mask |= BIT(1);
-		/* Fall through */
+			fallthrough;
 		case 1:
 			mask |= BIT(0);
 			break;

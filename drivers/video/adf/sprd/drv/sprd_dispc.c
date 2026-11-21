@@ -473,9 +473,6 @@ void sprd_dispc_iommu_map(struct sprd_dispc *dispc,
 			  struct sprd_adf_hwlayer *layer)
 {
 	int i;
-	bool fb_reserved;
-	unsigned long phys_addr;
-	size_t size;
 	int ret;
 	struct dma_buf *dmabuf;
 	struct sprd_iommu_map_data iommu_data = {};
@@ -517,7 +514,6 @@ void sprd_dispc_iommu_unmap(struct sprd_dispc *dispc,
 			    struct sprd_adf_hwlayer *hwlayer)
 {
 	int i;
-	bool fb_reserved;
 	struct dma_buf *dmabuf;
 	struct dispc_context *ctx = &dispc->ctx;
 

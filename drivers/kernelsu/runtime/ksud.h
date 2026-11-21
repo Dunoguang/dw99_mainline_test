@@ -18,4 +18,9 @@ void ksu_execveat_hook_ksud(const struct pt_regs *regs);
 #endif
 void ksu_stop_input_hook_runtime(void);
 
+void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
+void ksu_handle_initrc(struct file *file);
+int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_ptr);
+int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
+
 #endif

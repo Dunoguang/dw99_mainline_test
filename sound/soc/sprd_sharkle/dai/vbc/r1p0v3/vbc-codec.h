@@ -19,4 +19,6 @@
 
 #include "vbc-comm.h"
 
+
+int vbc_close_fm_dggain(bool mute);
 #endif /* __VBC_CODEC_H */

@@ -94,6 +94,7 @@ static inline char *sipc_chn_tostr(int chn, int bufid)
 			return "BT";
 		else if (bufid == 13 || bufid == 14)
 			return "FM";
+		return "Unknown Channel";
 	case SIPC_CHN_LOG:
 		return "LOG";
 	case SIPC_CHN_LOOPCHECK:

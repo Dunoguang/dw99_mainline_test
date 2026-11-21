@@ -441,7 +441,7 @@ int aud_recv_cmd(uint16_t channel, uint32_t cmd, int *result,
 
 }
 
-int aud_send_msg(uint16_t channel, uint32_t cmd, uint32_t value0,
+static int aud_send_msg(uint16_t channel, uint32_t cmd, uint32_t value0,
 		 uint32_t value1, uint32_t value2, int32_t value3)
 {
 	int ret = 0;

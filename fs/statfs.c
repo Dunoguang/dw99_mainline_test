@@ -10,17 +10,13 @@
 #include <linux/uaccess.h>
 #include <linux/compat.h>
 #ifdef CONFIG_KSU_SUSFS
-#include <linux/susfs_def.h>
+#include <linux/susfs.h>
 #endif // #ifdef CONFIG_KSU_SUSFS
 
 #include "internal.h"
 
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
-extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-extern struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vfsmnt);
+#include "mount.h"
 #endif //#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 
 static int flags_by_mnt(int mnt_flags)
@@ -82,7 +78,8 @@ static int statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf)
 }
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-int statfs_by_dentry_wrapper(struct dentry *dentry, struct kstatfs *buf){
+int statfs_by_dentry_wrapper(struct dentry *dentry, struct kstatfs *buf)
+{
 	return statfs_by_dentry(dentry, buf);
 }
 

@@ -273,7 +273,7 @@ static void gsp_r1p1_core_capability_init(struct gsp_core *core)
 	capa->max_video_size = 1;
 }
 
-void gsp_r1p1_core_coef_init(struct gsp_core *c)
+static void gsp_r1p1_core_coef_init(struct gsp_core *c)
 {
 	int i = 0;
 	struct gsp_r1p1_core *core = NULL;
@@ -352,7 +352,7 @@ int gsp_r1p1_core_alloc(struct gsp_core **core, struct device_node *node)
 	return 0;
 }
 
-void gsp_r1p1_core_irqstate_clear(struct gsp_core *core)
+static void gsp_r1p1_core_irqstate_clear(struct gsp_core *core)
 {
 	gsp_core_reg_update(GSP_INT_CFG(core->base),
 			    INT_CLR, INT_CLR);
@@ -362,13 +362,13 @@ void gsp_r1p1_core_irqstate_clear(struct gsp_core *core)
 
 }
 
-void gsp_r1p1_core_irq_enable(struct gsp_core *core)
+static void gsp_r1p1_core_irq_enable(struct gsp_core *core)
 {
 	gsp_core_reg_update(GSP_INT_CFG(core->base),
 			    INT_EN, INT_EN);
 }
 
-void gsp_r1p1_core_irq_mode_set(struct gsp_core *core)
+static void gsp_r1p1_core_irq_mode_set(struct gsp_core *core)
 {
 	u32 value = 0;
 
@@ -377,13 +377,13 @@ void gsp_r1p1_core_irq_mode_set(struct gsp_core *core)
 			    value, INT_MOD);
 }
 
-void gsp_r1p1_core_irq_disable(struct gsp_core *core)
+static void gsp_r1p1_core_irq_disable(struct gsp_core *core)
 {
 	gsp_core_reg_update(GSP_INT_CFG(core->base),
 			    0, INT_EN);
 }
 
-irqreturn_t gsp_r1p1_core_irq_handler(int irq, void *data)
+static irqreturn_t gsp_r1p1_core_irq_handler(int irq, void *data)
 {
 	struct gsp_core *core = NULL;
 
@@ -458,7 +458,7 @@ void gsp_r1p1_core_disable(struct gsp_core *c)
 
 }
 
-int gsp_r1p1_core_parse_clk(struct gsp_core *c)
+static int gsp_r1p1_core_parse_clk(struct gsp_core *c)
 {
 	struct gsp_r1p1_core *core = (struct gsp_r1p1_core *)c;
 
@@ -494,7 +494,7 @@ int gsp_r1p1_core_parse_clk(struct gsp_core *c)
 	return 0;
 }
 
-int gsp_r1p1_core_parse_irq(struct gsp_core *core)
+static int gsp_r1p1_core_parse_irq(struct gsp_core *core)
 {
 	int ret = -1;
 	struct device *dev = NULL;
@@ -509,7 +509,7 @@ int gsp_r1p1_core_parse_irq(struct gsp_core *core)
 	return ret;
 }
 
-int gsp_r1p1_core_parse_misc(struct gsp_core *core)
+static int gsp_r1p1_core_parse_misc(struct gsp_core *core)
 {
 	/* to parse misc information here */
 	return 0;
@@ -538,7 +538,7 @@ int gsp_r1p1_core_parse_dt(struct gsp_core *core)
 	return ret;
 }
 
-void gsp_r1p1_core_misc_reg_set(struct gsp_core *core, struct gsp_r1p1_cfg *cfg)
+static void gsp_r1p1_core_misc_reg_set(struct gsp_core *core, struct gsp_r1p1_cfg *cfg)
 {
 	u32 value = 0;
 	void __iomem *base = NULL;
@@ -596,7 +596,7 @@ void gsp_r1p1_core_misc_reg_set(struct gsp_core *core, struct gsp_r1p1_cfg *cfg)
 	gsp_core_reg_update(GSP_CFG(base), value, BND_BYPASS);
 }
 
-void gsp_r1p1_core_l0_reg_set(void __iomem *base,
+static void gsp_r1p1_core_l0_reg_set(void __iomem *base,
 			   struct gsp_r1p1_img_layer *layer)
 {
 	u32 value = 0;
@@ -705,7 +705,7 @@ void gsp_r1p1_core_l0_reg_set(void __iomem *base,
 	gsp_core_reg_update(LAYER0_CFG(base), value, PALLET_EN_L0);
 }
 
-void gsp_r1p1_core_l1_reg_set(void __iomem *base,
+static void gsp_r1p1_core_l1_reg_set(void __iomem *base,
 			   struct gsp_r1p1_osd_layer *layer)
 {
 	u32 value = 0;
@@ -804,7 +804,7 @@ void gsp_r1p1_core_l1_reg_set(void __iomem *base,
 	gsp_core_reg_update(LAYER1_CFG(base), value, PALLET_EN_L1);
 }
 
-void gsp_r1p1_core_ld_reg_set(void __iomem *base,
+static void gsp_r1p1_core_ld_reg_set(void __iomem *base,
 			   struct gsp_r1p1_des_layer *layer)
 {
 	u32 value = 0;
@@ -859,7 +859,7 @@ void gsp_r1p1_core_ld_reg_set(void __iomem *base,
 	gsp_core_reg_update(DES_DATA_CFG(base), value, COMPRESS_R8);
 }
 
-void gsp_r1p1_core_run(struct gsp_core *core)
+static void gsp_r1p1_core_run(struct gsp_core *core)
 {
 	gsp_core_reg_update(GSP_CFG(core->base), GSP_RUN, GSP_RUN);
 }
@@ -994,7 +994,7 @@ int gsp_r1p1_core_copy_cfg(struct gsp_kcfg *kcfg,
 	return 0;
 }
 
-void gsp_r1p1_core_misc_dump(void __iomem *base)
+static void gsp_r1p1_core_misc_dump(void __iomem *base)
 {
 	u32 val = 0;
 
@@ -1030,7 +1030,7 @@ void gsp_r1p1_core_misc_dump(void __iomem *base)
 	GSP_DEBUG("misc dump end.\n");
 }
 
-void gsp_r1p1_core_layer0_dump(void __iomem *base)
+static void gsp_r1p1_core_layer0_dump(void __iomem *base)
 {
 	u32 val = 0;
 
@@ -1114,7 +1114,7 @@ void gsp_r1p1_core_layer0_dump(void __iomem *base)
 	GSP_DEBUG("layer0 dump end.\n");
 }
 
-void gsp_r1p1_core_layer1_dump(void __iomem *base)
+static void gsp_r1p1_core_layer1_dump(void __iomem *base)
 {
 	u32 val = 0;
 
@@ -1196,7 +1196,7 @@ void gsp_r1p1_core_layer1_dump(void __iomem *base)
 	GSP_DEBUG("layer1 dump end.\n");
 }
 
-void gsp_r1p1_core_layerd_dump(void __iomem *base)
+static void gsp_r1p1_core_layerd_dump(void __iomem *base)
 {
 	u32 val = 0;
 

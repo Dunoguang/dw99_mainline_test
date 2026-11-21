@@ -25,6 +25,7 @@
 #include <linux/sipc.h>
 
 #include "../include/sipc_priv.h"
+#include "sipc_debugfs.h"
 
 struct smem_phead {
 	struct list_head smem_phead;

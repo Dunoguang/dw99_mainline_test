@@ -31,6 +31,7 @@
 #include <linux/mfd/sc2705/registers.h>
 #include <linux/delay.h>
 #include "sprd_charge_helper.h"
+#include "sc2705-charger.h"
 
 #define SPRD_EX_DEBUG(format, arg...) pr_info("sc2705_chg: "format, ## arg)
 /* The range of cccv value is 3.80v-4.80v, the default vol is 3.80v */

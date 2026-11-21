@@ -118,4 +118,20 @@ unsigned int mcdt_is_adc_empty(unsigned int channel);
 
 void mcdt_da_fifo_clr(unsigned int chan_num);
 void mcdt_ad_fifo_clr(unsigned int chan_num);
+
+int mcdt_is_chan_fifo_int_sts(enum MCDT_CHAN_NUM chan_num,
+				enum MCDT_FIFO_INT int_type);
+unsigned int mcdt_is_ap_int(enum MCDT_CHAN_NUM chan_num);
+unsigned int mcdt_is_da_fifo_real_empty(enum MCDT_CHAN_NUM chan_num);
+unsigned int mcdt_is_da_fifo_full(enum MCDT_CHAN_NUM chan_num);
+unsigned int mcdt_is_da_fifo_empty(enum MCDT_CHAN_NUM chan_num);
+unsigned int mcdt_is_ad_fifo_real_full(enum MCDT_CHAN_NUM chan_num);
+unsigned int mcdt_is_ad_fifo_full(enum MCDT_CHAN_NUM chan_num);
+unsigned int mcdt_is_ad_fifo_empty(enum MCDT_CHAN_NUM chan_num);
+int mcdt_get_mcdt_adc_dma_uid(enum MCDT_CHAN_NUM mcdt_chan,
+			 enum MCDT_AP_DMA_CHAN mcdt_ap_dma_chan,
+			 unsigned int fullmark);
+int mcdt_get_mcdt_dac_dma_uid(enum MCDT_CHAN_NUM mcdt_chan,
+			 enum MCDT_AP_DMA_CHAN mcdt_ap_dma_chan,
+			 unsigned int emptymark);
 #endif

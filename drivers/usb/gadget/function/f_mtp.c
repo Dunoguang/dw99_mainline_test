@@ -39,6 +39,7 @@
 #include <linux/usb/composite.h>
 
 #include "configfs.h"
+#include "f_mtp.h"
 
 #define MTP_BULK_BUFFER_SIZE       65536
 #define MTP_MINIMUM_BUFFER_SIZE		16384

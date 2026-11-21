@@ -371,7 +371,7 @@ static int ion_handle_put_nolock(struct ion_handle *handle)
 	return ret;
 }
 
-int ion_handle_put(struct ion_handle *handle)
+static int ion_handle_put(struct ion_handle *handle)
 {
 	struct ion_client *client = handle->client;
 	int ret;
@@ -413,8 +413,8 @@ static struct ion_handle *ion_handle_get_by_id_nolock(struct ion_client *client,
         return ERR_PTR(-EINVAL);
 }
 
-struct ion_handle *ion_handle_get_by_id(struct ion_client *client,
-						int id)
+static struct ion_handle *ion_handle_get_by_id(struct ion_client *client,
+					       int id)
 {
 	struct ion_handle *handle;
 

@@ -109,7 +109,6 @@ extern int ksu_try_handle_toolkit_cmd(int magic2, unsigned int cmd, void __user 
 #endif
 
 #ifdef CONFIG_KSU_SUSFS
-extern int ksu_handle_susfs_cmd(unsigned int cmd, void __user **arg);
 #endif
 
 // downstream: make sure to pass arg as reference, this can allow us to extend things.

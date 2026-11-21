@@ -798,6 +798,7 @@ static void print_usage(struct seq_file *p, void *v)
 static enum hrtimer_restart hrtimer_handler(struct hrtimer *timer)
 {
 	unsigned long flags;
+	long seconds = READ_ONCE(hrtimer_se);
 
 	/*lock */
 	spin_lock_irqsave(&usage_lock, flags);
@@ -806,8 +807,8 @@ static enum hrtimer_restart hrtimer_handler(struct hrtimer *timer)
 	record_cpu_usage();
 
 	/*update hrtimer */
-	if ((hrtimer_se > 0) || (hrtimer_ns > 0))
-		kt = ktime_set(hrtimer_se, hrtimer_ns);
+	if (seconds > 0 || hrtimer_ns > 0)
+		kt = ktime_set(seconds, hrtimer_ns);
 
 	hrtimer_forward_now(timer, kt);
 
@@ -827,18 +828,14 @@ static int show_cpu_usage(struct seq_file *p, void *v)
 static ssize_t cpu_usage_write(struct file *file, const char __user *buf,
 			       size_t len, loff_t *ppos)
 {
-	char flag[len + 1];
+	long seconds;
 	int ret;
 
-	memset(flag, 0, sizeof(flag));
-
-	if (copy_from_user(flag, buf, len))
-		return -EFAULT;
-
-	ret = kstrtol(flag, 10, &hrtimer_se);
+	ret = kstrtol_from_user(buf, len, 10, &seconds);
 	if (ret < 0)
 		return ret;
 
+	WRITE_ONCE(hrtimer_se, seconds);
 	return len;
 }
 

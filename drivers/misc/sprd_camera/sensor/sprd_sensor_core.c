@@ -11,6 +11,7 @@
 * GNU General Public License for more details.
 */
 
+#include <linux/zyt_info.h>
 #include <linux/errno.h>
 #include <linux/file.h>
 #include <linux/fs.h>
@@ -476,15 +477,20 @@ static int sprd_sensor_io_power_cfg(struct sprd_sensor_file_tag *p_file,
 
 //@jinq 20170807 add zyt_info
 struct sensor_name_tag s_zyt_info_sensor_name = {"Unknow","Unknow","Unknow","Unknow"};
-char* get_sensor_info(int sensor_id)/*0: Main ,1: Sub*/
+char *get_sensor_info(int sensor_id)
 {
-	char * name;
-	if(sensor_id ==0) name = s_zyt_info_sensor_name.main_sensor;
-	if(sensor_id ==1) name = s_zyt_info_sensor_name.sub_sensor;
-	if(sensor_id ==2) name = s_zyt_info_sensor_name.main2_sensor;
-	if(sensor_id ==3) name = s_zyt_info_sensor_name.sub2_sensor;
-	if(name ==NULL) return "Unknow";
-	return name;
+	switch (sensor_id) {
+	case 0:
+		return s_zyt_info_sensor_name.main_sensor;
+	case 1:
+		return s_zyt_info_sensor_name.sub_sensor;
+	case 2:
+		return s_zyt_info_sensor_name.main2_sensor;
+	case 3:
+		return s_zyt_info_sensor_name.sub2_sensor;
+	default:
+		return "Unknow";
+	}
 }
 
 EXPORT_SYMBOL_GPL(get_sensor_info);

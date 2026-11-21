@@ -22,7 +22,7 @@
 
 #include "clk-sprd.h"
 
-void __init of_sprd_mux_clk_setup(struct device_node *node)
+static void __init of_sprd_mux_clk_setup(struct device_node *node)
 {
 	struct clk *clk;
 	const char *clk_name = node->name;

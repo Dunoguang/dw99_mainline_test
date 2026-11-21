@@ -35,7 +35,6 @@
 #define MIN_POOL_SIZE           (6 * 1024)
 
 #define SCI_MEMSET              memset
-#define MAX(_x, _y)           (((_x) > (_y)) ? (_x) : (_y))
 #define MEM_OPS_ADDR_ALIGN_MASK  (0x7UL)
 
 #define GSP_HOR_COEF_BASE(addr)  (addr+0x90)
@@ -98,7 +97,7 @@ static struct coef_entry *cache_coef_hit_check(uint16_t in_w, uint16_t in_h,
 	return NULL;
 }
 
-void cache_coef_move_entry_to_list_head(struct coef_entry *entry,
+static void cache_coef_move_entry_to_list_head(struct coef_entry *entry,
 					struct list_head *coef_list)
 {
 	list_del_init(&entry->entry_list);

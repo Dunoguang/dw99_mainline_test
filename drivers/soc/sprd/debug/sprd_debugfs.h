@@ -13,4 +13,9 @@ enum sprd_debug_type {
 };
 
 struct dentry *sprd_debugfs_entry(enum sprd_debug_type type);
+
+struct task_struct;
+
+void sprd_update_cpu_usage(struct task_struct *prev, struct task_struct *next);
+
 #endif

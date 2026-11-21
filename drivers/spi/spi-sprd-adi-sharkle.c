@@ -203,7 +203,7 @@ static void adi_debug(struct sprd_adi *sadi)
 }
 
 /* check the adi address */
-int adi_addr_check(struct sprd_adi *sadi, unsigned long paddr)
+static int adi_addr_check(struct sprd_adi *sadi, unsigned long paddr)
 {
 	if (!sadi->slave_pbase || !sadi->slave_vbase
 	    || paddr < sadi->slave_pbase

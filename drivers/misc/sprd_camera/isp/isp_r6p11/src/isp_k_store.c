@@ -15,6 +15,7 @@
 #include <video/sprd_mm.h>
 #include "sprd_isp_hw.h"
 #include "isp_drv.h"
+#include "isp_block.h"
 
 #ifdef pr_fmt
 #undef pr_fmt

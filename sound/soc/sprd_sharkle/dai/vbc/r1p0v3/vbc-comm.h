@@ -1134,4 +1134,9 @@ static inline void vbc_safe_mem_release(void **free)
 
 #define vbc_safe_kfree(p) vbc_safe_mem_release((void **)p)
 
+
+int xtlbuf1_eb_set(void);
+int xtlbuf1_eb_clr(void);
+void vbc_clock_set_force(void);
+void vbc_clock_clear_force(void);
 #endif /* __VBC_COMM_H */

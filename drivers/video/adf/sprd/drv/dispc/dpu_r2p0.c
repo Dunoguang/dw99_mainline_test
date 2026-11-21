@@ -847,9 +847,11 @@ static u32 dpu_img_ctrl(u32 format, u32 blending, u32 compression, u32 rotation)
 	case DRM_FORMAT_RGBA8888:
 		/* RGBA8888 -> ABGR8888 */
 		reg_val |= SPRD_IMG_DATA_ENDIAN_B3B2B1B0 << 8;
+		fallthrough;
 	case DRM_FORMAT_ABGR8888:
 		/* rb switch */
 		reg_val |= BIT(10);
+		fallthrough;
 	case DRM_FORMAT_ARGB8888:
 		if (compression)
 			/* XFBC-ARGB8888 */
@@ -860,6 +862,7 @@ static u32 dpu_img_ctrl(u32 format, u32 blending, u32 compression, u32 rotation)
 	case DRM_FORMAT_XBGR8888:
 		/* rb switch */
 		reg_val |= BIT(10);
+		fallthrough;
 	case DRM_FORMAT_XRGB8888:
 		if (compression)
 			/* XFBC-ARGB8888 */
@@ -870,6 +873,7 @@ static u32 dpu_img_ctrl(u32 format, u32 blending, u32 compression, u32 rotation)
 	case DRM_FORMAT_BGR565:
 		/* rb switch */
 		reg_val |= BIT(10);
+		fallthrough;
 	case DRM_FORMAT_RGB565:
 		if (compression)
 			/* XFBC-RGB565 */

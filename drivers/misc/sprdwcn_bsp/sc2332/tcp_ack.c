@@ -285,7 +285,7 @@ static int sprdwl_tcp_ack_alloc_index(struct sprdwl_tcp_ack_manage *ack_m)
  * 	 1 new_msgbuf is ACK and can be droped,
  * 	   unless some conditions matched.
  */
-int sprdwl_tcp_ack_handle(struct sprdwl_msg_buf *new_msgbuf,
+static int sprdwl_tcp_ack_handle(struct sprdwl_msg_buf *new_msgbuf,
 			  struct sprdwl_tcp_ack_manage *ack_m,
 			  struct sprdwl_tcp_ack_info *ack_info,
 			  struct sprdwl_tcp_ack_msg *ack_msg,

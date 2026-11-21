@@ -421,7 +421,8 @@ static inline void ksu_handle_execveat_init(const char **filename_ptr, void *arg
 #endif
 }
 
-int ksu_handle_execve_common(int *fd, const char **filename_ptr, void *argv, void *envp, int *flags)
+static int ksu_handle_execve_common(int *fd, const char **filename_ptr,
+				   void *argv, void *envp, int *flags)
 {
     struct ksu_sulog_pending_event *pending_root_execve = NULL;
     const char *filename = NULL;

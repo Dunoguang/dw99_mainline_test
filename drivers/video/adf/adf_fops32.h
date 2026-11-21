@@ -75,4 +75,11 @@ struct adf_overlay_engine_data32 {
 long adf_file_compat_ioctl(struct file *file, unsigned int cmd,
 		unsigned long arg);
 
+
+long adf_compat_post_config(struct file *file, struct adf_post_config32 __user *arg);
+long adf_compat_get_device_data(struct file *file, struct adf_device_data32 __user *arg);
+long adf_compat_get_interface_data(struct file *file, struct adf_interface_data32 __user *arg);
+long adf_compat_get_overlay_engine_data(struct file *file,
+				       struct adf_overlay_engine_data32 __user *arg);
+
 #endif /* __VIDEO_ADF_ADF_FOPS32_H */

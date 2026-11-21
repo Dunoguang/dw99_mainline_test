@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#include <soc/sprd/sysdump.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/init.h>

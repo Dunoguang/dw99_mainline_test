@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/smart_reclaim.h>
 #include <linux/pagewalk.h>
 #include <linux/mm_inline.h>
 #include <linux/hugetlb.h>

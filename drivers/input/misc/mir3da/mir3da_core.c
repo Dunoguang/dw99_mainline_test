@@ -324,7 +324,8 @@ static char isZStick(void){
 
 #endif /* ! MIR3DA_STK_TEMP_SOLUTION */
 
- int squareRoot(int val){
+static int squareRoot(int val)
+{
 	int r = 0;
 	int shift;
 
@@ -1478,7 +1479,8 @@ int mir3da_module_detect(PLAT_HANDLE handle)
 	return is_find;
 }
 
-int mir3da_parse_chip_info(PLAT_HANDLE handle){
+static int mir3da_parse_chip_info(PLAT_HANDLE handle)
+{
 	unsigned char i=0,tmp=0;   
 	unsigned char reg_value = -1,reg_value1 = -1,reg_value2 = -1;
 	char res=-1;
@@ -1762,8 +1764,8 @@ EXIT:
 #define TEMP_CALIBRATE_STATIC_THRESHOLD    60
 
 
-int mir3da_temp_calibrate_detect_static(short x,short y,short z)
-{ 
+static int mir3da_temp_calibrate_detect_static(short x, short y, short z)
+{
 	static int count_static=0;
 	static short pre_x=0,pre_y=0,pre_z=0;
 	static int is_first=1;

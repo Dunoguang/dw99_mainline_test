@@ -140,7 +140,7 @@ char *gsp_interface_to_name(struct gsp_interface *interface)
 	return interface->name;
 }
 
-void gsp_interface_copy_name(const char *orig, char *dst)
+static void gsp_interface_copy_name(const char *orig, char *dst)
 {
 	int i = 0;
 

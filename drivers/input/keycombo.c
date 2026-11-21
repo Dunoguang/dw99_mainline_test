@@ -231,7 +231,7 @@ static int keycombo_probe(struct platform_device *pdev)
 	return 0;
 }
 
-void keycombo_remove(struct platform_device *pdev)
+static void keycombo_remove(struct platform_device *pdev)
 {
 	struct keycombo_state *state = platform_get_drvdata(pdev);
 	wakeup_source_unregister(state->combo_held_wake_source);

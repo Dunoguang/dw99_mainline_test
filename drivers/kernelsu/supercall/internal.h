@@ -23,4 +23,10 @@ void ksu_supercall_cleanup_state(void);
 #define CHANGE_SPOOF_UNAME 10012 // spoof uname
 #define CHANGE_KSUFLAGS 10013 // change ksuflags, do the bit calc on your own, 0 + 1 + 2 + 4 + 8 blah
 
+struct ksu_get_managers_cmd;
+
+int ksu_handle_get_managers_cmd(struct ksu_get_managers_cmd __user *arg,
+				struct ksu_get_managers_cmd *cmd);
+int ksu_handle_susfs_cmd(unsigned int cmd, void __user **arg);
+
 #endif // __KSU_H_SUPERCALL_INTERNAL

@@ -5,6 +5,7 @@
 #include <linux/sched.h>
 #include "manager_identity.h"
 #include "ksu.h"
+#include "supercall/internal.h"
 #include "uapi/supercall.h"
 #include "compat/kernel_compat.h"
 

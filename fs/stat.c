@@ -353,9 +353,6 @@ static int vfs_statx_path(const struct path *path, int flags, struct kstat *stat
 		stat->result_mask |= STATX_MNT_ID;
 	}
 
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-bypass_orig_flow:
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 	if (path_mounted(path))
 		stat->attributes |= STATX_ATTR_MOUNT_ROOT;
 	stat->attributes_mask |= STATX_ATTR_MOUNT_ROOT;

@@ -2291,10 +2291,6 @@ static int sprd_cpufreq_cpu_callback(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
-static struct notifier_block __refdata sprd_cpufreq_cpu_notifier = {
-	.notifier_call = sprd_cpufreq_cpu_callback,
-};
-
 static int sprd_cpufreq_cpuhp_online(unsigned int cpu)
 {
 	if (sprd_cpufreq_cpu_callback(NULL, CPU_UP_PREPARE,

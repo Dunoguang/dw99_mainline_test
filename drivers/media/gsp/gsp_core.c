@@ -80,7 +80,7 @@ int gsp_core_is_idle(struct gsp_core *core)
 	return ret;
 }
 
-int gsp_core_is_err(struct gsp_core *core)
+static int gsp_core_is_err(struct gsp_core *core)
 {
 	int ret = 0;
 
@@ -90,7 +90,7 @@ int gsp_core_is_err(struct gsp_core *core)
 	return ret;
 }
 
-int gsp_core_is_irq_handled(struct gsp_core *core)
+static int gsp_core_is_irq_handled(struct gsp_core *core)
 {
 	int ret = 0;
 
@@ -100,7 +100,7 @@ int gsp_core_is_irq_handled(struct gsp_core *core)
 	return ret;
 }
 
-int gsp_core_is_trigger(struct gsp_core *core)
+static int gsp_core_is_trigger(struct gsp_core *core)
 {
 	int ret = 0;
 
@@ -166,7 +166,7 @@ void gsp_core_reg_update(void __iomem *addr, u32 value, u32 mask)
 	gsp_core_reg_write(addr, tmp);
 }
 
-int gsp_core_enable(struct gsp_core *core)
+static int gsp_core_enable(struct gsp_core *core)
 {
 	if (gsp_core_verify(core)) {
 		GSP_ERR("core[%d] enable params failed\n",
@@ -177,7 +177,7 @@ int gsp_core_enable(struct gsp_core *core)
 	return core->ops->enable(core);
 }
 
-void gsp_core_disable(struct gsp_core *core)
+static void gsp_core_disable(struct gsp_core *core)
 {
 	if (gsp_core_verify(core)) {
 		GSP_ERR("core[%d] disable params failed\n",
@@ -188,7 +188,7 @@ void gsp_core_disable(struct gsp_core *core)
 	core->ops->disable(core);
 }
 
-int gsp_core_parse_dt(struct gsp_core *core)
+static int gsp_core_parse_dt(struct gsp_core *core)
 {
 	int ret = -1;
 	struct resource res;
@@ -293,7 +293,7 @@ void gsp_core_work(struct gsp_core *core)
 		GSP_WARN("queue trigger work failed\n");
 }
 
-void gsp_core_start_timer(struct gsp_core *core)
+static void gsp_core_start_timer(struct gsp_core *core)
 {
 	if (gsp_core_verify(core)) {
 		GSP_ERR("core start timer params error\n");
@@ -303,7 +303,7 @@ void gsp_core_start_timer(struct gsp_core *core)
 	mod_timer(&core->timer, jiffies + msecs_to_jiffies(GSP_CORE_TIMER_OUT));
 }
 
-void gsp_core_stop_timer(struct gsp_core *core)
+static void gsp_core_stop_timer(struct gsp_core *core)
 {
 	if (gsp_core_verify(core)) {
 		GSP_ERR("core stop timer params error\n");
@@ -513,7 +513,7 @@ void gsp_core_release(struct kthread_work *work)
 	pm_runtime_mark_last_busy(core->parent->dev);
 }
 
-void gsp_core_recover(struct kthread_work *work)
+static void gsp_core_recover(struct kthread_work *work)
 {
 	bool need_reset = false;
 	bool need_dump = false;
@@ -815,7 +815,7 @@ void gsp_core_reset(struct gsp_core *core)
 	}
 }
 
-int gsp_core_create_timeline(struct gsp_core *core)
+static int gsp_core_create_timeline(struct gsp_core *core)
 {
 	struct gsp_sync_timeline *timeline = NULL;
 
@@ -916,7 +916,7 @@ int gsp_core_init(struct gsp_core *core)
 	return ret;
 }
 
-void gsp_core_timeline_destroy(struct gsp_core *core)
+static void gsp_core_timeline_destroy(struct gsp_core *core)
 {
 	if (core->timeline)
 		gsp_sync_timeline_destroy(core->timeline);

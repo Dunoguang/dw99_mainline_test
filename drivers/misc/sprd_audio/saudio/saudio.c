@@ -872,7 +872,7 @@ static struct snd_pcm_ops snd_card_saudio_capture_ops = {
 	.mmap = saudio_snd_mmap,
 };
 
-void saudio_pcm_lib_preallocate_free_for_all(struct snd_pcm *pcm)
+static void saudio_pcm_lib_preallocate_free_for_all(struct snd_pcm *pcm)
 {
 	struct snd_pcm_substream *substream;
 	int stream;
@@ -892,7 +892,7 @@ void saudio_pcm_lib_preallocate_free_for_all(struct snd_pcm *pcm)
 		}
 }
 
-int saudio_pcm_lib_preallocate_pages_for_all(struct snd_pcm *pcm,
+static int saudio_pcm_lib_preallocate_pages_for_all(struct snd_pcm *pcm,
 					     int type, void *data,
 					     size_t size, size_t max)
 {

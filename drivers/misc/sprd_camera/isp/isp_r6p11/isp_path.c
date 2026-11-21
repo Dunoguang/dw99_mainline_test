@@ -24,8 +24,6 @@
 
 #define ISP_PATH_ALIGN_SIZE		2
 #define ISP_ALIGNTO(size)	((size) & ~(ISP_PATH_ALIGN_SIZE - 1))
-#define  MAX(_x, _y) (((_x) > (_y)) ? (_x) : (_y))
-#define  MIN(_x, _y) (((_x) < (_y)) ? (_x) : (_y))
 
 #define ISP_ALIGN(x, n)  ((~(n-1) & 0xFFFFFFFF) & ((x) + (n-1)))
 #define ISP_ALIGN_4BYTE(x)      ISP_ALIGN(x, 4)

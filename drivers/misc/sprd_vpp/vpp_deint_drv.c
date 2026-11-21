@@ -68,8 +68,6 @@ struct compat_vsp_iommu_map_data {
 
 #define DEFAULT_FREQ_DIV 0x0
 
-static DEFINE_SEMAPHORE(s_vpp_sem, 1);
-
 struct deint_fh {
 	int is_deint_acquired;
 	int is_clock_enabled;
@@ -199,44 +197,6 @@ static void vpp_clk_disable(struct deint_dev_t *deint_hw_dev)
 }
 
 #ifdef CONFIG_COMPAT
-static int compat_get_mmu_map_data(struct compat_vsp_iommu_map_data __user
-				   *data32,
-				   struct vsp_iommu_map_data __user *data)
-{
-	compat_int_t i;
-	compat_size_t s;
-	compat_ulong_t ul;
-	int err;
-
-	err = get_user(i, &data32->fd);
-	err |= put_user(i, &data->fd);
-	err |= get_user(s, &data32->size);
-	err |= put_user(s, &data->size);
-	err |= get_user(ul, &data32->iova_addr);
-	err |= put_user(ul, &data->iova_addr);
-
-	return err;
-};
-
-static int compat_put_mmu_map_data(struct compat_vsp_iommu_map_data __user
-				   *data32,
-				   struct vsp_iommu_map_data __user *data)
-{
-	compat_int_t i;
-	compat_size_t s;
-	compat_ulong_t ul;
-	int err;
-
-	err = get_user(i, &data->fd);
-	err |= put_user(i, &data32->fd);
-	err |= get_user(s, &data->size);
-	err |= put_user(s, &data32->size);
-	err |= get_user(ul, &data->iova_addr);
-	err |= put_user(ul, &data32->iova_addr);
-
-	return err;
-};
-
 static long compat_deint_ioctl(struct file *filp, unsigned int cmd,
 			       unsigned long arg)
 {

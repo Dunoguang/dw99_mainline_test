@@ -86,7 +86,7 @@ static struct platform_driver sprd_dummy_driver = {
 
 static struct platform_device *sprd_dummy_dev;
 
-int __init sprd_dummy_playback_codec_init(void)
+static int __init sprd_dummy_playback_codec_init(void)
 {
 	int ret;
 
@@ -102,7 +102,7 @@ int __init sprd_dummy_playback_codec_init(void)
 	return ret;
 }
 
-void __exit sprd_dummy_playback_codec_exit(void)
+static void __exit sprd_dummy_playback_codec_exit(void)
 {
 	platform_device_unregister(sprd_dummy_dev);
 	platform_driver_unregister(&sprd_dummy_driver);

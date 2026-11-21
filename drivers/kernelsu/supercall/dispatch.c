@@ -1058,7 +1058,6 @@ static int do_dynamic_manager(void __user *arg)
 }
 
 #ifndef CONFIG_KSU_DISABLE_MANAGER
-extern int ksu_handle_get_managers_cmd(struct ksu_get_managers_cmd __user *arg, struct ksu_get_managers_cmd *cmd);
 #endif
 
 static int do_get_managers(void __user *arg)

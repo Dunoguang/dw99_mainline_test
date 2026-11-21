@@ -74,7 +74,7 @@ int slowmotion_frame_dequeue(struct isp_slw_queue *queue,
 	return 0;
 }
 
-void slowmotion_frame_queue_clear(struct isp_slw_queue *queue)
+static void slowmotion_frame_queue_clear(struct isp_slw_queue *queue)
 {
 	if (ISP_ADDR_INVALID(queue)) {
 		pr_err("fail to get valid heap %p\n", queue);
@@ -84,7 +84,7 @@ void slowmotion_frame_queue_clear(struct isp_slw_queue *queue)
 	memset((void *)queue, 0, sizeof(struct isp_slw_queue));
 }
 
-void isp_slw_queue_clear(struct isp_slw_queue *p_queue,
+static void isp_slw_queue_clear(struct isp_slw_queue *p_queue,
 				struct camera_frame *res_frame)
 {
 	/*
@@ -151,7 +151,7 @@ void isp_slw_clear(void *handle)
 
 }
 
-int set_pingpang_reg(unsigned int idx,
+static int __maybe_unused set_pingpang_reg(unsigned int idx,
 					struct isp_slw_info *p_from_embed)
 {
 	enum isp_slw_rtn rtn = ISP_RTN_SLW_SUCCESS;
@@ -175,7 +175,7 @@ int set_pingpang_reg(unsigned int idx,
 	return rtn;
 }
 
-int set_isp_fmcu_int_reg(void *isp_handle)
+static int set_isp_fmcu_int_reg(void *isp_handle)
 {
 	unsigned int idx;
 	enum isp_slw_rtn rtn = ISP_RTN_SLW_SUCCESS;
@@ -219,7 +219,7 @@ int set_isp_fmcu_int_reg(void *isp_handle)
 	return rtn;
 }
 
-void set_isp_fmcu_start_reg(unsigned int idx)
+static void set_isp_fmcu_start_reg(unsigned int idx)
 {
 	ISP_REG_MWR(idx, ISP_FMCU_START, BIT_0, 1);
 }
@@ -284,7 +284,7 @@ int set_isp_fmcu_cmd_reg(enum isp_scl_id path_id, void *isp_handle)
 #endif
 }
 
-int isp_slw_buf_error(struct isp_slw_queue *p_empty_queue,
+static int __maybe_unused isp_slw_buf_error(struct isp_slw_queue *p_empty_queue,
 	struct isp_slw_info *p_from_empty, struct isp_buf_queue *p_buf_queue)
 {
 	enum isp_slw_rtn rtn = ISP_RTN_SLW_SUCCESS;
@@ -305,7 +305,7 @@ int isp_slw_buf_error(struct isp_slw_queue *p_empty_queue,
 	return rtn;
 }
 
-void set_fmcu_cmd(enum isp_id iid, unsigned int index,
+static void __maybe_unused set_fmcu_cmd(enum isp_id iid, unsigned int index,
 	struct camera_frame *frame, unsigned int u_offset,
 	struct isp_slw_info *p_from_empty)
 {
@@ -348,7 +348,7 @@ void set_fmcu_cmd(enum isp_id iid, unsigned int index,
 
 }
 
-int fmcu_slw_cmd(void *isp_handle,
+static int fmcu_slw_cmd(void *isp_handle,
 	enum isp_scl_id path_id, unsigned int buf_reserved)
 {
 	/*
@@ -452,7 +452,7 @@ int fmcu_slw_cmd(void *isp_handle,
 
 }
 
-int isp_fmcu_slw_int_init(void *isp_handle)
+static int isp_fmcu_slw_int_init(void *isp_handle)
 {
 	enum isp_slw_rtn rtn = ISP_RTN_SLW_SUCCESS;
 	struct isp_pipe_dev *dev = NULL;
@@ -483,7 +483,7 @@ int isp_fmcu_slw_int_init(void *isp_handle)
 	return rtn;
 }
 
-int isp_fmcu_slw_queue_init(void *isp_handle)
+static int isp_fmcu_slw_queue_init(void *isp_handle)
 {
 	/*
 	 * Remove it because slow motion using CFG mode now. Notice
@@ -682,14 +682,14 @@ int set_fmcu_slw_cfg(void *handle)
 	}
 
 	buf_reserved = 1;
-	rtn = set_isp_fmcu_slw_cmd(handle, ISP_PATH_IDX_VID, buf_reserved);
+	rtn = set_isp_fmcu_slw_cmd(handle, ISP_SCL_VID, buf_reserved);
 	if (rtn) {
 		pr_err("fail to set fmcu cmd %s rtn %d", __func__, rtn);
 		return rtn;
 	}
 
 	buf_reserved = 0;
-	rtn = set_isp_fmcu_slw_cmd(handle, ISP_PATH_IDX_VID, buf_reserved);
+	rtn = set_isp_fmcu_slw_cmd(handle, ISP_SCL_VID, buf_reserved);
 	if (rtn) {
 		pr_err("fail to set %s rtn %d", __func__, rtn);
 		return rtn;
