@@ -1659,7 +1659,7 @@
 				port {
 
 					endpoint {
-						remote-enpoint = <0x60>;
+						remote-endpoint = <0x60>;
 						linux,phandle = <0x11>;
 						phandle = <0x11>;
 					};
@@ -1675,7 +1675,7 @@
 				port {
 
 					endpoint {
-						remote-enpoint = <0x62>;
+						remote-endpoint = <0x62>;
 						linux,phandle = <0x12>;
 						phandle = <0x12>;
 					};
